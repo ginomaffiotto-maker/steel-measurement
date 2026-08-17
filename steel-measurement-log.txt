@@ -1,0 +1,26 @@
+===================================== 
+s b 08/08/2026 21:26:40,83 
+===================================== 
+Liberando puerto 3002 si estaba ocupado... 
+Iniciando servidor... 
+
+> steel-measurement@0.1.0 start
+> set PORT=3002 && react-scripts start
+
+(node:3604) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:3604) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:3604) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+Starting the development server...
+
+Compiled successfully!
+
+You can now view steel-measurement in the browser.
+
+  http://localhost:3002
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled [1m[32msuccessfully[39m[22m
+npm start termino con codigo 1073807364 

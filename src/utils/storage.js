@@ -1,0 +1,344 @@
+export const loadLS = (k, d) => {
+  try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; }
+};
+export const saveLS = (k, v) => {
+  try { localStorage.setItem(k, JSON.stringify(v)); } catch {}
+};
+
+export const uid = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+
+// created_at/updated_at para entidades de nivel superior (presupuesto, trabajo
+// histórico, cómputo, anidado, ítem de biblioteca) — preparación para sync con
+// backend futuro, no se usa en sub-filas dentro de un ítem.
+export const stamp = () => {
+  const now = new Date().toISOString();
+  return { created_at: now, updated_at: now };
+};
+export const touch = (obj) => ({ ...obj, updated_at: new Date().toISOString() });
+
+// ─── CLIENTES (lista centralizada, autocompletado) ────────────────
+// Cómputo, Anidado y Presupuesto comparten esta lista para que "CCFC" y
+// "Ccfc" no queden como 2 clientes distintos en el Buscador/filtros — se
+// arma sola: cada vez que alguien tipea un cliente nuevo se agrega acá.
+export const loadClientes = () => loadLS("smeas_clientes", []);
+export const registrarCliente = (nombre) => {
+  const n = (nombre || "").trim();
+  if (!n) return;
+  const lista = loadClientes();
+  if (!lista.some(c => c.toLowerCase() === n.toLowerCase())) {
+    saveLS("smeas_clientes", [...lista, n]);
+  }
+};
+
+// Backup manual: descarga/restaura todas las claves smeas_* de localStorage.
+export const exportBackup = () => {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("smeas_")) data[k] = localStorage.getItem(k);
+  }
+  const payload = { app: "steel-measurement", version: 1, exported_at: new Date().toISOString(), data };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.href = url;
+  a.download = `steel-measurement-backup-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+export const parseBackup = (jsonText) => {
+  const payload = JSON.parse(jsonText);
+  if (!payload || payload.app !== "steel-measurement" || typeof payload.data !== "object") {
+    throw new Error("Archivo de backup inválido o corrupto.");
+  }
+  return payload;
+};
+
+export const restoreBackup = (payload) => {
+  Object.entries(payload.data).forEach(([k, v]) => localStorage.setItem(k, v));
+};
+
+export const iUsuarios = loadLS("smeas_usuarios", [
+  { id: 1, nombre: "Administrador", rol: "admin", emoji: "⚙️", clave: "admin" },
+]);
+
+// Tarifario configurable (Config): catálogo extensible de ítems por rubro
+// (MO Fab, MO Mon, Materiales Generales, Terc. Fab, Terc. Mon, Traslados) +
+// tarifas sueltas (arenado, galvanizado, pantógrafo). Se puede agregar
+// cualquier ítem nuevo a cada catálogo — no está limitado a una lista fija.
+// Sirve como catálogo para elegir rápido al cargar un presupuesto; el
+// usuario puede editar el monto por fila sin que eso cambie el tarifario.
+const mkCat = (prefix, campo, entries) =>
+  entries.map(([nombre, valor], i) => ({ id: `${prefix}_${i}`, nombre, [campo]: valor }));
+
+const TARIFARIO_DEFAULT = {
+  mo_fab: [
+    { id: "mo_fab_1", nombre: "OFICIAL FAB",     usd_hora: 34 },
+    { id: "mo_fab_2", nombre: "1/2 OFICIAL FAB", usd_hora: 28 },
+    { id: "mo_fab_3", nombre: "PEON FAB",        usd_hora: 22 },
+    { id: "mo_fab_4", nombre: "SUPERVISOR",      usd_hora: 39 },
+    { id: "mo_fab_5", nombre: "DIBUJANTE",       usd_hora: 32 },
+  ],
+  mo_mon: [
+    { id: "mo_mon_1", nombre: "OFICIAL MONTADOR",         usd_hora: 37 },
+    { id: "mo_mon_2", nombre: "1/2 OFICIAL MONTADOR",     usd_hora: 30 },
+    { id: "mo_mon_3", nombre: "SUPERVISOR EN OBRA",       usd_hora: 43 },
+    { id: "mo_mon_4", nombre: "OFICIAL CONSTRUCCION",     usd_hora: 31 },
+    { id: "mo_mon_5", nombre: "1/2 OFICIAL CONSTRUCCION", usd_hora: 25 },
+    { id: "mo_mon_6", nombre: "SUPERVISOR CONSTRUCCION",  usd_hora: 35 },
+    { id: "mo_mon_7", nombre: "TRANSPORTE A OBRA",        usd_hora: 15 },
+    { id: "mo_mon_8", nombre: "COMPLEMENTO MONTAJE",      usd_hora: 7 },
+  ],
+  mat_generales: mkCat("mg", "usd", [
+    ["MALLA ELECTRO SOLDADA 50X50", 110],
+    ["BULON DE 1/2\"X1 1/2\" + TUERCA + ARANDELA", 1.5],
+    ["CERROJO STANDAR", 30],
+    ["SILICONA NEUTRA", 5],
+    ["SILICONA SIKA FLEX", 15],
+    ["VARILLA ROSCADA 25MM", 15],
+    ["CODO HIERRO CED. 40 48.2 EXT. ESP. 3,68", 3],
+    ["REJILLA RJ08 990X3000MM (GALVANIZADA)", 365],
+    ["REJILLA RJ06 630X6000MM (GALVANIZADA)", 470],
+    ["ZINGA EN LATA (GALVANIZADO EN FRIO)", 150],
+    ["TUERCA 5/8", 0.25],
+    ["METAL DESPLEGADO GA431 1200X3000MM", 150],
+    ["METAL DESPLEGADO MD431", 54],
+    ["METAL DESPLEGADO MD431A", 24],
+    ["VARILLA ROSCADA 1/2", 6.5],
+    ["BULON DE 5/8\"X1 1/2\" + TUERCA + ARANDELA", 2],
+    ["BULON DE 1/2\"X2\" + TUERCA", 1.5],
+    ["RESINA EPOXICA HILTI HY-200 500CC", 53],
+    ["RESINA EPOXICA HILTI HY-10 500CC", 27],
+    ["METAL DESPLEGADO MD 454 (1220X2440)MM", 60],
+    ["VARILLA ROSCADA M16 8,8", 15],
+    ["CHAPA TRAPEZOIDAL 1,83M X 1,01M ESP 0,5MM", 20],
+    ["REJILLA RJ02 810X6000MM (LAMINADA)", 300],
+    ["CHAPA M. PERFORADA 4MM, ESP 0,9", 65],
+    ["VARILLA ROSCADA 3/8\" INOX", 6.05],
+    ["VARILLA ROSCADA M10 INOX", 4],
+    ["METAL DESPLEGADO S31 (HIERROS SABATINI)", 90],
+    ["BULON DE 1\" + TUERCA + ARANDELA", 3],
+    ["BULON 3/8 X 4\" CON TUERCA Y ARANDELA", 0.3],
+    ["TEJIDO 40X40MM, ROLLO 25M X 2M", 275],
+    ["BRIDA SLIP ON 10\" CLASE 150", 65],
+    ["STEEL DECK 0,89MM / UTIL 0,91", 30],
+    ["VARILLA ROSCADA 1\"", 10.5],
+    ["METAL DESPLEGADO MD 454 (1500X3000)MM", 125],
+    ["REJILLA RJ07 990X2000MM (GALVANIZADA)", 215],
+    ["METAL DESPLEGADO MD 411 3000X1000", 45],
+    ["HORMIGON TIPO C-20 VOLCADO 1MT3", 105],
+    ["CHAPA TRAPEZOIDAL 0,5MM L=6,10 MTS", 125],
+    ["BULON M16 X 50MM GALV CAL", 0.7],
+    ["TUERCA M16 GALV CAL", 0.3],
+    ["ARANDELA PLANA M16 GALV CAL", 0.1],
+    ["TUERCA 5/8\" GALV CAL", 0.4],
+    ["ARANDELA 5/8\" GALV CAL", 0.1],
+    ["TUERCA M10 GALV CAL", 0.06],
+    ["BULON 5/16 X 4\"", 0.8],
+    ["BULON 1/2\" COMPLETO GALV CAL", 0.65],
+    ["VARILLA ROSCADA 3/4\"", 6.5],
+    ["TUERCA 3/4\" GALV CAL", 0.3],
+    ["ARANDELA 3/4\" GALV CAL", 0.15],
+    ["ACC SOLD CAÑO 1\" SCH40", 10],
+    ["EMBALAJE Y PRESENTACIÓN", 50],
+    ["TEJIDO ROMBOIDAL 50X50MM (25X2,2M)", 265],
+    ["REJILLA RJ01 630X6000MM (LAMINADA)", 390],
+    ["REJILLA RJ061 999X3000MM (GALV-MOLDURA)", 200],
+    ["REJILLA RJ060 998X3000 (GALV-MOLDURA)", 371],
+    ["RUEDA GIRATORIA CON FRENO 3\" (150KG)", 13],
+    ["METAL DESPLEGADO MD 415 (1500X3000)MM", 110],
+    ["ECONOPANEL ESP=0,5 M LINEAL", 15],
+    ["TORNILLO AUTOPERFORANTE X 100", 20],
+    ["REJILLA RJA 30 DENTADA / GALV. CALIENTE", 320],
+    ["REJILLA RJ09 630X3000MM", 110],
+    ["PLANCHUELA CON PUAS (PORTONES)", 10],
+    ["RUEDA DE PORTON CON RESORTE", 75],
+    ["TEJIDO ROMBOIDAL 50X50MM 3MM X M2", 10],
+    ["BISAGRA", 5],
+    ["PASADOR", 15],
+    ["METAL DESPLEGADO 3000X1500 (75X38 E=3)", 70],
+    ["CHAPA PERFORADA 6,35 1500X3000", 700],
+    ["JUEGO RIEL STANLEY (RIEL + CARROS)", 150],
+    ["CERRADURA STANLEY", 100],
+    ["ISOPANEL 150CM", 50],
+    ["METAL DESPLEGADO MD475 1500X3000", 145],
+    ["CADENAS DE IZAJE", 2000],
+    ["CODO SOLDABLE", 5],
+    ["VARILLA ROSCADA 5/8 GALV. EN CALIENTE", 10],
+    ["METAL DESPLEGADO MD45B 1220X2440", 75],
+    ["METAL DESPLEGADO MD 433", 55],
+    ["REJILLA RJA 31 DENTADA / GALV. CALIENTE", 427],
+    ["BROCA SDS MAX", 30],
+    ["ANCLAJE QUIMICO BCM-MAX", 25],
+    ["ANCLAJE QUIMICO HILTI HY 200, 500ML", 50],
+    ["TENSOR GRILLETE-GRILLETE 10X100MM INOX", 23],
+    ["METAL DESPLEGADO MD484 1500X3000MM", 220],
+    ["STEEL DECK 0,71MM / UTIL 0,91", 12],
+    ["PERNOS NELSON 19X120MM", 4],
+    ["PERFIL C PGC 160X60X20 E=2MM LARGO 6MTS", 55],
+    ["CORREA Z 240X65X25 ESPESOR 2,5MM", 28],
+    ["TEJIDO 80X80MM ROLLO 25M X 1,8M", 160],
+    ["ISOPANEL 100", 50],
+    ["CHAPA TRAPEZOIDAL CALIBRE 22 (0,7MM) AL", 10.6],
+    ["REJILLA TM 633X5,8 633X5800 (GALV)", 435],
+    ["PERFIL C 180X50X25", 9.9],
+    ["ESCALONES RJ80C (630X300MM)", 64],
+    ["METAL DESPLEGADO MD 454 (1000X2000MM)", 45],
+    ["METAL DESPLEGADO MD 458 (1200X2440MM)", 20],
+  ]),
+  terc_fabricacion: mkCat("tf", "usd", [
+    ["CORTE Y DOBLADO VARILLAS POR KILO", 0.45],
+    ["CORTE Y PLEGADO", 0.5],
+    ["CORTE Y DOBLADO ESTRIBOS MANO DE OBRA", 0.35],
+    ["CILINDRADOS", 0.25],
+    ["CURVADO", 100],
+    ["CALCULO ESTRUCTURAL", 1000],
+    ["PLEGADO POR METRO LINEAL", 5],
+    ["ENSAYOS / END", 500],
+    ["TORNERIA", 100],
+    ["PINTURA AL HORNO", 100],
+    ["ROSCADOS", 4],
+    ["PLEGADOS", 0.35],
+    ["PRUEBA HIDRAULICA CAÑERIAS (15KG/CM2)", 2500],
+    ["PRUEBA NEUMATICA DE ESTANQUEIDAD", 2500],
+    ["ENSAYO DE FLOTABILIDAD", 4000],
+    ["ENSAYO DE ADHERENCIA Y CONTROL DE ESPESOR", 1000],
+    ["MECANIZADO", 1],
+    ["SOLDADORA DE PERNOS NELSON", 300],
+    ["SOLD PERNOS T.NELSON + OPERARIO X DIA", 380],
+    ["SOLD PERNOS T.NELSON (FLETE MONTEVIDEO)", 460],
+    ["HORMIGON CONCRETO TIPO C20 X MT3", 100],
+  ]),
+  terc_montajes: [],
+  // Unificado — Terc. Fabricación y Terc. Montajes se muestran juntos en Insumos
+  // y Precios desde 2026-08-02 (antes eran 2 catálogos separados). Se arranca
+  // con los mismos ítems que tenía terc_fabricacion; terc_fabricacion/
+  // terc_montajes se conservan por compatibilidad con tarifarios ya guardados.
+  terceros: mkCat("terc", "usd", [
+    ["CORTE Y DOBLADO VARILLAS POR KILO", 0.45],
+    ["CORTE Y PLEGADO", 0.5],
+    ["CORTE Y DOBLADO ESTRIBOS MANO DE OBRA", 0.35],
+    ["CILINDRADOS", 0.25],
+    ["CURVADO", 100],
+    ["CALCULO ESTRUCTURAL", 1000],
+    ["PLEGADO POR METRO LINEAL", 5],
+    ["ENSAYOS / END", 500],
+    ["TORNERIA", 100],
+    ["PINTURA AL HORNO", 100],
+    ["ROSCADOS", 4],
+    ["PLEGADOS", 0.35],
+    ["PRUEBA HIDRAULICA CAÑERIAS (15KG/CM2)", 2500],
+    ["PRUEBA NEUMATICA DE ESTANQUEIDAD", 2500],
+    ["ENSAYO DE FLOTABILIDAD", 4000],
+    ["ENSAYO DE ADHERENCIA Y CONTROL DE ESPESOR", 1000],
+    ["MECANIZADO", 1],
+    ["SOLDADORA DE PERNOS NELSON", 300],
+    ["SOLD PERNOS T.NELSON + OPERARIO X DIA", 380],
+    ["SOLD PERNOS T.NELSON (FLETE MONTEVIDEO)", 460],
+    ["HORMIGON CONCRETO TIPO C20 X MT3", 100],
+  ]),
+  traslados: mkCat("tr", "usd", [
+    ["HIDRO GRUA 20 TON", 90],
+    ["TRANSPORTE POR KM CHATA COMUN 12 MTS", 3.5],
+    ["TRANSPORTE ESPECIAL 4 MTS ANCHO MDEO", 600],
+    ["TRANSPORTE MN", 75],
+    ["PLATAFORMA DE TIJERA", 500],
+    ["PREVENCIONISTA", 500],
+    ["HIDRO GRUA MN", 65],
+    ["BRAZO ARTICULADO BOOM 9MTS X 30 DIAS", 2000],
+    ["GRUA MAS DE 100T", 200],
+    ["ELEVADOR", 12],
+    ["GRUA 100 TON", 200],
+    ["RETRO EXCAVADORA X HORA", 35],
+    ["GENERADOR NAFTA 2,5KW (DIARIO)", 21],
+    ["BAÑO QUIMICO", 90],
+    ["ALQUILER DE ANDAMIOS", 200],
+    ["HOSPEDAJE POR NOCHE", 60],
+    ["TRANSPORTE ESPECIAL", 1500],
+    ["TRASLADO A OBRA", 5],
+    ["VIATICO MAYOR 25KM", 22],
+    ["HOSPEDAJE", 1500],
+    ["PASAJE CADA 15 DIAS", 25],
+    ["CHATA 12M", 200],
+    ["TIJERA", 150],
+  ]),
+  pinturas: mkCat("pi", "usd", [
+    ["FONDO ANTIOXIDO", 10],
+    ["ESMALTE SINTETICO", 12],
+    ["ARENADO SA 2 1/2", 10],
+    ["FONDO EPOXI", 18],
+    ["INTERMEDIA EPOXI (INTERSEAL 670)", 18],
+    ["TERMINACION PU (INTERTHANE 990)", 25],
+    ["TERMINACION EPOXI (INTERIOR)", 25],
+    ["INTERZINC 52 (ZINC SILICATO)", 37],
+    ["FOSFATO DE ZINC (INTERGARD 251)", 21],
+    ["INTERTHERM 50", 28.4],
+    ["INTERZINC 22 (ZINC INORGANICO)", 37],
+    ["INTERLINE 850", 24],
+    ["ZINGA (GALVANIZADO EN FRIO)", 92],
+    ["ESFUMADITA", 5],
+    ["CROMOX (CONVERTIDOR DE OXIDO)", 28],
+    ["TERMINACION PU (INTERTHANE 870)", 25],
+    ["INTERTUF 262", 18],
+    ["INTERZONE 854", 25],
+    ["ESMALTE EPOXI (INTERGARD 740)", 25],
+    ["HEMPADUR MIO 15570", 20],
+    ["HEMPADUR MASTIC 45880", 22],
+    ["HEMPATHANE HS 55610", 23.5],
+    ["INTERZONE 954", 22],
+    ["HEMPADUR AVANTGUARD 750 1736G", 42.6],
+    ["HEMPADUR QUATTRO 17634", 22],
+    ["HEMPADUR TIE COAT 49183", 23],
+    ["HEMPEL S A/F GLOBIC 9000 7890", 57.6],
+    ["INTERPRIME 198", 20],
+    ["INTERGARD 269", 17],
+    ["INTUMESCENTE C-THERM IC600WB", 34],
+    ["INTERLAC 655", 25],
+    ["HEMPAPRIME MULTI 500 WINTER 45953", 15],
+    ["ESMALTE CONVERTIDOR DE OXIDO PROMET", 18],
+  ]),
+  interes_financiero: [
+    { id: "int_30_usd",  nombre: "30 días",  moneda: "USD", dias: 30,  pct: 1.00 },
+    { id: "int_60_usd",  nombre: "60 días",  moneda: "USD", dias: 60,  pct: 1.40 },
+    { id: "int_90_usd",  nombre: "90 días",  moneda: "USD", dias: 90,  pct: 1.70 },
+    { id: "int_120_usd", nombre: "120 días", moneda: "USD", dias: 120, pct: 2.20 },
+    { id: "int_150_usd", nombre: "150 días", moneda: "USD", dias: 150, pct: 2.80 },
+    { id: "int_180_usd", nombre: "180 días", moneda: "USD", dias: 180, pct: 3.40 },
+    { id: "int_30_uyu",  nombre: "30 días",  moneda: "UYU", dias: 30,  pct: 3.00 },
+    { id: "int_60_uyu",  nombre: "60 días",  moneda: "UYU", dias: 60,  pct: 4.00 },
+    { id: "int_90_uyu",  nombre: "90 días",  moneda: "UYU", dias: 90,  pct: 5.00 },
+    { id: "int_120_uyu", nombre: "120 días", moneda: "UYU", dias: 120, pct: 6.70 },
+    { id: "int_150_uyu", nombre: "150 días", moneda: "UYU", dias: 150, pct: 8.40 },
+    { id: "int_180_uyu", nombre: "180 días", moneda: "UYU", dias: 180, pct: 10.00 },
+    { id: "int_sin_usd", nombre: "Sin interés", moneda: "USD", dias: 0, pct: 0 },
+    { id: "int_120_usd_factoring", nombre: "120 días (factoring)", moneda: "USD", dias: 120, pct: 4.00 },
+  ],
+  arenado_usd_m2: 10, galvanizado_usd_kg: 1.00,
+  panto_usd_kg_2d: 0, panto_usd_kg_3d: 0,
+  // Catálogos de referencia extensibles — Arenado/Granallado y Galvanizado
+  // (arriba) siguen siendo los 2 campos que realmente calcula Presupuesto;
+  // acá se pueden agregar OTROS tipos de tratamiento/corte para tener el
+  // precio de referencia a mano (ej. Metalizado, Fosfatizado), aunque
+  // todavía no se auto-calculan en el ítem — hay que cargarlos a mano en
+  // Trat. Superficie → Pinturas, que sí es una lista libre.
+  trat_superficie_extra: [],
+  pantografo_extra: [],
+};
+export const loadTarifario = () => {
+  const t = loadLS("smeas_tarifario", null);
+  if (!t) return TARIFARIO_DEFAULT;
+  // completa catálogos que puedan faltar si el tarifario se guardó con una versión vieja
+  const merged = { ...TARIFARIO_DEFAULT, ...t };
+  // Migración 2026-08-02: terc_fabricacion + terc_montajes → terceros unificado
+  // (solo si el tarifario guardado todavía no tiene "terceros").
+  if (!t.terceros) {
+    merged.terceros = [...(t.terc_fabricacion || TARIFARIO_DEFAULT.terc_fabricacion), ...(t.terc_montajes || [])];
+  }
+  return merged;
+};
+export const saveTarifario = (t) => saveLS("smeas_tarifario", t);
