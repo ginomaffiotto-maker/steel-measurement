@@ -241,7 +241,7 @@ generar un identificador distinto, y la relación entre ambos es
 | Identificador | Lo genera | Formato |
 |---|---|---|
 | **Código de presupuesto** (`nro` en steelCRM, ej. `P-0001`) | **steelCRM** | Correlativo propio (`P-XXXX`), o el valor heredado al importar histórico. |
-| **Código de cálculo** (`idCalc`/`idsCalc` en steelCRM) | **steel-measurement** | **Libre por ahora, sin formato fijo acordado.** Si en algún momento steel-measurement define un formato fijo (ej. `CALC-0001`), avisar acá para que steelCRM pueda validar/reconocer el patrón — hoy no valida nada, es texto libre. |
+| **Código de cálculo** (`idCalc`/`idsCalc` en steelCRM) | **steel-measurement** | **Definido 2026-08-17: `SM-AAAA-NNNN`** (ej. `SM-2026-0001`). `AAAA` = año de creación del presupuesto, `NNNN` = correlativo de 4 dígitos que reinicia cada año. Fijo, no configurable por empresa (a diferencia de `nro`) — tiene que ser estable entre los dos proyectos. |
 
 **Por qué muchos-a-muchos:** un cálculo puede derivar en más de un
 presupuesto (ej. una obra se cotiza en dos alternativas a partir del mismo
@@ -271,6 +271,67 @@ React funcionando, con datos reales de MMN cargados (614 presupuestos +
 183 contactos históricos importados desde la planilla de Gestsoft). La
 integración Steel Measurement ↔ steelCRM mencionada en `PLAN.md` §"pendiente"
 puede empezar a diseñarse sobre código real, no sobre un proyecto vacío.
+
+---
+
+## 8. Transporte de datos steel-measurement → steelCRM (2026-08-17)
+
+Ambos proyectos son 100% cliente (localStorage, sin backend), así que hasta
+que exista uno compartido, la conexión es manual vía archivo — mismo
+principio que ya usa cada uno para su propio Backup/Restaurar: nunca
+automático, el usuario elige cuándo exportar.
+
+**Implementado del lado steel-measurement:** botón "⬇️ steelCRM" en el
+detalle de cada presupuesto (`Presupuesto.jsx` → `exportarSteelCRM()`,
+helper `exportPresupuestoParaSteelCRM()` en `src/utils/storage.js`).
+Descarga `steelmeasurement-export-<codigo_calculo>.json`:
+
+```json
+{
+  "origen": "steel-measurement",
+  "version": 1,
+  "exported_at": "2026-08-17T...",
+  "presupuesto": {
+    "codigo_calculo": "SM-2026-0001",
+    "nro_interno_sm": "P-014",
+    "estado_sm": "aprobado",
+    "cliente": "...", "contacto": "...", "obra": "...",
+    "tipo_trabajo": "Fabricación",
+    "categoria": "Barandas - Defensas", "familia": "Herrería liviana",
+    "fecha": "2026-08-17",
+    "detalle": "...",
+    "kg_total": 1234.5,
+    "usd_total": 9876.54,
+    "usd_kg": 8.0
+  }
+}
+```
+
+**Deliberadamente NO incluye** el desglose interno de los 9 rubros de costo
+(Hierros/MO Fab/MO Mont/Terceros/Trat.Sup/Traslados/Pantógrafo) — mismo
+criterio de privacidad que ya usa el PDF del presupuesto: steelCRM sigue el
+recorrido comercial, no necesita ver la estructura de costos interna.
+
+**Gaps conocidos, a resolver del lado steelCRM cuando se construya el
+importador (no bloquean lo de acá, quedan anotados para esa sesión):**
+- **Vocabulario de `estado` distinto entre los dos sistemas.**
+  steel-measurement usa `borrador/enviado/aprobado/rechazado`; steelCRM usa
+  `enviado/en negociación/aceptado/no aprobado/recotizado/licitación/
+  facturado` (ver `CLAUDE.md` de steelCRM, sección "Estados de
+  presupuesto"). Por eso el campo se llama `estado_sm` en el export, no
+  `estado` a secas — el mapeo entre ambos vocabularios queda a criterio de
+  quien construya el importador, no se intentó adivinar acá.
+- ~~**No lleva `categoria`/Familia.**~~ **Resuelto 2026-08-17 (misma
+  sesión).** `Presupuesto.jsx` ganó un campo `categoria` (dropdown
+  `SelectCategoria`, mismo mapeo Familia→Categoría de `taxonomia.js`, con
+  `<optgroup>` por Familia — no texto libre, para no divergir de la lista
+  canónica). El export ahora lleva `categoria` y `familia` (derivada vía
+  `familiaDe()`). Presupuestos creados antes de este campo quedan con
+  `categoria: ""` hasta que alguien los abra y la complete a mano — no hay
+  forma automática de inferirla retroactivamente.
+- **Import del lado steelCRM: no construido todavía.** Este documento deja
+  el contrato (forma del JSON) para que esa sesión arme el botón "cargar
+  desde steel-measurement" cuando le toque.
 
 ---
 

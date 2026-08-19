@@ -48,7 +48,7 @@ function genNro(lista) {
   return "OT-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
 }
 
-const iTrabajo = () => ({
+export const iTrabajo = () => ({
   id: uid(), nro_ot: "", fecha: new Date().toISOString().slice(0, 10),
   cliente: "", obra: "", categoria: "", tipo_trabajo: "Fabricación",
   kg_total: 0, metros_total: 0, usd_total: 0,
@@ -60,7 +60,7 @@ const iTrabajo = () => ({
 });
 
 // ─── CÁLCULOS ────────────────────────────────────────────────────
-function calcTrabajo(t) {
+export function calcTrabajo(t) {
   const kg  = +t.kg_total || 0;
   const usd = +t.usd_total || 0;
   const usd_kg_real     = kg > 0 ? usd / kg : 0;
@@ -74,7 +74,7 @@ function calcTrabajo(t) {
 }
 
 // Benchmark Min/Prom/Max por categoría — esto es lo que M4 va a consumir.
-function calcBenchmark(trabajos, agruparPor = "categoria") {
+export function calcBenchmark(trabajos, agruparPor = "categoria") {
   const porGrupo = {};
   for (const t of trabajos) {
     const cat = t.categoria || "(sin categoría)";
@@ -260,20 +260,49 @@ function presupuestoAHistorial(p) {
 function DetalleTrabajo({ t, onChange, onBack }) {
   const c = calcTrabajo(t);
   const origen = ORIGEN_CFG[t.origen] || ORIGEN_CFG.manual;
+  const set  = (k, v) => onChange({ ...t, [k]: v });
+  const setR = (k, v) => onChange({ ...t, desglose_pct: { ...t.desglose_pct, [k]: v } });
+  const lblMini = { fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.5, display:"block", marginBottom:3 };
+  const inpMini = { ...INP, padding:"6px 9px", fontSize:13 };
 
   return (
     <div>
       <button style={{ ...BTN("ghost"), marginBottom:16 }} onClick={onBack}>← Volver</button>
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
         <div style={{ fontWeight:800, fontSize:19 }}>{t.nro_ot || "Trabajo"} — {t.cliente || "Sin cliente"}</div>
         <span style={BDG(origen.color, true)}>{origen.label}</span>
       </div>
-      <div style={{ color:C.muted, fontSize:13, marginBottom:20 }}>{t.obra || "—"} · {t.categoria || "sin categoría"} · {t.fecha}</div>
+
+      {/* Datos generales — editables */}
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:C.steel, marginBottom:10 }}>Datos generales</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+          <div><label style={lblMini}>N° OT</label><input style={inpMini} value={t.nro_ot} onChange={e=>set("nro_ot",e.target.value)}/></div>
+          <div><label style={lblMini}>Fecha</label><input type="date" style={inpMini} value={t.fecha} onChange={e=>set("fecha",e.target.value)}/></div>
+          <div>
+            <label style={lblMini}>Tipo de trabajo</label>
+            <select style={inpMini} value={t.tipo_trabajo} onChange={e=>set("tipo_trabajo",e.target.value)}>
+              {TIPOS.map(x=><option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+          <div><label style={lblMini}>Cliente</label><input style={inpMini} value={t.cliente} onChange={e=>set("cliente",e.target.value)}/></div>
+          <div><label style={lblMini}>Obra</label><input style={inpMini} value={t.obra} onChange={e=>set("obra",e.target.value)}/></div>
+          <div><label style={lblMini}>Categoría</label><input style={inpMini} value={t.categoria} onChange={e=>set("categoria",e.target.value)}/></div>
+        </div>
+      </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+          <label style={lblMini}>Kg totales</label>
+          <input type="number" style={{ ...inpMini, fontSize:20, fontWeight:800, color:C.accent, border:"none", background:"transparent", padding:0 }}
+            value={t.kg_total} onChange={e=>set("kg_total",+e.target.value)}/>
+        </div>
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+          <label style={lblMini}>USD total</label>
+          <input type="number" style={{ ...inpMini, fontSize:20, fontWeight:800, color:C.accent, border:"none", background:"transparent", padding:0 }}
+            value={t.usd_total} onChange={e=>set("usd_total",+e.target.value)}/>
+        </div>
         {[
-          ["Kg totales", n3(t.kg_total)],
-          ["USD total", "$"+n2(t.usd_total)],
           ["USD/kg real", n2(c.usd_kg_real)],
           ["Kg/h fab. real", n2(c.kg_hora_fab_real)],
         ].map(([lbl,val]) => (
@@ -285,7 +314,12 @@ function DetalleTrabajo({ t, onChange, onBack }) {
       </div>
 
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 }}>
-        <div style={{ fontSize:12, fontWeight:700, color:C.steel, marginBottom:10 }}>Desglose por rubro</div>
+        <div style={{ fontSize:12, fontWeight:700, color:C.steel, marginBottom:10, display:"flex", justifyContent:"space-between" }}>
+          <span>Desglose por rubro (%, post-obra)</span>
+          <span style={{ color: Math.abs(Object.values(t.desglose_pct||{}).reduce((s,v)=>s+(+v||0),0)-100) < 0.5 ? C.ok : C.warn }}>
+            {n2(Object.values(t.desglose_pct||{}).reduce((s,v)=>s+(+v||0),0))}%
+          </span>
+        </div>
         {RUBROS.map(r => {
           const pct = +t.desglose_pct?.[r.k] || 0;
           return (
@@ -294,7 +328,8 @@ function DetalleTrabajo({ t, onChange, onBack }) {
               <div style={{ flex:1, background:C.iron, borderRadius:4, height:8, overflow:"hidden" }}>
                 <div style={{ width:`${Math.min(pct,100)}%`, background:r.color, height:"100%" }} />
               </div>
-              <div style={{ width:52, textAlign:"right", fontSize:13, color:r.color, fontWeight:800 }}>{n2(pct)}%</div>
+              <input type="number" style={{ ...inpMini, width:64, textAlign:"right", color:r.color, fontWeight:800 }}
+                value={pct} onChange={e=>setR(r.k,+e.target.value)} />
             </div>
           );
         })}
@@ -303,7 +338,10 @@ function DetalleTrabajo({ t, onChange, onBack }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
           <div style={{ fontSize:12, fontWeight:700, color:C.steel, marginBottom:10 }}>Fabricación</div>
-          <div style={{ fontSize:12, color:C.muted, marginBottom:4 }}>Est.: {n2(t.horas_fab_est)} hs · Real: {n2(t.horas_fab_real)} hs</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:6 }}>
+            <div><label style={lblMini}>Hs Est.</label><input type="number" style={inpMini} value={t.horas_fab_est} onChange={e=>set("horas_fab_est",+e.target.value)}/></div>
+            <div><label style={lblMini}>Hs Real</label><input type="number" style={inpMini} value={t.horas_fab_real} onChange={e=>set("horas_fab_real",+e.target.value)}/></div>
+          </div>
           <div style={{ fontSize:12, color: c.desvio_fab_pct > 10 ? C.err : c.desvio_fab_pct < -5 ? C.ok : C.muted, fontWeight:700 }}>
             Desvío: {c.desvio_fab_pct > 0 ? "+" : ""}{n2(c.desvio_fab_pct)}%
           </div>
@@ -311,7 +349,10 @@ function DetalleTrabajo({ t, onChange, onBack }) {
         </div>
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
           <div style={{ fontSize:12, fontWeight:700, color:C.steel, marginBottom:10 }}>Montaje</div>
-          <div style={{ fontSize:12, color:C.muted, marginBottom:4 }}>Est.: {n2(t.horas_mon_est)} hs · Real: {n2(t.horas_mon_real)} hs</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:6 }}>
+            <div><label style={lblMini}>Hs Est.</label><input type="number" style={inpMini} value={t.horas_mon_est} onChange={e=>set("horas_mon_est",+e.target.value)}/></div>
+            <div><label style={lblMini}>Hs Real</label><input type="number" style={inpMini} value={t.horas_mon_real} onChange={e=>set("horas_mon_real",+e.target.value)}/></div>
+          </div>
           <div style={{ fontSize:12, color: c.desvio_mon_pct > 10 ? C.err : c.desvio_mon_pct < -5 ? C.ok : C.muted, fontWeight:700 }}>
             Desvío: {c.desvio_mon_pct > 0 ? "+" : ""}{n2(c.desvio_mon_pct)}%
           </div>
@@ -319,11 +360,15 @@ function DetalleTrabajo({ t, onChange, onBack }) {
         </div>
       </div>
 
-      {t.notas && (
-        <div style={{ background:C.iron, borderRadius:8, padding:12, fontSize:12, color:C.steel }}>
-          {t.notas}
-        </div>
-      )}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+        <div><label style={lblMini}>Negociación %</label><input type="number" style={inpMini} value={t.negociacion_pct} onChange={e=>set("negociacion_pct",+e.target.value)}/></div>
+        <div><label style={lblMini}>Días de obra</label><input type="number" style={inpMini} value={t.dias_obra} onChange={e=>set("dias_obra",+e.target.value)}/></div>
+      </div>
+
+      <div>
+        <label style={lblMini}>Observaciones</label>
+        <textarea style={{ ...INP, minHeight:60, resize:"vertical" }} value={t.notas} onChange={e=>set("notas",e.target.value)} />
+      </div>
     </div>
   );
 }

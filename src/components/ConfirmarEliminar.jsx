@@ -62,25 +62,26 @@ export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, o
 // demasiada fricción para algo que se hace todo el tiempo), pero exige
 // tildar una casilla antes de habilitar el botón, para frenar el click
 // accidental en el ✕.
-export function ModalConfirmarBorrado({ titulo, subtitulo, onConfirm, onClose }) {
+export function ModalConfirmarBorrado({ titulo, subtitulo, verbo, checkboxLabel, labelBoton, color, onConfirm, onClose }) {
   const [ok, setOk] = useState(false);
+  const col = color || C.err;
 
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position:"fixed", inset:0, zIndex:2000, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div style={{ background:C.card, border:`1.5px solid ${C.err}55`, borderRadius:14, padding:24, width:"100%", maxWidth:360 }}>
-        <div style={{ color:C.err, fontWeight:800, fontSize:14, marginBottom:6 }}>⚠ Eliminar {titulo}</div>
-        <div style={{ color:C.muted, fontSize:12, marginBottom:16 }}>
+      <div style={{ background:C.card, border:`1.5px solid ${col}55`, borderRadius:14, padding:24, width:"100%", maxWidth:420 }}>
+        <div style={{ color:col, fontWeight:800, fontSize:14, marginBottom:6 }}>⚠ {verbo || "Eliminar"} {titulo}</div>
+        <div style={{ color:C.muted, fontSize:12, marginBottom:16, whiteSpace:"pre-line", maxHeight:220, overflowY:"auto" }}>
           {subtitulo || "Esta acción no se puede deshacer."}
         </div>
         <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:16, fontSize:12, color:C.text }}>
-          <input type="checkbox" checked={ok} onChange={e=>setOk(e.target.checked)} style={{ width:16, height:16, accentColor:C.err, cursor:"pointer" }} />
-          Sí, quiero eliminar esto
+          <input type="checkbox" checked={ok} onChange={e=>setOk(e.target.checked)} style={{ width:16, height:16, accentColor:col, cursor:"pointer" }} />
+          {checkboxLabel || "Sí, quiero eliminar esto"}
         </label>
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={()=>ok&&onConfirm()} disabled={!ok}
-            style={{ ...BTN("danger"), flex:1, opacity: ok ? 1 : 0.5, background:C.err+"22", borderColor:C.err+"66" }}>
-            🗑 Eliminar
+            style={{ ...BTN("danger"), flex:1, opacity: ok ? 1 : 0.5, background:col+"22", borderColor:col+"66", color:col }}>
+            {labelBoton || "🗑 Eliminar"}
           </button>
           <button onClick={onClose} style={{ ...BTN("ghost"), flex:1 }}>Cancelar</button>
         </div>

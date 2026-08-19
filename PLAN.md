@@ -1,6 +1,6 @@
 # STEEL MEASUREMENT — PLAN MAESTRO Y CONTEXTO
 *Documento de referencia para continuar el desarrollo en nuevas sesiones*
-*Última actualización: 2026-08-02*
+*Última actualización: 2026-08-17*
 
 ---
 
@@ -549,8 +549,11 @@ Lo que queda pendiente, por orden sugerido:
       contra la lista. Probado en navegador: crear → cambiar estado a
       Aprobado → clonar → confirma nro correlativo, estado vuelve a
       Borrador, referencia al original se resuelve bien.
-- [ ] **Exportación a PDF** — no implementada (0 referencias a jsPDF/print/pdf
-      en el código). Corresponde a D1 de steelCRM.
+- [x] **Exportación a PDF** — implementada 2026-08-16 (23:40, fuera de esta
+      sesión de trabajo — ver §9.22 para el detalle y la corrección de
+      estado). `src/utils/pdfPresupuesto.js`, botón "🖨️ PDF" en
+      `Presupuesto.jsx`. Corresponde a D1 de steelCRM (mismo template
+      compartido entre los dos repos).
 - [x] **Backup manual (exportar/importar)** — implementado 2026-07-31.
       Botón "⬇️ Backup" (visible a todos) descarga un .json con todas las
       claves `smeas_*` de localStorage. Botón "⬆️ Restaurar" (solo
@@ -1825,6 +1828,224 @@ Measurement ↔ steelCRM" en la lista de pendientes (línea ~773) decía que
 steelCRM era "solo documentación, sin código construido" — ya no es así,
 tiene código React funcionando con 614 presupuestos + 183 contactos reales
 de MMN importados.
+
+## §9.21 — Otros tratamientos/cortes conectados al cálculo + carga de presupuestos históricos (2026-08-16)
+
+**A. "Otros tratamientos" y "Otros cortes" ahora suman al ítem** (antes eran
+catálogos de referencia sin efecto en el cálculo, señalado por el usuario
+como pendiente):
+- `TabTrat` (Presupuesto.jsx): nuevo array `ts.otros` (fila = nombre +
+  USD/kg), subtotal SIEMPRE recalculado en vivo como
+  `usd_kg × hier_kg_item` (nunca guardado stale, para no desincronizar si
+  cambian los hierros del ítem después). `calcItem()` suma este subtotal a
+  `trat_usd`. QuickPick opcional desde `tarifario.trat_superficie_extra`
+  (Config) además de la carga manual.
+- `TabPanto`: "Otros cortes" reutiliza el mecanismo ya existente de
+  `corte_pantografo` (ya estaba conectado al cálculo) — se agregó un
+  QuickPick desde `tarifario.pantografo_extra`, visible solo si ese
+  catálogo tiene datos cargados en Config.
+- Verificado en navegador con datos reales: cargar "1.5 USD/kg" en Otros
+  tratamientos sobre un ítem de 43124 kg sumó exactamente $64686.00 (=
+  1.5 × 43124) al total del ítem y al Resumen del presupuesto. Fila
+  probada, verificada y eliminada después (no queda en los datos reales).
+
+**B. Carga de presupuestos históricos aproximados** (235 registros,
+misma fuente "Datos de fabricación.xlsx" que ya alimenta el Historial):
+- `src/utils/presupuestosHistoricosSeed.js` (nuevo, generado por script):
+  un presupuesto por trabajo histórico, UN ítem con una fila por rubro
+  (Hierros, Mat. Generales, MO Fab, MO Mon, Terceros Fab/Mon, Trat.
+  Superficie, Traslados, Pantógrafo), dimensionada para que el total
+  coincida EXACTO con el `usd_total` real de cada trabajo (normalización
+  proporcional de los `%` por rubro, que no siempre suman 100% en la
+  fuente — diferencia máxima verificada entre los 235 registros: $0.02,
+  puro redondeo). `estado: "aprobado"`, `nro: "H-<OT>"`,
+  `negociacion_pct: 0` a propósito (no se toma del histórico — ahora la
+  negociación suma al total, usar el valor viejo, pensado como descuento,
+  infllaría el monto reconstruido).
+- **Es una aproximación, no el cálculo real**: no tiene detalle
+  pieza por pieza — un solo ítem "Trabajo completo (importado de
+  histórico)" con montos por rubro, sin materiales/horas específicas.
+- Carga: botón "📥 Cargar histórico (235)" en el header de Presupuesto,
+  gateado por `ModalConfirmarBorrado` (generalizado con props
+  `verbo`/`checkboxLabel`/`labelBoton`/`color` para reusarlo en acciones
+  no destructivas — antes tenía "Eliminar" fijo). SUMA a los presupuestos
+  existentes, nunca reemplaza. Flag `smeas_historico_cargado` en
+  localStorage oculta el botón después de la primera carga (no se puede
+  cargar duplicado desde la UI).
+- Nota: no se usó `window.confirm` — el proyecto evita diálogos nativos
+  del navegador en favor de modales propios (patrón ya establecido toda
+  esta sesión con `ModalConfirmarBorrado`/`ModalConfirmarEliminar`).
+- Verificado en navegador: carga de los 235, un presupuesto de ejemplo
+  (H-4176, Barandas - Defensas, $213071.60) con la suma de sus 5 rubros
+  coincidiendo exacto con el total, KG totales y USD/kg mostrados
+  correctamente en el Resumen.
+
+**C. Limpieza de `historialSeed.js`** (2026-08-16, mismo día — el usuario
+señaló las fechas corruptas vistas en la lista de Presupuestos y pidió
+limpiarlas): la fuente tenía 239 registros originalmente, 5 con datos
+sospechosos. Investigado uno por uno:
+- 1 registro real con fecha corrupta pero recuperable: OT 4416 (Cajones
+  UPN, Marinao, $23800, 6652 kg) tenía `fecha: "16/024/202"` — corregido
+  a `"2024-04-16"` por contexto (linda en la secuencia de OTs con la
+  4415, del mismo cliente/fecha, y con la 4272→2023-11-13 y 4547→
+  2024-09-11 antes/después).
+- 4 registros que NO eran trabajos reales, sino basura del import de
+  Excel (fila vacía o de fórmula que se coló): `nro_ot` con decimales
+  tipo fracción (`"0.21637426900584794"`), `fecha: "%"` (el símbolo del
+  formato de celda, no un valor), `cliente`/`obra`/`notas` vacíos,
+  montos triviales (2 de $1 con 0.02–0.06 kg). Eliminados de
+  `historialSeed.js` — bajan el total de 239 a **235**.
+- `presupuestosHistoricosSeed.js` regenerado desde el `historialSeed.js`
+  corregido (mismo script, mismo chequeo de integridad: diferencia
+  máxima $0.02 en los 235). Verificado en navegador tras limpiar
+  localStorage y recargar: 0 presupuestos con fecha fuera de formato
+  `YYYY-MM-DD`, H-4416 con fecha correcta.
+- Esto afecta también al Historial y su Benchmark (mismos 235 registros,
+  4 menos que antes) — no hubo verificación adicional en Historial en
+  esta pasada porque el fix es puramente de datos (menos basura, no
+  cambia lógica de agrupamiento).
+
+Build limpio (`CI=true npx react-scripts build`, exit 0) y verificación
+completa en navegador (login, Presupuesto, carga histórica, edición de
+Otros tratamientos, Pantógrafo, limpieza de datos) para los tres puntos.
+
+## §9.22 — Tipo de ítem (Fab/Montaje/Fab+Mont) + rubros activos por ítem, corrección de estado del PDF (2026-08-17)
+
+Gino compartió `MN005_ProgramaCalculo.xlsx` (cálculo real hecho a mano para
+un rótulo JCDecaux, con el formato del programa de cálculo interno MMN) y
+preguntó si validaba la estructura de steel-measurement. Comparado rubro
+por rubro contra `Presupuesto.jsx`: los 9 rubros coinciden casi campo a
+campo (USD/KG, Subtotal KG, Subtotal USD, Porc.Item, filas de desperdicio
+separadas por hierro — igual que el export Anidado→Presupuesto). El gap
+real encontrado: el Excel separa el trabajo en dos ítems de Gestsoft
+independientes (ID fabricación vs ID sitio/montaje), cada uno con su
+propio subtotal y USD/kg — steel-measurement mezclaba todos los rubros en
+un solo ítem sin esa distinción.
+
+**Fix**: no se tocó el schema de los 9 rubros (nada de migración). Se
+agregaron 2 campos nuevos a cada ítem, ambos con default que preserva el
+comportamiento actual:
+- `tipo: "fabricacion" | "montaje" | "fab_mont"` (default `"fab_mont"`).
+- `rubrosActivos: {hierros, mat_generales, mo_fabricacion, mo_montajes,
+  terc_fabricacion, terc_montajes, trat_superficie, traslados,
+  corte_pantografo}` (default: todos `true`).
+
+`PRESET_TIPO_RUBROS` en `Presupuesto.jsx` define qué rubros se activan al
+elegir cada tipo (ej. "Fabricación" activa Hierros/MatGen/MOFab/TratSup/
+Pantógrafo y desactiva MOMon/TercMon/Traslados). El usuario puede
+override cualquier rubro individual después con un chip ☑/☐ por rubro.
+**Es puramente visual — nunca borra datos ni cambia `calcItem()`**: un
+rubro desactivado con filas cargadas sigue sumando al total, solo se
+oculta su pestaña en el editor (mismo principio que "Otros tratamientos"
+de la sesión anterior: nunca perder plata por un toggle de UI).
+
+Ítems viejos/históricos sin `rubrosActivos` (los 235 del seed histórico,
+cualquier presupuesto guardado antes de este cambio) se tratan como
+"todo activo" — `activo(id) = item.rubrosActivos ? item.rubrosActivos[id]
+!== false : true` — cero necesidad de migrar datos existentes.
+
+Verificado en navegador sobre H-4176 (real, cargado del histórico): elegir
+"🔨 Fabricación" ocultó las pestañas MO Mon/Terc.Mon/Traslados sin cambiar
+el TOTAL USD ($213,071.60 intacto) ni el Resumen (Traslados $2,733.42
+seguía sumando aunque su pestaña estaba oculta); re-marcar el chip
+individual de Traslados la trajo de vuelta; volver a "Fab+Mont" restauró
+los 9 rubros activos. Build limpio.
+
+**Corrección de estado — Exportación a PDF**: en el status check anterior
+de esta misma sesión (más arriba en esta conversación) se reportó "no
+implementada, 0 referencias a jsPDF/print" — eso era correcto en el
+momento en que se verificó. Al probar el ítem H-4176 en este paso apareció
+un botón "🖨️ PDF" que no debería haber estado ahí. Investigado: el archivo
+`src/utils/pdfPresupuesto.js` tiene fecha de creación en disco
+**2026-08-16 23:40**, 37 minutos después de la última edición de este
+`PLAN.md` en esta sesión (23:03, §9.21) — es decir, se agregó por fuera de
+este hilo de trabajo, probablemente desde la sesión de coordinación con
+steelCRM (el propio archivo dice en su comentario que es la misma función
+compartida entre los dos repos, correspondiente a D1 de steelCRM). No fue
+un error de grep — el archivo genuinamente no existía cuando se reportó.
+No se tocó ese código (no es de esta sesión), solo se corrigió el estado
+en el punto de la sección 9.4 más arriba.
+
+## §9.23 — Auditoría de "qué falta": 4 gaps reales cerrados (2026-08-17)
+
+Pedido: relevamiento honesto de qué le falta al software para seguir
+desarrollando (releído `PLAN.md` completo + verificado contra código
+actual, no solo memoria — confirmó que la sección "Config marcado
+`pronto:true`" ya estaba obsoleta, y que 2 hallazgos de julio seguían
+reales: Historial de solo lectura y los 4 `window.confirm()`). De la
+lista priorizada, Gino eligió atacar 4 puntos en esta misma sesión:
+
+**1. Historial: los trabajos ya se pueden editar.** `DetalleTrabajo`
+recibía `onChange` como prop pero no lo usaba en ningún input — quedaba
+100% de solo lectura después de creado (sólo crear/eliminar). Ahora todos
+los campos crudos (N° OT, fecha, tipo, cliente, obra, categoría, kg/USD
+totales, horas fab/mont est. y real, % por rubro, negociación, días de
+obra, observaciones) son inputs conectados a `onChange({...t,[k]:v})`,
+que ya llamaba `touch()` del lado del padre — no hizo falta tocar esa
+parte. Los valores CALCULADOS (USD/kg real, kg/h real, % de desvío) siguen
+de solo lectura, como corresponde. Verificado en navegador: editar
+Cliente en la OT 1731 actualiza `smeas_historial` y `updated_at` avanza.
+
+**2. Los 4 `window.confirm()` restantes migrados a los modales propios**
+(`ModalConfirmarBorrado`, generalizado la sesión anterior con
+`verbo`/`checkboxLabel`/`labelBoton`/`color`):
+- `BibliotecaMateriales.jsx`: guardar datos técnicos y eliminar material
+  — ambos separados en función "real" (sin el confirm) + estado de modal
+  que la dispara.
+- `Computo.jsx`: eliminar ítem — mismo patrón que ya usaba Anidado desde
+  §9.18 (`ModalConfirmarBorrado` con casilla, no pide contraseña porque es
+  un borrado frecuente durante la edición).
+- `Presupuesto.jsx`: sync de precios Historial→Biblioteca al aprobar (el
+  más viejo del proyecto, de antes de que existiera el patrón) — la
+  función se partió en `calcularCambiosPrecios()` (pura) +
+  `aplicarCambiosPrecios()` (efecto), con el estado del modal en
+  `DetallePresupuesto`. El cambio de estado del presupuesto sigue
+  aplicándose de inmediato pase lo que pase con el modal (mismo
+  comportamiento que antes — sólo la sincronización de precios queda
+  gateada por la confirmación, nunca la aprobación en sí).
+- `ModalConfirmarBorrado` ganó `whiteSpace:"pre-line"` + scroll en el
+  subtítulo (antes una sola línea) para poder mostrar listas
+  multi-línea como el detalle de cambios de precio.
+- Verificado en navegador los 4: guardar/eliminar material en Biblioteca,
+  eliminar ítem de Cómputo (3→4→3 ítems), y el de sync de precios con un
+  caso real forzado (`$0.50 → $1.54 USD/kg`, confirmado y verificado que
+  actualizó `precio_usd_kg` + `historial_precios` con proveedor
+  "Presupuesto H-4176").
+- `grep window\.confirm` en `src/` → 0 resultados funcionales (sólo queda
+  la mención en un comentario).
+
+**3. Formato de `codigo_calculo` definido: `SM-AAAA-NNNN`.** Contador
+anual propio en localStorage (`newCodigoCalculo()` en `storage.js`,
+mismo patrón que `newNroPresupuesto()` pero con formato fijo, no
+configurable por empresa — tiene que ser estable entre proyectos). Se
+asigna al crear o clonar un presupuesto; los presupuestos viejos/
+históricos sin el campo lo reciben por "backfill" la primera vez que se
+exportan (ver punto 4). Visible en el topbar del detalle: "🔗
+SM-2026-0001". `TAXONOMIA-COMPARTIDA-MMN.md` §7 actualizado — reemplaza
+el "libre por ahora, sin acordar" anterior.
+
+**4. Transporte steel-measurement → steelCRM: lado steel-measurement
+construido.** Botón "⬇️ steelCRM" en el detalle de Presupuesto, junto al
+de PDF — descarga `steelmeasurement-export-<codigo_calculo>.json` con el
+RESUMEN comercial (cliente, obra, tipo, fecha, kg, USD total, USD/kg,
+codigo_calculo, estado_sm) — deliberadamente SIN el desglose de los 9
+rubros de costo, mismo criterio de privacidad que ya usa el PDF.
+`exportPresupuestoParaSteelCRM()` en `storage.js`, mismo mecanismo de
+descarga que `exportBackup()`. Contrato completo (forma del JSON) documentado
+en `TAXONOMIA-COMPARTIDA-MMN.md` §8 nueva, para que la sesión de steelCRM
+construya el importador cuando le toque — **no se tocó código de
+steelCRM en esta sesión**, respetando el límite ya establecido de "cada
+proyecto, su propia sesión". Gaps anotados ahí mismo para esa sesión:
+vocabulario de `estado` distinto entre los dos sistemas (por eso el campo
+se llama `estado_sm`, no `estado`), y que Presupuesto todavía no tiene un
+campo de Categoría/Familia (sólo Historial lo tiene) — así que el export
+no lo puede llevar todavía. Verificado en navegador: backfill de
+`codigo_calculo` al exportar un presupuesto histórico sin el campo,
+aparece correctamente en el topbar.
+
+Build limpio (`CI=true npx react-scripts build`, exit 0) después de cada
+punto; los 4 verificados en navegador con datos reales, no sólo lectura
+de código.
 
 ---
 

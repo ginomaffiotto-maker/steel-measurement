@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario } from "../utils/storage";
+import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const hoy = () => new Date().toISOString().split("T")[0];
@@ -819,6 +820,8 @@ function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
     : { nombre: mat.nombre, cat: mat.cat || "", kg_m: String(mat.kg_m), largo: String(mat.largo), sup: String(mat.sup) };
   const [datos,    setDatos]    = useState(initDatos);
   const [editando, setEditando] = useState(false);
+  const [confirmarGuardarDatos, setConfirmarGuardarDatos] = useState(false);
+  const [confirmarEliminarMat, setConfirmarEliminarMat] = useState(false);
 
   const historial = [...(mat.historial_precios || [])].sort((a, b) => {
     if (!a.fecha) return 1; if (!b.fecha) return -1;
@@ -844,7 +847,6 @@ function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
 
   // ── Datos técnicos ──
   const guardarDatos = () => {
-    if (!window.confirm(`¿Confirmar cambios en los datos técnicos de "${mat.nombre}"?`)) return;
     let actualizado = { ...mat };
     if (tipo === "plancha") {
       const esp = parseFloat(datos.espesor) || mat.espesor;
@@ -880,7 +882,6 @@ function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
   };
 
   const handleEliminar = () => {
-    if (!window.confirm(`¿Eliminar "${mat.nombre}" de la biblioteca? Esta acción no se puede deshacer.`)) return;
     onEliminar(mat.id);
     onClose();
   };
@@ -1034,7 +1035,7 @@ function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
                     <button onClick={() => setEditando(true)} style={{ ...BTN("ghost"), borderColor: C.warn+"66", color: C.warn }}>
                       ✏️ Editar datos
                     </button>
-                    <button onClick={handleEliminar} style={{ ...BTN("danger") }}>
+                    <button onClick={() => setConfirmarEliminarMat(true)} style={{ ...BTN("danger") }}>
                       🗑️ Eliminar material
                     </button>
                   </div>
@@ -1085,10 +1086,30 @@ function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
                     </div>
                   </div>
                   <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={guardarDatos} style={{ ...BTN("ok") }}>✓ Guardar cambios</button>
+                    <button onClick={() => setConfirmarGuardarDatos(true)} style={{ ...BTN("ok") }}>✓ Guardar cambios</button>
                     <button onClick={() => { setEditando(false); setDatos(initDatos()); }} style={BTN("ghost")}>Cancelar</button>
                   </div>
                 </>
+              )}
+              {confirmarGuardarDatos && (
+                <ModalConfirmarBorrado
+                  titulo={`cambios en los datos técnicos de "${mat.nombre}"`}
+                  subtitulo="Recalcula kg/m, kg/m² o m² según el tipo de material — verificá los valores antes de confirmar."
+                  verbo="Guardar"
+                  checkboxLabel="Sí, quiero guardar estos cambios"
+                  labelBoton="✓ Guardar"
+                  color={C.ok}
+                  onConfirm={() => { guardarDatos(); setConfirmarGuardarDatos(false); }}
+                  onClose={() => setConfirmarGuardarDatos(false)}
+                />
+              )}
+              {confirmarEliminarMat && (
+                <ModalConfirmarBorrado
+                  titulo={`"${mat.nombre}" de la biblioteca`}
+                  subtitulo="Esta acción no se puede deshacer."
+                  onConfirm={() => { setConfirmarEliminarMat(false); handleEliminar(); }}
+                  onClose={() => setConfirmarEliminarMat(false)}
+                />
               )}
             </div>
           )}
@@ -1858,9 +1879,9 @@ function SeccionTratSuperficie({ usuario }) {
       <h3 style={{ margin:"0 0 4px", fontSize:13, fontWeight:800, color:C.muted }}>Otros tratamientos</h3>
       <div style={{ fontSize:12, color:C.muted, marginBottom:14, maxWidth:900 }}>
         Precio de referencia para tratamientos que no son Arenado ni Galvanizado
-        (ej. Metalizado, Fosfatizado). Todavía no se calculan solos en el ítem del
-        presupuesto — para cobrarlos hoy, cargalos en Trat. Superficie → Pinturas
-        del ítem, que sí es una lista libre.
+        (ej. Metalizado, Fosfatizado). Se pueden elegir desde acá en cualquier
+        ítem de Presupuesto (pestaña Trat. Superficie → "Otros tratamientos") y
+        se cobran USD/kg sobre el peso total del ítem.
       </div>
       <CatalogoEditable items={tarifario.trat_superficie_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} />
     </div>
@@ -1893,7 +1914,9 @@ function SeccionPantografo({ usuario }) {
       <h3 style={{ margin:"0 0 4px", fontSize:13, fontWeight:800, color:C.muted }}>Otros cortes</h3>
       <div style={{ fontSize:12, color:C.muted, marginBottom:14, maxWidth:900 }}>
         Precio de referencia para otros tipos de corte (láser, plasma CNC, oxicorte
-        especial, etc.) además de los 2D/3D de arriba.
+        especial, etc.) además de los 2D/3D de arriba. Se pueden elegir desde acá
+        en cualquier ítem de Presupuesto (pestaña Pantógrafo) — el kg queda
+        pre-cargado con el peso del ítem y es editable.
       </div>
       <CatalogoEditable items={tarifario.pantografo_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} />
     </div>

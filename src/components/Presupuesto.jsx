@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, registrarCliente } from "../utils/storage";
-import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, registrarCliente, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM } from "../utils/storage";
+import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
+import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
+import { FAMILIAS, familiaDe } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -16,10 +19,12 @@ const TH_TOOLTIPS = {
 
 // Al aprobar un presupuesto, ofrece actualizar Insumos y Precios con los
 // USD/kg realmente usados en los ítems de Hierros — SIEMPRE con confirmación
-// previa, nunca en silencio (pedido explícito del usuario).
-function sincronizarPreciosDesdeAprobacion(pres) {
+// previa, nunca en silencio (pedido explícito del usuario). Separado en
+// cálculo (puro) + aplicación para poder mostrar la confirmación con el
+// modal propio del proyecto en vez de window.confirm.
+function calcularCambiosPrecios(pres) {
   const hierros = (pres.items || []).flatMap(it => it.hierros || []);
-  if (hierros.length === 0) return;
+  if (hierros.length === 0) return [];
   const catalogos = ["smeas_perfiles", "smeas_planchuelas", "smeas_planchas"];
   const porNombre = {};
   catalogos.forEach(key => loadLS(key, []).forEach(it => { porNombre[it.nombre] = { ...it, __key: key }; }));
@@ -34,14 +39,10 @@ function sincronizarPreciosDesdeAprobacion(pres) {
       cambios.push({ nombre: r.nombre, key: bib.__key, id: bib.id, desde: actual, hasta: +r.usd_kg });
     }
   });
-  if (cambios.length === 0) return;
+  return cambios;
+}
 
-  const resumen = cambios.map(c => `• ${c.nombre}: $${n2(c.desde)} → $${n2(c.hasta)} USD/kg`).join("\n");
-  const ok = window.confirm(
-    `Este presupuesto tiene ${cambios.length} precio(s) distintos a los cargados en Insumos y Precios:\n\n${resumen}\n\n¿Actualizar Insumos y Precios con estos precios?`
-  );
-  if (!ok) return;
-
+function aplicarCambiosPrecios(pres, cambios) {
   const porKey = {};
   cambios.forEach(c => { (porKey[c.key] = porKey[c.key] || []).push(c); });
   Object.entries(porKey).forEach(([key, lista]) => {
@@ -105,6 +106,23 @@ const ESTADO_CFG = {
 };
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
+// Categoría: mismo mapeo Familia→Categoría que ya usa Historial (taxonomia.js),
+// dropdown en vez de texto libre para que no diverja de la lista canónica —
+// necesario para que el export a steelCRM (§4 de esta sesión) y los reportes
+// cruzados por Familia/Categoría funcionen también con datos de Presupuesto.
+function SelectCategoria({ value, onChange }) {
+  return (
+    <select style={INP} value={value || ""} onChange={e => onChange(e.target.value)}>
+      <option value="">— Sin categoría —</option>
+      {Object.entries(FAMILIAS).map(([familia, cats]) => (
+        <optgroup key={familia} label={familia}>
+          {cats.map(c => <option key={c} value={c}>{c}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
 const TIPO_HORA_OPCIONES = [
   { label: "Común",    pct: 0   },
   { label: "Nocturna", pct: 25  },
@@ -115,14 +133,9 @@ const TIPO_HORA_OPCIONES = [
 const normalizarTipoHora = (v) => v === "comun" ? "Común" : v === "extra" ? "Extra" : (v || "Común");
 const UNIDADES = ["kg", "m²", "m", "u", "hora", "día", "mes"];
 
-function genNro(lista) {
-  const nums = lista.map(p => parseInt((p.nro || "").replace(/\D/g, ""), 10)).filter(n => !isNaN(n));
-  return "P-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
-}
-
-const iPresupuesto = () => ({
-  id: uid(), nro: "", nombre: "", cliente: "", contacto: "",
-  obra: "", detalle: "", tipo_trabajo: "Fabricación",
+export const iPresupuesto = () => ({
+  id: uid(), nro: "", codigo_calculo: "", nombre: "", cliente: "", contacto: "",
+  obra: "", detalle: "", tipo_trabajo: "Fabricación", categoria: "",
   estado: "borrador", clonado_de: null,
   negociacion_pct: 0, negociacion_usd: 0, neg_modo: "pct",
   interes_pct: 0, interes_dias: 30,
@@ -131,9 +144,19 @@ const iPresupuesto = () => ({
   ...stamp(),
 });
 
-const iItem = () => ({
+// Preset de rubros activos según el tipo de trabajo del ítem — sólo
+// controla qué pestañas se muestran en el editor (no borra datos ni
+// afecta calcItem: un rubro oculto con filas cargadas sigue sumando).
+const PRESET_TIPO_RUBROS = {
+  fabricacion: { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:false, terc_fabricacion:true,  terc_montajes:false, trat_superficie:true, traslados:false, corte_pantografo:true  },
+  montaje:     { hierros:false, mat_generales:true, mo_fabricacion:false, mo_montajes:true,  terc_fabricacion:false, terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:false },
+  fab_mont:    { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:true,  terc_fabricacion:true,  terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:true  },
+};
+
+export const iItem = () => ({
   id: uid(), titulo: "Ítem nuevo", cantidad: 1, n_plano: "",
   no_agrega_kg: false, computo_id: "",
+  tipo: "fab_mont", rubrosActivos: { ...PRESET_TIPO_RUBROS.fab_mont },
   hierros: [], mat_generales: [],
   mo_fabricacion: [], mo_montajes: [], horas_especiales: [],
   terc_fabricacion: [], terc_montajes: [],
@@ -142,7 +165,9 @@ const iItem = () => ({
 });
 
 // ─── CÁLCULOS ────────────────────────────────────────────────────
-function calcItem(it) {
+// export sólo para poder testearlas directamente (src/components/__tests__) —
+// siguen siendo funciones internas del módulo, no una API pública nueva.
+export function calcItem(it) {
   const cant      = +it.cantidad || 1;
   const hier_usd  = (it.hierros || []).reduce((s, h) => s + (+h.subtotal_usd || 0), 0);
   const hier_kg   = (it.hierros || []).reduce((s, h) => s + (+h.subtotal_kg  || 0), 0);
@@ -161,7 +186,8 @@ function calcItem(it) {
   const tarifarioCI = loadTarifario();
   const trat_usd  = (ts.pinturas || []).reduce((s, p) => s + (+p.subtotal_usd || 0), 0)
                   + (+ts.arenado_m2 || 0) * (+ts.arenado_usd_m2 || tarifarioCI.arenado_usd_m2 || 0)
-                  + (ts.galvanizado ? (+ts.galvanizado_kg || 0) * (+ts.galvanizado_usd_kg || tarifarioCI.galvanizado_usd_kg || 0) : 0);
+                  + (ts.galvanizado ? (+ts.galvanizado_kg || 0) * (+ts.galvanizado_usd_kg || tarifarioCI.galvanizado_usd_kg || 0) : 0)
+                  + (ts.otros || []).reduce((s, o) => s + (+o.usd_kg || 0), 0) * hier_kg;
   const trasl_usd = (it.traslados || []).reduce((s, t) => s + (+t.subtotal_usd || 0), 0);
   const panto_usd = (it.corte_pantografo || []).reduce((s, c) => s + (+c.subtotal_usd || 0), 0);
 
@@ -180,7 +206,7 @@ function calcItem(it) {
   };
 }
 
-function calcPresupuesto(p) {
+export function calcPresupuesto(p) {
   const rubros = { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 };
   let total_usd = 0, total_kg = 0, kg_con_desp = 0, kg_desp_pond = 0;
   for (const it of p.items || []) {
@@ -206,9 +232,35 @@ function calcPresupuesto(p) {
   };
 }
 
+// El PDF nunca muestra el desglose de rubros (expondría la estructura de
+// costos interna al cliente) — solo el resumen: kg totales, USD/kg promedio
+// y el monto final. Los rubros siguen calculándose y quedan asociados al
+// presupuesto (calcPresupuesto), simplemente no se imprimen fila por fila.
+function generarPDFPresupuesto(pres) {
+  const c = calcPresupuesto(pres);
+
+  abrirPDFPresupuesto({
+    empresa: loadLS("smeas_empresa", ""),
+    nro: pres.nro,
+    fecha: pres.fecha,
+    cliente: { empresa: pres.cliente, contacto: pres.contacto },
+    proyecto: { descripcion: pres.detalle || pres.nombre, obra: pres.obra, tipo: pres.tipo_trabajo },
+    items: [{
+      label: pres.detalle || pres.nombre || "—",
+      sub: pres.obra,
+      kg: c.total_kg,
+      usdKg: c.usd_kg,
+      totalUSD: c.gran_total,
+    }],
+    totalUSD: c.gran_total,
+    condiciones: { moneda: pres.moneda || "USD", formaPago: pres.forma_pago },
+    notas: pres.notas,
+  });
+}
+
 // ─── MODAL NUEVO PRESUPUESTO ─────────────────────────────────────
 function ModalNuevo({ onSave, onClose }) {
-  const [form, setForm] = useState({ nombre:"", cliente:"", contacto:"", obra:"", detalle:"", tipo_trabajo:"Fabricación" });
+  const [form, setForm] = useState({ nombre:"", cliente:"", contacto:"", obra:"", detalle:"", tipo_trabajo:"Fabricación", categoria:"" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   return (
     <div style={{ position:"fixed",inset:0,zIndex:1000,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
@@ -229,6 +281,8 @@ function ModalNuevo({ onSave, onClose }) {
             <select style={INP} value={form.tipo_trabajo} onChange={e=>set("tipo_trabajo",e.target.value)}>
               {TIPOS.map(t=><option key={t}>{t}</option>)}
             </select></div>
+          <div><label style={LBL}>Categoría</label>
+            <SelectCategoria value={form.categoria} onChange={v=>set("categoria",v)} /></div>
           <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Detalle</label>
             <input style={INP} value={form.detalle} placeholder="Descripción breve" onChange={e=>set("detalle",e.target.value)}/></div>
         </div>
@@ -718,6 +772,18 @@ function TabTrat({ item, set }) {
   const arena_auto   = (item.hierros || []).filter(r=>r.arena).reduce((s,r)=>s+(+r.subtotal_m2||0),0);
   const pintura_auto = (item.hierros || []).filter(r=>r.pintura).reduce((s,r)=>s+(+r.subtotal_m2||0),0);
   const galv_auto    = (item.hierros || []).filter(r=>r.galvanizado).reduce((s,r)=>s+(+r.subtotal_kg||0),0);
+  const hier_kg_item = (item.hierros || []).reduce((s,r)=>s+(+r.subtotal_kg||0),0);
+
+  // Otros tratamientos (catálogo extensible de Insumos y Precios) — se
+  // cobran USD/kg sobre el peso total del ítem, mismo criterio que
+  // Arenado/Galvanizado. El subtotal se calcula en vivo (no se guarda
+  // "pisado") para que nunca quede desactualizado si cambian los hierros.
+  const otros = ts.otros || [];
+  const updOtro = (id, field, val) => setTs("otros", otros.map(r => r.id===id ? { ...r, [field]: val } : r));
+  const addOtroDesdeCatalogo = (it) => setTs("otros", [...otros, { id:uid(), nombre:it.nombre, usd_kg:it.usd||0 }]);
+  const addOtro = () => setTs("otros", [...otros, { id:uid(), nombre:"", usd_kg:0 }]);
+  const delOtro = (id) => setTs("otros", otros.filter(r=>r.id!==id));
+  const tot_otros = otros.reduce((s,r)=>s+(+r.usd_kg||0),0) * hier_kg_item;
 
   const updPintura = (id, field, val) => {
     const rows = (ts.pinturas||[]).map(r => {
@@ -737,7 +803,7 @@ function TabTrat({ item, set }) {
   const tot_galv      = ts.galvanizado ? (+ts.galvanizado_kg||0) * (+ts.galvanizado_usd_kg||tarifario.galvanizado_usd_kg||0) : 0;
   const tot_lt        = (ts.pinturas||[]).reduce((s,r)=>s+(+r.cant_lt||0)*(+r.cant_manos||0),0);
   const tot_manos     = (ts.pinturas||[]).reduce((s,r)=>s+(+r.cant_manos||0),0);
-  const tot = tot_pintura + tot_arenado + tot_galv;
+  const tot = tot_pintura + tot_arenado + tot_galv + tot_otros;
 
   return (
     <div>
@@ -807,6 +873,35 @@ function TabTrat({ item, set }) {
         )}
       </div>
 
+      {/* Otros tratamientos */}
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 }}>
+        <div style={{ fontWeight:700, color:C.steel, fontSize:13, marginBottom:12 }}>🧪 Otros tratamientos</div>
+        <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Subtotal = USD/kg × {n2(hier_kg_item)} kg (peso total del ítem)</div>
+        <QuickPick catalogo={tarifario.trat_superficie_extra} onPick={addOtroDesdeCatalogo} />
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead><tr>
+            {["Descripción","USD/kg","Subtotal USD",""].map(h=>
+              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {otros.map(r=>(
+              <tr key={r.id}>
+                <td style={TD}><input value={r.nombre} placeholder="Metalizado, fosfatizado..." onChange={e=>updOtro(r.id,"nombre",e.target.value)} style={{...INP_SM,width:220}}/></td>
+                <td style={TD}><input type="number" value={r.usd_kg} min="0" step="0.01" onChange={e=>updOtro(r.id,"usd_kg",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
+                <Subtotal usd={(+r.usd_kg||0)*hier_kg_item}/>
+                <td style={TD}><BtnDel onClick={()=>delOtro(r.id)}/></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button style={{...BTN("ghost"),marginTop:10}} onClick={addOtro}>+ Agregar tratamiento</button>
+        {tot_otros > 0 && (
+          <div style={{ marginTop:10, textAlign:"right", fontSize:13, color:C.muted }}>
+            Otros tratamientos: <strong style={{color:C.ok}}>${n2(tot_otros)}</strong>
+          </div>
+        )}
+      </div>
+
       {/* Pinturas */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
         <div style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom:12 }}>🖌 Pinturas</div>
@@ -865,8 +960,11 @@ function TabTrat({ item, set }) {
           <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:2 }}>
             <span>$ Granallado</span><span>${n2(tot_arenado)}</span>
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:2 }}>
             <span>$ Galvanizado</span><span>${n2(tot_galv)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:8 }}>
+            <span>$ Otros tratamientos</span><span>${n2(tot_otros)}</span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid ${C.teal}33`, paddingTop:8 }}>
             <span style={{ fontSize:13, color:C.steel }}>Total Trat. Superficie</span>
@@ -941,11 +1039,13 @@ function TabPanto({ item, set }) {
 
   const tot_kg  = rows.reduce((s,r)=>s+(+r.kg||0),0);
   const tot_usd = rows.reduce((s,r)=>s+(+r.subtotal_usd||0),0);
+  const hier_kg_item = (item.hierros || []).reduce((s,r)=>s+(+r.subtotal_kg||0),0);
 
   const anidados = loadLS("smeas_anidados", []);
   const anidadoSel = anidados.find(a => a.id === item.anidado_id) || null;
   const { kg3D: anidKg3D, kg2D: anidKg2D } = anidadoSel ? anidadoKg(anidadoSel) : { kg3D:0, kg2D:0 };
   const tarifario = loadTarifario();
+  const addOtroDesdeCatalogo = (it) => add("Otro", it.nombre, +hier_kg_item.toFixed(2), it.usd||0);
 
   return (
     <div>
@@ -962,6 +1062,12 @@ function TabPanto({ item, set }) {
               + Corte 2D ({n2(anidKg2D)} kg)
             </button>
           )}
+        </div>
+      )}
+      {tarifario.pantografo_extra?.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>Otros cortes — kg pre-cargado con el peso del ítem ({n2(hier_kg_item)} kg), editable en la fila:</div>
+          <QuickPick catalogo={tarifario.pantografo_extra} onPick={addOtroDesdeCatalogo} />
         </div>
       )}
       <div style={{ overflowX:"auto" }}>
@@ -1024,6 +1130,21 @@ function EditorRubros({ item, onChange, onClose }) {
   const set = (k, v) => onChange({ ...item, [k]: v });
   const c   = calcItem(item);
 
+  // rubrosActivos ausente (ítems viejos/históricos) = todo activo, sin romper nada.
+  const activo = (id) => (item.rubrosActivos ? item.rubrosActivos[id] !== false : true);
+  const setTipo = (t) => {
+    const nuevosActivos = { ...PRESET_TIPO_RUBROS[t] };
+    onChange({ ...item, tipo: t, rubrosActivos: nuevosActivos });
+    if (tab !== "resumen" && nuevosActivos[tab] === false) setTab("resumen");
+  };
+  const toggleRubro = (id) => {
+    const base = item.rubrosActivos || { ...PRESET_TIPO_RUBROS.fab_mont };
+    const next = { ...base, [id]: !(base[id] !== false) };
+    onChange({ ...item, rubrosActivos: next });
+    if (tab === id && next[id] === false) setTab("resumen");
+  };
+  const visibleTabs = TABS.filter(t => t.id === "resumen" || activo(t.id));
+
   // conteos por pestaña para mostrar badge
   const counts = {
     hierros:          (item.hierros||[]).length,
@@ -1061,10 +1182,44 @@ function EditorRubros({ item, onChange, onClose }) {
             color:C.muted, cursor:"pointer", fontSize:18, padding:"2px 10px", flexShrink:0 }}>✕</button>
         </div>
 
+        {/* Tipo de trabajo + rubros activos */}
+        <div style={{ padding:"10px 18px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", flexWrap:"wrap", alignItems:"center", gap:14, flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontSize:11, color:C.muted, fontWeight:700 }}>TIPO:</span>
+            {[["fabricacion","🔨 Fabricación"],["montaje","🏗️ Montaje"],["fab_mont","🔨🏗️ Fab + Mont"]].map(([val,lbl]) => (
+              <button key={val} onClick={() => setTipo(val)} style={{
+                ...BTN((item.tipo||"fab_mont")===val ? "primary" : "ghost"), padding:"4px 10px", fontSize:11,
+              }}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:11, color:C.muted, fontWeight:700 }}>RUBROS:</span>
+            {TABS.filter(t => t.id !== "resumen").map(t => {
+              const on = activo(t.id);
+              const cnt = counts[t.id];
+              return (
+                <button key={t.id} onClick={() => toggleRubro(t.id)}
+                  title={(on ? `Ocultar ${t.label}` : `Mostrar ${t.label}`) + (cnt > 0 ? ` — tiene ${cnt} fila(s) cargada(s), ocultar no las borra` : "")}
+                  style={{
+                    background: on ? C.accent+"18" : "transparent",
+                    border: `1px solid ${on ? C.accent+"55" : C.border}`,
+                    color: on ? C.text : C.muted, opacity: on ? 1 : 0.55,
+                    borderRadius:5, padding:"3px 8px", fontSize:10, cursor:"pointer",
+                    display:"flex", alignItems:"center", gap:3,
+                  }}>
+                  <span>{on ? "☑" : "☐"}</span><span>{t.icon}</span><span>{t.label}</span>
+                  {cnt > 0 && <span style={{ background: on ? C.accent : C.muted, color:"#fff", borderRadius:8, padding:"0 4px", fontSize:9, fontWeight:700 }}>{cnt}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Tabs */}
         <div style={{ display:"flex", gap:2, padding:"8px 14px 0", borderBottom:`1px solid ${C.border}`,
           overflowX:"auto", flexShrink:0 }}>
-          {TABS.map(t => {
+          {visibleTabs.map(t => {
             const cnt = counts[t.id];
             const active = tab === t.id;
             return (
@@ -1163,6 +1318,9 @@ function FilaItem({ item, onChange, onDelete }) {
             {item.no_agrega_kg ? "⚠ No KG" : "KG ✓"}
           </button>
 
+          {item.tipo === "fabricacion" && <span style={BDG(C.pur, true)}>🔨 Fab</span>}
+          {item.tipo === "montaje" && <span style={BDG(C.teal, true)}>🏗️ Mont</span>}
+
           {c.total_kg > 0  && <span style={{...BDG(C.info, true),fontSize:14,padding:"4px 12px"}}>{n3(c.total_kg)} kg</span>}
           {c.total_usd > 0 && <span style={{...BDG(C.ok,   true),fontSize:14,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>}
           {c.usd_kg > 0    && <span style={{...BDG(C.gold, true),fontSize:14,padding:"4px 12px"}}>{n2(c.usd_kg)} $/kg</span>}
@@ -1243,9 +1401,42 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
   const updItem = (it) => set("items", pres.items.map(x => x.id === it.id ? it : x));
   const delItem = (id) => set("items", pres.items.filter(x => x.id !== id));
   const addItem = ()   => set("items", [...(pres.items||[]), iItem()]);
+  const [confirmarSyncPrecios, setConfirmarSyncPrecios] = useState(null); // {cambios} | null
+
+  const cambiarEstado = (k) => {
+    if (k === "aprobado" && pres.estado !== "aprobado") {
+      const cambios = calcularCambiosPrecios(pres);
+      if (cambios.length > 0) setConfirmarSyncPrecios({ cambios });
+    }
+    set("estado", k);
+  };
+
+  // Backfill: presupuestos creados antes de este campo (o los históricos
+  // importados) todavía no tienen codigo_calculo — se les asigna recién acá,
+  // en el momento en que hace falta exportarlos a steelCRM.
+  const exportarSteelCRM = () => {
+    const codigo = pres.codigo_calculo || newCodigoCalculo();
+    if (!pres.codigo_calculo) set("codigo_calculo", codigo);
+    exportPresupuestoParaSteelCRM({ ...pres, codigo_calculo: codigo }, c);
+  };
 
   return (
     <div>
+      {confirmarSyncPrecios && (
+        <ModalConfirmarBorrado
+          titulo={`${confirmarSyncPrecios.cambios.length} precio(s) en Insumos y Precios`}
+          subtitulo={
+            `Este presupuesto tiene precios distintos a los cargados en Insumos y Precios:\n` +
+            confirmarSyncPrecios.cambios.map(c => `• ${c.nombre}: $${n2(c.desde)} → $${n2(c.hasta)} USD/kg`).join("\n")
+          }
+          verbo="Actualizar"
+          checkboxLabel="Sí, quiero actualizar Insumos y Precios con estos valores"
+          labelBoton="✓ Actualizar precios"
+          color={C.gold}
+          onConfirm={() => { aplicarCambiosPrecios(pres, confirmarSyncPrecios.cambios); setConfirmarSyncPrecios(null); }}
+          onClose={() => setConfirmarSyncPrecios(null)}
+        />
+      )}
       {/* Topbar */}
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18, flexWrap:"wrap" }}>
         <button style={BTN("ghost")} onClick={onBack}>← Volver</button>
@@ -1253,15 +1444,15 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
           <div style={{ fontWeight:800, fontSize:17, color:C.accent }}>{pres.nombre||"Presupuesto sin nombre"}</div>
           <div style={{ fontSize:11, color:C.muted }}>
             {pres.nro} · {pres.fecha}
+            {pres.codigo_calculo && <span title="Código de cálculo — vincula este presupuesto con steelCRM (idsCalc)"> · 🔗 {pres.codigo_calculo}</span>}
             {pres.clonado_de && <span> · 📋 clonado de {origenNro || pres.clonado_de}</span>}
           </div>
         </div>
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          <button style={BTN("ghost")} onClick={() => generarPDFPresupuesto(pres)} title="Generar PDF del presupuesto">🖨️ PDF</button>
+          <button style={BTN("ghost")} onClick={exportarSteelCRM} title="Descarga un .json con el resumen de este presupuesto (cliente, obra, kg, USD) para importar en steelCRM — no incluye el desglose interno de rubros">⬇️ steelCRM</button>
           {Object.entries(ESTADO_CFG).map(([k,v]) => (
-            <button key={k} onClick={() => {
-              if (k === "aprobado" && pres.estado !== "aprobado") sincronizarPreciosDesdeAprobacion(pres);
-              set("estado",k);
-            }}
+            <button key={k} onClick={() => cambiarEstado(k)}
               style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,
                 ...(pres.estado===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
               {v.label}
@@ -1290,6 +1481,10 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
                 <select style={INP} value={pres.tipo_trabajo||"Fabricación"} onChange={e=>set("tipo_trabajo",e.target.value)}>
                   {TIPOS.map(t=><option key={t}>{t}</option>)}
                 </select></div>
+              <div><label style={LBL}>Categoría</label>
+                <SelectCategoria value={pres.categoria} onChange={v=>set("categoria",v)} />
+                {pres.categoria && <div style={{ fontSize:10, color:C.muted, marginTop:3 }}>Familia: {familiaDe(pres.categoria)}</div>}
+              </div>
               <div><label style={LBL}>TC (USD/UYU)</label>
                 <div style={{ ...INP, display:"flex", alignItems:"center", color:C.muted, background:C.bg }}>
                   {pres.tc != null
@@ -1298,8 +1493,15 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
                 </div></div>
               <div><label style={LBL}>Detalle</label>
                 <input style={INP} value={pres.detalle||""} placeholder="Descripción breve..." onChange={e=>set("detalle",e.target.value)}/></div>
-              <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Notas internas</label>
-                <input style={INP} value={pres.notas||""} placeholder="Observaciones internas..." onChange={e=>set("notas",e.target.value)}/></div>
+              <div><label style={LBL}>Moneda</label>
+                <select style={INP} value={pres.moneda||"USD"} onChange={e=>set("moneda",e.target.value)}>
+                  <option value="USD">USD</option>
+                  <option value="UYU">UYU</option>
+                </select></div>
+              <div><label style={LBL}>Forma de pago</label>
+                <input style={INP} value={pres.forma_pago||""} placeholder="ej: Contado, 30 días..." onChange={e=>set("forma_pago",e.target.value)}/></div>
+              <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Notas / Cláusulas</label>
+                <input style={INP} value={pres.notas||""} placeholder="Observaciones, condiciones, cláusulas..." onChange={e=>set("notas",e.target.value)}/></div>
             </div>
           </div>
 
@@ -1493,6 +1695,8 @@ export default function Presupuesto({ usuario, tcGlobal }) {
   const [filtEst, setFiltEst] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
+  const [historicoCargado, setHistoricoCargado] = useState(() => loadLS("smeas_historico_cargado", false));
+  const [confirmarHistorico, setConfirmarHistorico] = useState(false);
 
   useEffect(() => { saveLS("smeas_presupuestos", presupuestos); }, [presupuestos]);
 
@@ -1549,9 +1753,9 @@ export default function Presupuesto({ usuario, tcGlobal }) {
 
   const crearPres = (form) => {
     const nuevo = { ...iPresupuesto(), ...form };
-    const all = [nuevo, ...presupuestos];
-    nuevo.nro = genNro(all);
-    setPres(all);
+    nuevo.nro = newNroPresupuesto();
+    nuevo.codigo_calculo = newCodigoCalculo();
+    setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
     setNuevoOpen(false);
@@ -1567,13 +1771,22 @@ export default function Presupuesto({ usuario, tcGlobal }) {
       fecha: new Date().toISOString().slice(0, 10),
       ...stamp(),
     };
-    const all = [nuevo, ...presupuestos];
-    nuevo.nro = genNro(all);
-    setPres(all);
+    nuevo.nro = newNroPresupuesto();
+    nuevo.codigo_calculo = newCodigoCalculo();
+    setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
   };
   const presAEliminar = confirmarDelId ? presupuestos.find(p=>p.id===confirmarDelId) : null;
+
+  const cargarHistorico = () => {
+    if (historicoCargado) return;
+    const nuevos = PRESUPUESTOS_HISTORICOS_SEED.map(p => ({ ...p, id: uid() }));
+    setPres(prev => [...nuevos, ...prev]);
+    setHistoricoCargado(true);
+    saveLS("smeas_historico_cargado", true);
+    setConfirmarHistorico(false);
+  };
 
   if (vista === "detalle" && selPres) {
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
@@ -1596,12 +1809,31 @@ export default function Presupuesto({ usuario, tcGlobal }) {
           onClose={() => setConfirmarDelId(null)}
         />
       )}
+      {confirmarHistorico && (
+        <ModalConfirmarBorrado
+          titulo={`${PRESUPUESTOS_HISTORICOS_SEED.length} presupuestos históricos`}
+          subtitulo={`Se reconstruyen desde el histórico de fabricación (2017-2024), marcados "H-<OT>" y en estado Aprobado. Son una aproximación por rubro (sin detalle pieza por pieza) — se suman a los presupuestos existentes, no reemplazan nada.`}
+          verbo="Cargar"
+          checkboxLabel="Sí, quiero cargar estos presupuestos"
+          labelBoton="📥 Cargar histórico"
+          color={C.accent}
+          onConfirm={cargarHistorico}
+          onClose={() => setConfirmarHistorico(false)}
+        />
+      )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <div style={{ fontWeight:800, fontSize:20, color:C.accent }}>💰 Presupuestos</div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{presupuestos.length} presupuesto{presupuestos.length!==1?"s":""}</div>
         </div>
-        <button style={BTN("primary")} onClick={() => setNuevoOpen(true)}>+ Nuevo presupuesto</button>
+        <div style={{ display:"flex", gap:8 }}>
+          {!historicoCargado && (
+            <button style={BTN("ghost")} onClick={() => setConfirmarHistorico(true)} title="Reconstruye presupuestos aproximados desde el histórico de fabricación (2017-2024)">
+              📥 Cargar histórico ({PRESUPUESTOS_HISTORICOS_SEED.length})
+            </button>
+          )}
+          <button style={BTN("primary")} onClick={() => setNuevoOpen(true)}>+ Nuevo presupuesto</button>
+        </div>
       </div>
 
       {/* Filtros por estado */}

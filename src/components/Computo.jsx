@@ -944,6 +944,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   const [creando,       setCreando]       = useState(false);
   const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"" });
   const [confirmarDelId, setConfirmarDelId] = useState(null);
+  const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [busqNombre,    setBusqNombre]    = useState("");
   const [busqCliente,   setBusqCliente]   = useState("");
   const [fDesde,        setFDesde]        = useState("");
@@ -1028,7 +1029,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
 
   const eliminarItem = (id) => {
     if (!computo || computo.items.length<=1) return;
-    if (!window.confirm("¿Eliminar este ítem?")) return;
     updateComputo({ ...computo, items:computo.items.filter(it=>it.id!==id) });
     setExpandedItems(prev=>{ const n=new Set(prev); n.delete(id); return n; });
   };
@@ -1209,8 +1209,18 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   if (!computo) { setSelId(null); return null; }
   const tc = computo.tc ?? tcGlobal;
 
+  const itemAEliminar = confirmarItemDelId ? computo.items.find(it=>it.id===confirmarItemDelId) : null;
+
   return (
     <div>
+      {itemAEliminar && (
+        <ModalConfirmarBorrado
+          titulo={`ítem "${itemAEliminar.titulo||"Sin nombre"}"`}
+          subtitulo="Se pierden todas las piezas cargadas en este ítem."
+          onConfirm={() => { eliminarItem(itemAEliminar.id); setConfirmarItemDelId(null); }}
+          onClose={() => setConfirmarItemDelId(null)}
+        />
+      )}
       {/* Breadcrumb */}
       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20 }}>
         <button onClick={()=>setSelId(null)}
@@ -1282,7 +1292,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
             onChange={updateItem}
             expanded={expandedItems.has(item.id)}
             onToggle={()=>toggleItem(item.id)}
-            onEliminar={()=>eliminarItem(item.id)}
+            onEliminar={()=>setConfirmarItemDelId(item.id)}
             onClonar={()=>clonarItem(item)}
             tc={tc}
             canDelete={computo.items.length>1}

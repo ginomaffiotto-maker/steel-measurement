@@ -134,7 +134,11 @@ function useBibliotecaPlanchas() {
 // ═══════════════════════════════════════════════════════════════
 // ALGORITMO 1D — FFD para perfiles
 // ═══════════════════════════════════════════════════════════════
-function runFFD(piezas, largo_barra_mm, kerf_mm, kg_m) {
+// export sólo para testearla directamente (src/components/__tests__) — acá
+// vivió el bug crítico de empalme de la sesión 2026-08-03 (una pieza más
+// larga que la barra se descartaba en silencio); el regression test fija
+// el comportamiento correcto con un caso sintético mínimo.
+export function runFFD(piezas, largo_barra_mm, kerf_mm, kg_m) {
   // mm_util se calcula sobre las piezas ORIGINALES (antes de empalmar), así
   // siempre refleja el largo real pedido — independiente de cómo se resuelva
   // el corte. Antes, una pieza más larga que la barra se descartaba en

@@ -76,8 +76,8 @@ function Login({ usuarios, setUsuarios, onLogin }) {
               style={{ background: C.card, border: `2px solid ${C.border}`, borderRadius: 14, padding: "22px 28px", cursor: "pointer", textAlign: "center", minWidth: 130, transition: "all .15s" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.transform = "scale(1.03)"; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "scale(1)"; }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: (ROL_COLOR[u.rol] || C.accent) + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 10px", border: `2px solid ${(ROL_COLOR[u.rol] || C.accent)}44` }}>
-                {u.emoji || "👤"}
+              <div style={{ width: 52, height: 52, borderRadius: "50%", background: (ROL_COLOR[u.rol] || C.accent) + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 10px", border: `2px solid ${(ROL_COLOR[u.rol] || C.accent)}44`, overflow: "hidden" }}>
+                {u.foto ? <img src={u.foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (u.emoji || "👤")}
               </div>
               <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{u.nombre}</div>
               <div style={{ fontSize: 10, color: ROL_COLOR[u.rol] || C.muted, fontWeight: 600, marginTop: 3, textTransform: "uppercase", letterSpacing: .5 }}>
@@ -99,8 +99,8 @@ function Login({ usuarios, setUsuarios, onLogin }) {
         <form onSubmit={entrar} style={{ width: "100%", maxWidth: 320 }}>
           <div style={{ background: C.card, border: `2px solid ${C.accent}44`, borderRadius: 14, padding: "28px 24px 22px" }}>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, margin: "0 auto", border: `3px solid ${C.accent}55` }}>
-                {sel.emoji || "👤"}
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, margin: "0 auto", border: `3px solid ${C.accent}55`, overflow: "hidden" }}>
+                {sel.foto ? <img src={sel.foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (sel.emoji || "👤")}
               </div>
               <div style={{ fontWeight: 700, fontSize: 15, color: C.text, marginTop: 10 }}>{sel.nombre}</div>
               <div style={{ fontSize: 10, color: ROL_COLOR[sel.rol] || C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
@@ -312,7 +312,9 @@ export default function App() {
             {collapsed ? "▶" : "◀"}
           </button>
           <div onClick={() => setUsuario(null)} title="Cambiar usuario" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 2px", justifyContent: collapsed ? "center" : "flex-start" }}>
-            <span style={{ fontSize: 18, flexShrink: 0 }}>{usuario.emoji || "👤"}</span>
+            {usuario.foto
+              ? <img src={usuario.foto} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              : <span style={{ fontSize: 18, flexShrink: 0 }}>{usuario.emoji || "👤"}</span>}
             {!collapsed && (
               <div style={{ overflow: "hidden" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{usuario.nombre}</div>

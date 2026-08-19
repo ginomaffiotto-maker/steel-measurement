@@ -1,3 +1,5 @@
+import { familiaDe } from "./taxonomia";
+
 export const loadLS = (k, d) => {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; }
 };
@@ -61,6 +63,51 @@ export const parseBackup = (jsonText) => {
 
 export const restoreBackup = (payload) => {
   Object.entries(payload.data).forEach(([k, v]) => localStorage.setItem(k, v));
+};
+
+// ─── EXPORT PARA STEELCRM ────────────────────────────────────────
+// Lado steel-measurement del transporte manual entre los dos proyectos —
+// ambos son 100% client-only (localStorage, sin backend), así que hasta que
+// exista uno compartido, la conexión es un archivo .json descargado acá e
+// importado allá (mismo mecanismo que Backup/Restaurar, mismo espíritu:
+// nunca automático, el usuario elige cuándo exportar cada presupuesto).
+//
+// Formato y campos documentados en TAXONOMIA-COMPARTIDA-MMN.md §7 — si se
+// toca esta forma, actualizar ese archivo para que la sesión de steelCRM
+// sepa qué esperar del lado del importador (todavía no construido).
+//
+// Sólo lleva el RESUMEN comercial (cliente, obra, kg, USD total, USD/kg) —
+// nunca el desglose interno de los 9 rubros de costo, mismo criterio de
+// privacidad que ya usa el PDF del presupuesto (buildPresupuestoHTML).
+export const exportPresupuestoParaSteelCRM = (pres, calc) => {
+  const payload = {
+    origen: "steel-measurement",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    presupuesto: {
+      codigo_calculo: pres.codigo_calculo || null,
+      nro_interno_sm: pres.nro,
+      estado_sm: pres.estado,
+      cliente: pres.cliente || "",
+      contacto: pres.contacto || "",
+      obra: pres.obra || "",
+      tipo_trabajo: pres.tipo_trabajo || "",
+      categoria: pres.categoria || "",
+      familia: pres.categoria ? familiaDe(pres.categoria) : "",
+      fecha: pres.fecha,
+      detalle: pres.detalle || "",
+      kg_total: calc.total_kg,
+      usd_total: calc.gran_total,
+      usd_kg: calc.usd_kg,
+    },
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `steelmeasurement-export-${pres.codigo_calculo || pres.nro || "presupuesto"}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 export const iUsuarios = loadLS("smeas_usuarios", [
@@ -342,3 +389,48 @@ export const loadTarifario = () => {
   return merged;
 };
 export const saveTarifario = (t) => saveLS("smeas_tarifario", t);
+
+// ─── NUMERACIÓN DE PRESUPUESTOS ─────────────────────────────────────
+// Formato configurable (Sistema > Empresa): prefijo, si incluye el año,
+// dígitos del secuencial, si reinicia cada 1° de enero. Antes se calculaba
+// escaneando el máximo numérico de todos los nro existentes (genNro) — eso
+// se rompía con los históricos importados (H-4176, H-13183...), que traían
+// números de OT reales de miles/decenas de miles y hacían que el próximo
+// presupuesto nuevo saliera con un número gigante sin sentido. Ahora usa un
+// contador propio en localStorage, igual que steelCRM.
+const NUMERACION_DEFAULT = { prefijo: "P-", incluirAnio: false, digitos: 3, reiniciaPorAnio: false };
+export const loadNumeracion = () => ({ ...NUMERACION_DEFAULT, ...loadLS("smeas_numeracion", {}) });
+export const saveNumeracion = (cfg) => saveLS("smeas_numeracion", cfg);
+function contadorKeyPres(cfg) {
+  return cfg.reiniciaPorAnio ? `smeas_last_nro_${new Date().getFullYear()}` : "smeas_last_nro";
+}
+function formatearNroPres(cfg, n) {
+  const anioTxt = cfg.incluirAnio ? String(new Date().getFullYear()) : "";
+  return `${cfg.prefijo || ""}${anioTxt}${String(n).padStart(cfg.digitos || 3, "0")}`;
+}
+export const peekNroPresupuesto = () => {
+  const cfg = loadNumeracion();
+  const last = Number(localStorage.getItem(contadorKeyPres(cfg)) || "0");
+  return formatearNroPres(cfg, last + 1);
+};
+// ─── CÓDIGO DE CÁLCULO (SM-AAAA-NNNN) ───────────────────────────────
+// Identificador propio de steel-measurement para vincular un cálculo con
+// presupuestos de steelCRM (campo idsCalc allá — ver TAXONOMIA-COMPARTIDA-MMN.md
+// §7, donde este formato reemplaza el "libre por ahora, sin acordar" anterior).
+// Formato FIJO (a diferencia de nro, que sí es configurable por empresa) porque
+// tiene que ser estable entre los dos proyectos. Contador anual propio.
+export const newCodigoCalculo = () => {
+  const anio = new Date().getFullYear();
+  const key = `smeas_last_codigo_calculo_${anio}`;
+  const next = Number(localStorage.getItem(key) || "0") + 1;
+  localStorage.setItem(key, String(next));
+  return `SM-${anio}-${String(next).padStart(4, "0")}`;
+};
+
+export const newNroPresupuesto = () => {
+  const cfg = loadNumeracion();
+  const key = contadorKeyPres(cfg);
+  const next = Number(localStorage.getItem(key) || "0") + 1;
+  localStorage.setItem(key, String(next));
+  return formatearNroPres(cfg, next);
+};

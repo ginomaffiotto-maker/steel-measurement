@@ -1,5 +1,5 @@
 ===================================== 
-s b 08/08/2026 21:26:40,83 
+lun 17/08/2026 20:52:56,98 
 ===================================== 
 Liberando puerto 3002 si estaba ocupado... 
 Iniciando servidor... 
@@ -7,20 +7,192 @@ Iniciando servidor...
 > steel-measurement@0.1.0 start
 > set PORT=3002 && react-scripts start
 
-(node:3604) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(node:14136) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:3604) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
-(node:3604) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:14136) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:14136) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 Starting the development server...
 
 Compiled successfully!
 
 You can now view steel-measurement in the browser.
 
-  http://localhost:3002
+  Local:            http://localhost:3002
+  On Your Network:  http://192.168.89.240:3002
 
 Note that the development build is not optimized.
 To create a production build, use npm run build.
 
 webpack compiled [1m[32msuccessfully[39m[22m
-npm start termino con codigo 1073807364 
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\Config.jsx
+  Line 15:19:  'useRef' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\Config.jsx
+  Line 15:19:  'useRef' is not defined  no-undef
+
+Search for the keywords to learn more about each [1m[31merror[39m[22m[1m.[39m[22m
+
+webpack compiled with [1m[31m1 error[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\components\Presupuesto.jsx
+  Line 3:78:  'newNroPresupuesto' is defined but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\components\Presupuesto.jsx
+  Line 3:78:  'newNroPresupuesto' is defined but never used  no-unused-vars
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\Presupuesto.jsx
+  Line 1639:17:  'genNro' is not defined  no-undef
+  Line 1657:17:  'genNro' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\components\Presupuesto.jsx
+  Line 3:78:  'newNroPresupuesto' is defined but never used  no-unused-vars
+
+[39m[22m
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\Presupuesto.jsx
+  Line 1639:17:  'genNro' is not defined  no-undef
+  Line 1657:17:  'genNro' is not defined  no-undef
+
+Search for the keywords to learn more about each [1m[31merror[39m[22m[1m.[39m[22m
+
+webpack compiled with [1m[31m1 error[39m[22m and [1m[33m1 warning[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\Presupuesto.jsx
+  Line 1656:17:  'genNro' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\Presupuesto.jsx
+  Line 1656:17:  'genNro' is not defined  no-undef
+
+Search for the keywords to learn more about each [1m[31merror[39m[22m[1m.[39m[22m
+
+webpack compiled with [1m[31m1 error[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\components\Config.jsx
+  Line 3:31:  'loadNumeracion' is defined but never used  no-unused-vars
+  Line 3:47:  'saveNumeracion' is defined but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\components\Config.jsx
+  Line 3:31:  'loadNumeracion' is defined but never used  no-unused-vars
+  Line 3:47:  'saveNumeracion' is defined but never used  no-unused-vars
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\components\Config.jsx
+  Line 135:10:  'NumeracionPresupuestos' is not defined  react/jsx-no-undef
+
+Search for the keywords to learn more about each error.
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\components\Config.jsx
+  Line 3:31:  'loadNumeracion' is defined but never used  no-unused-vars
+  Line 3:47:  'saveNumeracion' is defined but never used  no-unused-vars
+
+[39m[22m
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\components\Config.jsx
+  Line 135:10:  'NumeracionPresupuestos' is not defined  react/jsx-no-undef
+
+Search for the keywords to learn more about each [1m[31merror[39m[22m[1m.[39m[22m
+
+webpack compiled with [1m[31m1 error[39m[22m and [1m[33m1 warning[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src\components\Presupuesto.jsx
+  Line 1115:9:  'setTipo' is assigned a value but never used      no-unused-vars
+  Line 1120:9:  'toggleRubro' is assigned a value but never used  no-unused-vars
+  Line 1126:9:  'visibleTabs' is assigned a value but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+[1m[33mWARNING[39m[22m in [1m[eslint] 
+src\components\Presupuesto.jsx
+  Line 1115:9:  'setTipo' is assigned a value but never used      no-unused-vars
+  Line 1120:9:  'toggleRubro' is assigned a value but never used  no-unused-vars
+  Line 1126:9:  'visibleTabs' is assigned a value but never used  no-unused-vars
+
+[39m[22m
+
+webpack compiled with [1m[33m1 warning[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+npm start termino con codigo -1 
