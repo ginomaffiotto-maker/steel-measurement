@@ -312,15 +312,21 @@ Descarga `steelmeasurement-export-<codigo_calculo>.json`:
 criterio de privacidad que ya usa el PDF del presupuesto: steelCRM sigue el
 recorrido comercial, no necesita ver la estructura de costos interna.
 
-**Gaps conocidos, a resolver del lado steelCRM cuando se construya el
-importador (no bloquean lo de acá, quedan anotados para esa sesión):**
-- **Vocabulario de `estado` distinto entre los dos sistemas.**
-  steel-measurement usa `borrador/enviado/aprobado/rechazado`; steelCRM usa
-  `enviado/en negociación/aceptado/no aprobado/recotizado/licitación/
-  facturado` (ver `CLAUDE.md` de steelCRM, sección "Estados de
-  presupuesto"). Por eso el campo se llama `estado_sm` en el export, no
-  `estado` a secas — el mapeo entre ambos vocabularios queda a criterio de
-  quien construya el importador, no se intentó adivinar acá.
+**Gaps conocidos — actualizado 2026-08-19 tras construir el importador en steelCRM:**
+- ~~**Vocabulario de `estado` distinto entre los dos sistemas.**~~
+  **Resuelto.** `estado_sm` **no** se mapea al `estado` comercial de
+  steelCRM (los vocabularios son incompatibles: steel-measurement usa
+  `borrador/enviado/aprobado/rechazado`, steelCRM usa `enviado/en
+  negociación/aceptado/no aprobado/recotizado/licitación/facturado`, sin
+  `borrador`). Se guarda tal cual en un campo nuevo, informativo,
+  `estadoSM` — el vendedor sigue moviendo el `estado` real a mano en
+  steelCRM, que es quien sabe en qué instancia comercial está de verdad.
+- ~~**`kg_total`/`usd_kg` sin campo obvio en steelCRM.**~~ **Era un error
+  de este documento — steelCRM ya tenía campos de kg desde siempre.**
+  `kg_total` → `kgCotizados`, `usd_kg` → `precioUSDkg`, `usd_total` →
+  `montoUSD`. Lo único que no existe en steelCRM (y nunca existió) es un
+  campo de **costo** — eso es un tema aparte, no relacionado a este
+  transporte de datos.
 - ~~**No lleva `categoria`/Familia.**~~ **Resuelto 2026-08-17 (misma
   sesión).** `Presupuesto.jsx` ganó un campo `categoria` (dropdown
   `SelectCategoria`, mismo mapeo Familia→Categoría de `taxonomia.js`, con
@@ -329,9 +335,14 @@ importador (no bloquean lo de acá, quedan anotados para esa sesión):**
   `familiaDe()`). Presupuestos creados antes de este campo quedan con
   `categoria: ""` hasta que alguien los abra y la complete a mano — no hay
   forma automática de inferirla retroactivamente.
-- **Import del lado steelCRM: no construido todavía.** Este documento deja
-  el contrato (forma del JSON) para que esa sesión arme el botón "cargar
-  desde steel-measurement" cuando le toque.
+- ~~**Import del lado steelCRM: no construido todavía.**~~ **Resuelto
+  2026-08-19.** Nuevo modo "Cargar desde steel-measurement" en
+  `Importar.jsx` (steelCRM) — sube el `.json`, muestra preview, y al
+  confirmar crea un presupuesto nuevo (siempre crea, no vincula a uno
+  existente — para eso ya se puede usar a mano el campo "ID Cálculo(s)"
+  de BudgetModal). `codigo_calculo` hace *append* a `idsCalc`, nunca
+  reemplaza. `tipo_trabajo` y `nro_interno_sm` no tienen campo dedicado
+  en steelCRM — quedan anotados en `notas` como referencia.
 
 ---
 
