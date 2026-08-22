@@ -1,6 +1,6 @@
 # STEEL MEASUREMENT — PLAN MAESTRO Y CONTEXTO
 *Documento de referencia para continuar el desarrollo en nuevas sesiones*
-*Última actualización: 2026-08-17*
+*Última actualización: 2026-08-22*
 
 ---
 
@@ -2046,6 +2046,178 @@ aparece correctamente en el topbar.
 Build limpio (`CI=true npx react-scripts build`, exit 0) después de cada
 punto; los 4 verificados en navegador con datos reales, no sólo lectura
 de código.
+
+## §9.24 — Categoría/Familia en Presupuesto + primera suite de tests automatizados (2026-08-19)
+
+De la lista de §9.23, Gino eligió los puntos A (Categoría en Presupuesto)
+y C (tests automatizados).
+
+**A. Presupuesto ahora tiene campo `categoria`.** Dropdown `SelectCategoria`
+(nuevo, en `Presupuesto.jsx`) agrupado por Familia vía `<optgroup>`, mismo
+mapeo de `taxonomia.js` que ya usa Historial — a propósito NO es texto
+libre como el de Historial, para no divergir de la lista canónica de 32.
+Agregado tanto al modal de creación (`ModalNuevo`) como al detalle
+("Datos generales"), con la Familia derivada (`familiaDe()`) mostrada
+debajo como texto de referencia. El export a steelCRM (`exportPresupuestoParaSteelCRM`
+en `storage.js`) ahora lleva `categoria` y `familia` — cierra el gap
+anotado en `TAXONOMIA-COMPARTIDA-MMN.md` §8 la sesión pasada. Presupuestos
+viejos quedan con `categoria:""` hasta que alguien los abra y la
+complete a mano (no hay forma de inferirla retroactivamente). Verificado
+en navegador de punta a punta: creado un presupuesto de prueba con
+categoría "Barandas - Defensas", el detalle mostró "Familia: Herrería
+liviana", y el `.json` exportado llevó ambos campos correctos
+(interceptando el `Blob` de la descarga para leer su contenido, ya que
+este navegador de pruebas no permite completar la descarga real).
+
+**C. Primera suite de tests automatizados** (`src/components/__tests__/`,
+Jest + React Testing Library — ya venían preinstalados con create-react-app,
+no hubo que agregar dependencias). Se exportaron 7 funciones que antes
+eran privadas del módulo (`calcItem`/`calcPresupuesto`/`iItem`/`iPresupuesto`
+de `Presupuesto.jsx`, `runFFD` de `Anidado.jsx`, `calcTrabajo`/`calcBenchmark`/
+`iTrabajo` de `Historial.jsx`) — sin tocar su lógica, sólo agregar la
+palabra `export`, para poder testearlas de forma aislada sin renderizar
+componentes. Priorizado lo que más costó esta sesión, no cobertura
+exhaustiva:
+- `runFFD.test.js` — **regression test del bug crítico de empalme**
+  (2026-08-03): una pieza más larga que la barra se descartaba en
+  silencio antes del fix. Caso sintético mínimo (pieza de 15m en barras
+  de 6m → 2 barras de empalme + 1 con 3m de resto) fija el comportamiento
+  correcto para siempre; si alguien reintroduce el bug, este test falla.
+- `calcItem.test.js` — rubros del ítem, `no_agrega_kg`, y el signo de la
+  negociación (SUMA, nunca resta — otro bug ya corregido esta sesión que
+  ahora queda protegido).
+- `calcTrabajo.test.js` — ratios de Historial (USD/kg real, kg/h,
+  desvío), y que `calcBenchmark` cubre el 100% de los trabajos tanto
+  agrupando por Categoría como por Familia (verificado a mano en
+  navegador en la sesión del 2026-08-06, ahora es un test permanente).
+- 12 tests, 3 suites, los 12 pasan (`CI=true npx react-scripts test
+  --watchAll=false`, exit 0).
+
+No se armó CI (GitHub Actions o similar) para correr esto automáticamente
+en cada cambio — sigue siendo manual (`npm test`). Evaluar si vale la pena
+cuando el repo tenga control de versiones remoto.
+
+Build limpio y ambos puntos verificados (A en navegador con datos reales,
+C corriendo la suite completa).
+
+## §9.25 — Auditoría de integración: Config en 6 pestañas + sidebar limpio (2026-08-22)
+
+Gino pidió auditar que las pantallas no tengan "herramientas entreveradas"
+y usen pestañas/desplegables — mismo principio de la Regla 6 de steelCRM
+(una pantalla acumulando herramientas sueltas porque cada una se agregó
+para un pedido puntual, sin pensar el conjunto). Auditadas 3 pantallas
+(esta, más 2 del lado steelCRM — ver `CLAUDE.md` de esa sesión):
+
+- **`Config.jsx` tenía solo 2 pestañas (Empresa/Usuarios), pero "Empresa"
+  acumulaba 4 cosas sin relación entre sí**: nombre de empresa,
+  Numeración de presupuestos, Diseño del PDF, y un sistema de temas
+  (`TEMA_ACTUAL`/`cambiarTema`) que ni siquiera estaba documentado en este
+  PLAN — lo agregó otra sesión sin dejar rastro acá. Separado en **6
+  pestañas reales**: Empresa (solo nombre), Numeración, PDF, Apariencia,
+  Usuarios, y una nueva Backup y Datos.
+- **Backup/Restaurar movidos del sidebar a Config.** Vivían como 2
+  botones sueltos permanentes al pie del sidebar (`App.js`), sin relación
+  visual con "Sistema" donde vive el resto de la configuración admin.
+  Ahora son la pestaña "💾 Backup y Datos" de Config — mismo componente
+  `BackupYDatos`, misma lógica (`exportBackup`/`parseBackup`/
+  `restoreBackup`, gateado por `puedeEliminar` para Restaurar), sin
+  cambios de comportamiento, solo de ubicación. "🧪 Seed datos prueba" se
+  dejó donde estaba — ya está gateado por `NODE_ENV==="development"`, no
+  llega nunca a producción, no era un problema real.
+- Verificado en navegador: las 6 pestañas de Config renderizan cada una
+  su contenido aislado, "Descargar backup" sigue funcionando igual
+  (interceptado el Blob de la descarga: 9 claves `smeas_*` exportadas
+  correctamente), sidebar sin los botones sueltos.
+
+Del lado steelCRM (repo separado, `C:\Users\Gino\Documents\steelcrm`):
+`Importar.jsx` tenía 2 secciones ("Cargar datos"/"Mantenimiento", del fix
+del 2026-08-22 anterior) pero renderizadas juntas en un solo scroll, no
+como pestañas reales — convertidas a pestañas de verdad con el mismo
+`TAB_BTN` que ya usa `Config.jsx` de ese proyecto. Detalle completo en el
+`CLAUDE.md` de la sesión de coordinación de steelCRM, no acá — para no
+duplicar el registro de cambios de un repo ajeno.
+
+Build limpio en los 2 repos, los 3 cambios verificados en navegador con
+datos reales (incluida la vista de Mantenimiento de steelCRM mostrando
+2 presupuestos de prueba reales del entorno de desarrollo).
+
+## §9.26 — Nuevo módulo: Dashboard (2026-08-22)
+
+Pedido de Gino: un dashboard de estadísticas/KPIs (presupuestos, empresas
+cotizadas, materiales más usados). Planificado primero, mismo lenguaje
+visual que el Dashboard de steelCRM (`KPI`/`Bar`, filtros con
+desplegables, comparación ▲▼% vs. período anterior) — leído el código
+real de `steelcrm/src/components/Dashboard.jsx` y `shared.jsx` antes de
+diseñar, no copiado de memoria. Aprobado el plan, implementado.
+
+- **`src/components/Dashboard.jsx`** (nuevo). Grupo de sidebar propio
+  ("📈 Dashboard", ícono distinto al de Historial que ya usaba "📊" —
+  si no hubiera quedado igual en el nav). 4 pestañas: 📊 Resumen
+  (presupuestos/monto/kg/USD-kg-promedio/empresas cotizadas, cada KPI
+  con flecha vs. período anterior), 📈 Tendencia (barras por mes, últimos
+  12), 🏢 Empresas (ranking con medallas 🥇🥈🥉), 🔩 Materiales (ranking
+  por kg, **el único que steelCRM no puede tener** — steelCRM no calcula
+  materiales, sólo el monto final).
+- **Fuente de datos seleccionable** (pedido explícito): filtro
+  "Fuente" = Presupuesto / Historial / Ambos. Función de normalización
+  (`normalizarPresupuesto`/`normalizarTrabajo`) lleva los dos modelos a
+  una forma común (fecha/cliente/categoria/kg/usd/materiales) sin tocar
+  ninguno de los dos originales.
+- **Los 235 presupuestos históricos aproximados quedan excluidos del
+  ranking de Materiales** (`p.origen_historico`): su "hierro" es la
+  categoría entera puesta como nombre (ver §9.21), no un material real —
+  mezclarlos ahí sería directamente incorrecto, no sólo impreciso. Sí
+  cuentan normalmente en Resumen/Tendencia/Empresas, donde el kg/USD
+  agregado es real y confiable.
+- Filtros comunes: Período (mismo esquema que steelCRM, con período
+  anterior para el ▲▼%), Desde/Hasta manual, Categoría (dropdown
+  `FAMILIAS` con optgroup, mismo que el nuevo selector de Presupuesto),
+  Cliente/Empresa (texto libre).
+- **`SelectCategoria` de `Presupuesto.jsx` exportado** para poder
+  reusarlo acá sin duplicar la lista de 32 con sus 8 optgroups — único
+  cambio a un archivo existente en esta tanda, sin tocar lógica.
+- Verificado en navegador con los 235 registros reales de Historial
+  (período "Todo"): $4.903.462 total, 1.265.766 kg, 39 empresas, ranking
+  de Empresas correcto (CCFC 🥇 $742.791/15 pres., Saceem 🥈, Consorcio
+  Puerto 🥉). Materiales confirmado vacío con sólo históricos cargados,
+  y poblado correctamente (2/2 materiales, kg exactos) al inyectar un
+  presupuesto de prueba con hierros reales — que después se eliminó.
+- Build limpio (`CI=true npx react-scripts build`, exit 0 verificado
+  sin `| tail` de por medio — un build anterior esta sesión había
+  fallado en silencio porque el pipe a `tail` enmascaraba el exit code
+  real de `react-scripts build`; ojo con ese patrón en sesiones futuras).
+
+## §9.27 — Fase 2 del backend compartido: capa de acceso a datos (2026-08-22)
+
+Ver `steel-backend/CLAUDE.md` y `BACKEND-COMPARTIDO-MMN.md` (raíz de este
+repo) para el detalle completo de esquema y decisiones — acá sólo lo que
+tocó código de Steel Measurement.
+
+- **`@supabase/supabase-js` instalado**, `src/utils/supabaseClient.js`
+  nuevo (cliente inicializado desde `REACT_APP_SUPABASE_URL`/
+  `REACT_APP_SUPABASE_ANON_KEY` en `.env.local`, gitignored).
+- **`src/utils/storage.js`**: agregadas `loadDBClientes`/`saveDBCliente`,
+  `loadDBPresupuestosSM`/`saveDBPresupuestoSM`, `loadDBItems`/`saveDBItem`
+  (ítems + 8 rubros de costo normalizados + tratamiento de superficie con
+  pinturas/otros). **Nada de esto está cableado a la UI todavía** — es
+  capacidad nueva detrás de la misma abstracción, sin cambiar el
+  comportamiento actual (Fase 3, dual-write, es el paso que la conecta).
+  `horas_especiales` deliberadamente sin cubrir — no tiene UI real hoy.
+- `saveDBItem` reemplaza todas las filas de cada rubro en cada guardado
+  (delete + insert) en vez de diffear — mismo patrón que el estado de
+  React hoy, que reemplaza el array completo.
+- **`scripts/test-fase2.mjs`** (nuevo): login real contra Supabase Auth +
+  prueba de punta a punta de `clientes`/`presupuestos_sm` sin depender de
+  la UI. Pensado para correr desde la terminal del usuario, nunca pasando
+  contraseñas por el chat de la sesión de Claude.
+- **Verificado en la práctica, con el proyecto Supabase real** (tenant
+  "Tenant Demo", usuario admin real de Gino): login, `SELECT` sobre
+  `profiles`, `SELECT`/`INSERT` sobre `clientes` (con el trigger de
+  `tenant_id` completando solo), `SELECT` sobre `presupuestos_sm`. Todo
+  ✅ en la corrida final.
+- **Pendiente**: `computos`, `anidados`, `historial_trabajos`, biblioteca
+  de materiales y tarifario sin capa de acceso propia todavía. Ninguna
+  conexión a la UI real (Fase 3) arrancada.
 
 ---
 

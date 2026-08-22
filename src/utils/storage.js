@@ -1,4 +1,5 @@
 import { familiaDe } from "./taxonomia";
+import { supabase } from "./supabaseClient";
 
 export const loadLS = (k, d) => {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; }
@@ -33,6 +34,146 @@ export const registrarCliente = (nombre) => {
   if (!lista.some(c => c.toLowerCase() === n.toLowerCase())) {
     saveLS("smeas_clientes", [...lista, n]);
   }
+};
+
+// ─── CLIENTES — capa de acceso al backend (Fase 2, sin cablear a la UI
+// todavía). Reemplaza la lista de nombres de arriba: acá `clientes` es la
+// tabla unificada compartida con steelCRM (ver BACKEND-COMPARTIDO-MMN.md en
+// la raíz de este repo). Requiere sesión de Supabase Auth activa — sin eso,
+// RLS devuelve vacío en loadDBClientes y rechaza el insert en saveDBCliente.
+export const loadDBClientes = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("clientes").select("*").order("nombre");
+  if (error) throw error;
+  return data;
+};
+export const saveDBCliente = async (cliente) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("clientes").upsert(cliente).select().single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── PRESUPUESTOS — capa de acceso al backend (Fase 2, sin cablear a la UI
+// todavía). Mismo criterio que clientes arriba: no traduce campos, el caller
+// arma la fila ya en forma de `presupuestos_sm` (tenant_id, cliente_id
+// resuelto contra la tabla clientes, clonado_de_id, etc.).
+// IMPORTANTE: no incluye `items` — esa es la tabla items_presupuesto_sm
+// (9 rubros de costo, piezas, normalizada), todavía sin capa de acceso propia.
+export const loadDBPresupuestosSM = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("presupuestos_sm").select("*").order("fecha", { ascending: false });
+  if (error) throw error;
+  return data;
+};
+export const saveDBPresupuestoSM = async (presupuesto) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { items, ...row } = presupuesto;
+  const { data, error } = await supabase.from("presupuestos_sm").upsert(row).select().single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── ÍTEMS DE PRESUPUESTO — 9 rubros de costo (Fase 2, sin cablear a la UI).
+// Cada rubro es un array de filas salvo trat_superficie (objeto con
+// pinturas/otros anidados). Guardar reemplaza TODAS las filas del rubro para
+// ese ítem (delete + insert) en vez de diffear — mismo patrón que el estado
+// de React hoy, que reemplaza el array completo en cada guardado. No incluye
+// horas_especiales: sin UI para agregar filas, siempre vacío en la práctica
+// (ver BACKEND-COMPARTIDO-MMN.md).
+const RUBROS_ITEM = [
+  ["hierros", "item_hierros"],
+  ["mat_generales", "item_mat_generales"],
+  ["mo_fabricacion", "item_mo_fabricacion"],
+  ["mo_montajes", "item_mo_montajes"],
+  ["terc_fabricacion", "item_terc_fabricacion"],
+  ["terc_montajes", "item_terc_montajes"],
+  ["traslados", "item_traslados"],
+  ["corte_pantografo", "item_corte_pantografo"],
+];
+
+export const loadDBItems = async (presupuestoId) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data: itemsRows, error: eItems } = await supabase
+    .from("items_presupuesto_sm").select("*").eq("presupuesto_id", presupuestoId).order("orden");
+  if (eItems) throw eItems;
+
+  const items = [];
+  for (const row of itemsRows) {
+    const item = { ...row };
+    for (const [campo, tabla] of RUBROS_ITEM) {
+      const { data, error } = await supabase.from(tabla).select("*").eq("item_id", row.id).order("orden");
+      if (error) throw error;
+      item[campo] = data;
+    }
+    const { data: trat, error: eTrat } = await supabase
+      .from("item_trat_superficie").select("*").eq("item_id", row.id).maybeSingle();
+    if (eTrat) throw eTrat;
+    if (trat) {
+      const [{ data: pinturas, error: eP }, { data: otros, error: eO }] = await Promise.all([
+        supabase.from("item_trat_pinturas").select("*").eq("trat_id", trat.id),
+        supabase.from("item_trat_otros").select("*").eq("trat_id", trat.id),
+      ]);
+      if (eP) throw eP;
+      if (eO) throw eO;
+      item.trat_superficie = { ...trat, pinturas, otros };
+    } else {
+      item.trat_superficie = null;
+    }
+    items.push(item);
+  }
+  return items;
+};
+
+export const saveDBItem = async (presupuestoId, item) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const {
+    hierros, mat_generales, mo_fabricacion, mo_montajes, terc_fabricacion, terc_montajes,
+    traslados, corte_pantografo, trat_superficie, ...row
+  } = item;
+
+  const { data: savedItem, error: eItem } = await supabase
+    .from("items_presupuesto_sm").upsert({ ...row, presupuesto_id: presupuestoId }).select().single();
+  if (eItem) throw eItem;
+  const itemId = savedItem.id;
+
+  const rubrosData = {
+    hierros, mat_generales, mo_fabricacion, mo_montajes,
+    terc_fabricacion, terc_montajes, traslados, corte_pantografo,
+  };
+
+  for (const [campo, tabla] of RUBROS_ITEM) {
+    const { error: eDel } = await supabase.from(tabla).delete().eq("item_id", itemId);
+    if (eDel) throw eDel;
+    const filas = (rubrosData[campo] || []).map((f) => ({ ...f, id: undefined, item_id: itemId }));
+    if (filas.length) {
+      const { error: eIns } = await supabase.from(tabla).insert(filas);
+      if (eIns) throw eIns;
+    }
+  }
+
+  // trat_superficie se borra y se recrea entero — el cascade de la FK ya
+  // limpia pinturas/otros del trat_id viejo, no hace falta borrarlos aparte.
+  const { error: eDelTrat } = await supabase.from("item_trat_superficie").delete().eq("item_id", itemId);
+  if (eDelTrat) throw eDelTrat;
+  if (trat_superficie) {
+    const { pinturas = [], otros = [], id, ...tratRow } = trat_superficie;
+    const { data: savedTrat, error: eTrat } = await supabase
+      .from("item_trat_superficie").insert({ ...tratRow, item_id: itemId }).select().single();
+    if (eTrat) throw eTrat;
+    if (pinturas.length) {
+      const { error: eP } = await supabase.from("item_trat_pinturas")
+        .insert(pinturas.map((p) => ({ ...p, id: undefined, trat_id: savedTrat.id })));
+      if (eP) throw eP;
+    }
+    if (otros.length) {
+      const { error: eO } = await supabase.from("item_trat_otros")
+        .insert(otros.map((o) => ({ ...o, id: undefined, trat_id: savedTrat.id })));
+      if (eO) throw eO;
+    }
+  }
+
+  return itemId;
 };
 
 // Backup manual: descarga/restaura todas las claves smeas_* de localStorage.
@@ -426,6 +567,12 @@ export const newCodigoCalculo = () => {
   localStorage.setItem(key, String(next));
   return `SM-${anio}-${String(next).padStart(4, "0")}`;
 };
+
+// ─── BLOQUES DEL PDF ─────────────────────────────────────────────────
+// Qué secciones se imprimen y en qué orden (Sistema > Config). Si no hay
+// nada guardado, abrirPDFPresupuesto usa BLOQUES_DEFAULT del generador.
+export const loadBloquesPDF = () => loadLS("smeas_pdf_bloques", null);
+export const saveBloquesPDF = (bloques) => saveLS("smeas_pdf_bloques", bloques);
 
 export const newNroPresupuesto = () => {
   const cfg = loadNumeracion();
