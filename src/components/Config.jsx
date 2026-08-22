@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { C, INP, LBL, BTN } from "../styles/colors";
-import { uid, loadLS, saveLS, loadNumeracion, saveNumeracion } from "../utils/storage";
-import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
+import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
+import { uid, loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup } from "../utils/storage";
+import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
+import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
 
 // ─── GESTIÓN DE USUARIOS (alta/edición de vendedor/supervisor, admin-only) ─
 const ROL_OPCIONES = [
@@ -37,6 +38,10 @@ function FilaUsuario({ u, soloLectura, esUltimoAdmin, onChange, onEliminar }) {
       <input value={u.nombre} placeholder="Nombre" disabled={soloLectura}
         onChange={e=>onChange({...u, nombre:e.target.value})}
         style={{ ...INP, flex:"1 1 120px", opacity: soloLectura?0.6:1 }} />
+      <input value={u.email||""} placeholder="Email (opcional — solo si tiene cuenta real)" disabled={soloLectura}
+        onChange={e=>onChange({...u, email:e.target.value})}
+        title="Si se carga, y la contraseña de acá coincide con la de Supabase Auth, este usuario también queda sincronizado con el backend al loguearse."
+        style={{ ...INP, flex:"1 1 160px", opacity: soloLectura?0.6:1 }} />
       <select value={u.rol} disabled={soloLectura}
         onChange={e=>onChange({...u, rol:e.target.value})}
         style={{ ...INP, width:130, opacity: soloLectura?0.6:1 }}>
@@ -150,6 +155,99 @@ function NumeracionPresupuestos({ soloLectura }) {
   );
 }
 
+// ─── BLOQUES DEL PDF ─────────────────────────────────────────────────────
+function DisenoPDF({ soloLectura }) {
+  const [bloques, setBloques] = useState(() => loadBloquesPDF() || BLOQUES_DEFAULT.map(b => ({ ...b })));
+  const guardar = (nuevos) => { setBloques(nuevos); saveBloquesPDF(nuevos); };
+  const toggle = (i) => { if (soloLectura) return; const n = bloques.map((b, idx) => idx === i ? { ...b, activo: !b.activo } : b); guardar(n); };
+  const mover = (i, dir) => {
+    if (soloLectura) return;
+    const j = i + dir;
+    if (j < 0 || j >= bloques.length) return;
+    const n = bloques.slice();
+    [n[i], n[j]] = [n[j], n[i]];
+    guardar(n);
+  };
+  return (
+    <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
+      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>📄 Diseño del PDF</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+        Qué secciones aparecen en el PDF de presupuesto y en qué orden. Afecta a los presupuestos generados de acá en adelante.
+      </div>
+      {bloques.map((b, i) => (
+        <div key={b.tipo} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom: i < bloques.length-1 ? "1px solid "+C.border+"44" : "none" }}>
+          <input type="checkbox" checked={b.activo} disabled={soloLectura} onChange={()=>toggle(i)} style={{ cursor: soloLectura?"default":"pointer" }} />
+          <span style={{ flex:1, fontSize:13, color: b.activo ? C.text : C.muted }}>{BLOQUES_LABELS[b.tipo] || b.tipo}</span>
+          <button onClick={()=>mover(i,-1)} disabled={soloLectura || i===0} style={{ background:"none", border:"none", cursor: (soloLectura||i===0)?"default":"pointer", color: (soloLectura||i===0)?C.border:C.muted, fontSize:14 }}>▲</button>
+          <button onClick={()=>mover(i,1)} disabled={soloLectura || i===bloques.length-1} style={{ background:"none", border:"none", cursor: (soloLectura||i===bloques.length-1)?"default":"pointer", color: (soloLectura||i===bloques.length-1)?C.border:C.muted, fontSize:14 }}>▼</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── BACKUP Y DATOS ──────────────────────────────────────────────────────
+// Movido acá desde el sidebar (vivía como botones sueltos al pie, sin
+// relación visual con el resto de la configuración del sistema).
+function BackupYDatos({ usuario }) {
+  const [pendingBackup, setPendingBackup] = useState(null);
+  const [importErr, setImportErr] = useState("");
+  const fileInputRef = useRef(null);
+
+  const elegirArchivo = () => { setImportErr(""); fileInputRef.current?.click(); };
+  const onArchivo = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        setPendingBackup(parseBackup(reader.result));
+      } catch (err) {
+        setImportErr(err.message || "No se pudo leer el archivo.");
+      }
+    };
+    reader.readAsText(file);
+  };
+  const confirmarRestaurar = () => {
+    restoreBackup(pendingBackup);
+    setPendingBackup(null);
+    window.location.reload();
+  };
+
+  return (
+    <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>💾 Backup y Datos</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:16 }}>
+        Backup manual de toda la app (presupuestos, cómputos, anidados, historial, biblioteca de precios) en un solo archivo .json.
+      </div>
+      <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+        <button onClick={exportBackup} style={{ ...BTN("ghost"), borderColor:C.ok+"66", color:C.ok }} title="Descarga un .json con todos los datos de la app">
+          ⬇️ Descargar backup
+        </button>
+        {puedeEliminar(usuario) && (
+          <button onClick={elegirArchivo} style={{ ...BTN("ghost"), borderColor:C.info+"66", color:C.info }} title="Restaura los datos desde un archivo de backup .json">
+            ⬆️ Restaurar desde archivo
+          </button>
+        )}
+      </div>
+      <input ref={fileInputRef} type="file" accept="application/json" onChange={onArchivo} style={{ display:"none" }} />
+      {importErr && <div style={{ color:C.err, fontSize:11, fontWeight:600, marginTop:10 }}>⚠ {importErr}</div>}
+
+      {pendingBackup && (
+        <ModalConfirmarEliminar
+          verbo="Restaurar"
+          titulo={`backup del ${new Date(pendingBackup.exported_at).toLocaleString("es-UY")}`}
+          subtitulo="Esto reemplaza TODOS los datos actuales de la app (presupuestos, cómputos, historial, biblioteca) por los del archivo. No se puede deshacer."
+          labelBoton="♻️ Restaurar y reemplazar todo"
+          onConfirm={confirmarRestaurar}
+          onClose={() => setPendingBackup(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // El tarifario (MO, materiales generales, terceriz., traslados, tratamiento de
 // superficie, pantógrafo) vive en el módulo "Insumos y Precios" junto a la
 // Biblioteca de materiales — acá solo queda lo que es admin-only del sistema.
@@ -163,6 +261,16 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
 
   const [empresa, setEmpresa] = useState(() => loadLS("smeas_empresa", ""));
   const guardarEmpresa = (v) => { setEmpresa(v); saveLS("smeas_empresa", v); };
+  const [seccion, setSeccion] = useState("empresa");
+
+  const TAB_BTN = (key, icon, lbl) => (
+    <button key={key} onClick={() => setSeccion(key)}
+      style={{ padding:"9px 18px", border:"none", borderBottom: seccion===key ? "2px solid "+C.accent : "2px solid transparent",
+        background:"transparent", color: seccion===key ? C.accent : C.muted, cursor:"pointer",
+        fontWeight: seccion===key ? 700 : 400, fontSize:13, marginBottom:-2, whiteSpace:"nowrap" }}>
+      {icon} {lbl}
+    </button>
+  );
 
   return (
     <div>
@@ -178,32 +286,65 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
       )}
       {soloLectura && (
         <div style={{ marginBottom:16, padding:"8px 14px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:12, color:C.warn }}>
-          ⚠ Solo lectura — solo Administrador puede editar usuarios.
+          ⚠ Solo lectura — solo Administrador puede editar la configuración.
         </div>
       )}
 
+      {/* TABS — mismo patrón visual que steelCRM */}
+      <div style={{ display:"flex", gap:0, marginBottom:20, borderBottom:"2px solid "+C.border+"44", flexWrap:"wrap" }}>
+        {TAB_BTN("empresa","🏢","Empresa")}
+        {TAB_BTN("numeracion","🔢","Numeración")}
+        {TAB_BTN("pdf","📄","PDF")}
+        {TAB_BTN("apariencia","🎨","Apariencia")}
+        {TAB_BTN("usuarios","👤","Usuarios")}
+        {TAB_BTN("backup","💾","Backup y Datos")}
+      </div>
+
       <div style={{ maxWidth:680 }}>
-        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
-          <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🏢 Empresa</div>
-          <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-            Aparece en el PDF de presupuesto y donde el sistema muestre el nombre de la empresa. Sin esto configurado, el PDF sale sin nombre de empresa.
+        {seccion === "empresa" && (
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🏢 Nombre de la empresa</div>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+              Aparece en el PDF de presupuesto y donde el sistema muestre el nombre de la empresa. Sin esto configurado, el PDF sale sin nombre de empresa.
+            </div>
+            <label style={LBL}>Nombre de la empresa</label>
+            <input style={INP} value={empresa} placeholder="Ej: Montajes Núñez S.A."
+              disabled={soloLectura}
+              onChange={e => guardarEmpresa(e.target.value)} />
           </div>
-          <label style={LBL}>Nombre de la empresa</label>
-          <input style={INP} value={empresa} placeholder="Ej: Montajes Núñez S.A."
-            disabled={soloLectura}
-            onChange={e => guardarEmpresa(e.target.value)} />
-        </div>
+        )}
 
-        <NumeracionPresupuestos soloLectura={soloLectura} />
+        {seccion === "numeracion" && <NumeracionPresupuestos soloLectura={soloLectura} />}
 
-        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginTop:16 }}>
-          <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>👤 Usuarios</div>
-          <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-            Administrador ve todo el sistema · Gerencia ve el equipo y aprueba · Vendedor ve sus propios datos.
-            No se puede eliminar el último Administrador.
+        {seccion === "pdf" && <DisenoPDF soloLectura={soloLectura} />}
+
+        {seccion === "apariencia" && (
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🎨 Apariencia</div>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+              Cambia el tema visual de todo el sistema. Podés volver al original en cualquier momento — no se pierde nada, es solo una preferencia de esta instalación.
+            </div>
+            <label style={LBL}>Tema</label>
+            <select style={INP} value={TEMA_ACTUAL}
+              onChange={e => cambiarTema(e.target.value)}>
+              {TEMAS_DISPONIBLES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Al cambiarlo, la página se recarga para aplicarlo. Cualquier usuario puede cambiarlo — es solo una preferencia visual, no afecta datos.</div>
           </div>
-          <GestionUsuarios usuarios={usuarios} setUsuarios={setUsuarios} soloLectura={soloLectura} />
-        </div>
+        )}
+
+        {seccion === "usuarios" && (
+          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>👤 Usuarios</div>
+            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+              Administrador ve todo el sistema · Gerencia ve el equipo y aprueba · Vendedor ve sus propios datos.
+              No se puede eliminar el último Administrador.
+            </div>
+            <GestionUsuarios usuarios={usuarios} setUsuarios={setUsuarios} soloLectura={soloLectura} />
+          </div>
+        )}
+
+        {seccion === "backup" && <BackupYDatos usuario={usuario} />}
       </div>
     </div>
   );

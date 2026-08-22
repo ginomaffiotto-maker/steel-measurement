@@ -34,6 +34,15 @@ export const registrarCliente = (nombre) => {
   if (!lista.some(c => c.toLowerCase() === n.toLowerCase())) {
     saveLS("smeas_clientes", [...lista, n]);
   }
+  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+  // puede romper el guardado local — localStorage sigue siendo la única
+  // fuente de verdad real en esta fase. Si falla (sin internet, backend
+  // caído), solo queda un warning en consola.
+  if (supabase) {
+    resolverClienteId(n).catch((e) => {
+      console.warn(`[Fase 3] No se pudo sincronizar cliente "${n}" con el backend:`, e.message || e);
+    });
+  }
 };
 
 // ─── CLIENTES — capa de acceso al backend (Fase 2, sin cablear a la UI
@@ -52,6 +61,34 @@ export const saveDBCliente = async (cliente) => {
   const { data, error } = await supabase.from("clientes").upsert(cliente).select().single();
   if (error) throw error;
   return data;
+};
+
+// Busca un cliente por nombre (case-insensitive, match exacto) y lo crea si
+// no existe — usado por el dual-write de Fase 3 para resolver el `cliente`
+// de texto libre que usa hoy la UI local a un `cliente_id` real. Cachea en
+// memoria durante la sesión para no repetir la búsqueda en cada tipeo.
+const _cacheClienteIds = new Map();
+export const resolverClienteId = async (nombre) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const n = (nombre || "").trim();
+  if (!n) return null;
+  const key = n.toLowerCase();
+  if (_cacheClienteIds.has(key)) return _cacheClienteIds.get(key);
+
+  const { data: existentes, error: eSel } = await supabase.from("clientes").select("id, nombre").ilike("nombre", n);
+  if (eSel) throw eSel;
+  const match = existentes?.find((c) => (c.nombre || "").trim().toLowerCase() === key);
+
+  let id;
+  if (match) {
+    id = match.id;
+  } else {
+    const { data: creado, error: eIns } = await supabase.from("clientes").insert({ nombre: n }).select("id").single();
+    if (eIns) throw eIns;
+    id = creado.id;
+  }
+  _cacheClienteIds.set(key, id);
+  return id;
 };
 
 // ─── PRESUPUESTOS — capa de acceso al backend (Fase 2, sin cablear a la UI

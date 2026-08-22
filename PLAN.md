@@ -2245,6 +2245,45 @@ Mismo criterio que antes: build limpio, nada cableado a la UI todavía.
   `cliente` como texto libre. El caller va a tener que resolverlo antes
   de llamar a `saveDBTrabajoHistorico`, no lo hace la función sola.
 
+## §9.29 — Fase 3, piloto: dual-write de clientes + login silencioso a Supabase Auth (2026-08-22)
+
+Primer paso real de Fase 3 (hasta acá todo Fase 2 era código inerte, sin
+cablear). `registrarCliente()` ahora también intenta escribir/resolver el
+cliente contra la tabla `clientes` real, en paralelo, sin bloquear ni poder
+romper el guardado local — verificado en el navegador con un cómputo de
+prueba real: el guardado local funcionó perfecto, el intento a Supabase
+falló con RLS (esperado, sin sesión) y no afectó nada.
+
+- **Encontrado en la verificación**: la app real no tenía ninguna sesión de
+  Supabase Auth — el login local (usuario + clave) nunca le avisaba nada al
+  backend. Sin eso, el dual-write iba a fallar siempre, para siempre.
+- **Login silencioso agregado** (`App.js`, función `entrar()`): si el
+  usuario logueado tiene `email` cargado, después del login local exitoso
+  se intenta también `signInWithPassword` contra Supabase con la misma
+  contraseña, en paralelo, sin bloquear. Si falla, solo un warning en
+  consola — el login local ya pasó antes y no se ve afectado.
+- **Campo `email` nuevo en Gestión de Usuarios** (`Config.jsx`, pestaña
+  Sistema > Usuarios) — opcional, solo se completa para usuarios con cuenta
+  real en Supabase Auth.
+- **Restricción real encontrada, sin forma de evitarla**: para que el login
+  silencioso funcione, la contraseña local y la de Supabase Auth tienen que
+  ser la misma — se sincronizan a mano por ahora. La `service_role key`
+  nunca puede vivir en el código de React (todo `REACT_APP_*` se empaqueta
+  al bundle público), así que no hay forma de que la app actualice sola la
+  contraseña de Supabase cuando cambia la local — necesitaría un backend
+  intermedio que no existe todavía.
+- **`scripts/crear-usuario.mjs`** (steel-backend, nuevo): da de alta un
+  usuario de Auth + su profile en una sola corrida, para cuando Gino sume
+  gente al equipo — instrucciones para alinear también el usuario local
+  (mismo email, misma contraseña) impresas al final del script.
+- Build limpio, verificado en navegador (campo email visible y editable en
+  Sistema > Usuarios, sin errores de consola nuevos).
+- **Pendiente**: Gino tiene que alinear a mano su contraseña local con la
+  de Supabase y cargar su email en su usuario local real (no en esta
+  sesión de verificación, en su app real) para confirmar el login
+  silencioso de punta a punta. `presupuestos_sm` y el resto de las
+  entidades siguen sin dual-write — este piloto cubrió solo `clientes`.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

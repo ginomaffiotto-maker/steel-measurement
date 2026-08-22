@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { C } from "./styles/colors";
-import { saveLS, loadLS, iUsuarios, exportBackup, parseBackup, restoreBackup, loadClientes } from "./utils/storage";
-import { ModalConfirmarEliminar, puedeEliminar } from "./components/ConfirmarEliminar";
+import { saveLS, loadLS, iUsuarios, loadClientes } from "./utils/storage";
+import { supabase } from "./utils/supabaseClient";
 import BibliotecaMateriales from "./components/BibliotecaMateriales";
 import Computo from "./components/Computo";
 import Anidado from "./components/Anidado";
 import Presupuesto from "./components/Presupuesto";
 import Historial from "./components/Historial";
+import Dashboard from "./components/Dashboard";
 import Config from "./components/Config";
 import Buscador from "./components/Buscador";
 import { seedTestData } from "./utils/seedTestData";
@@ -33,6 +34,10 @@ const GRUPOS = [
     tabs: [{ icon: "📊", label: "Trabajos", tab: "Historial" }],
   },
   {
+    id: "dashboard", icon: "📈", label: "Dashboard",
+    tabs: [{ icon: "📈", label: "Dashboard", tab: "Dashboard" }],
+  },
+  {
     id: "sistema", icon: "⚙️", label: "Sistema",
     tabs: [
       { icon: "⚙️", label: "Config",     tab: "Config" },
@@ -54,7 +59,19 @@ function Login({ usuarios, setUsuarios, onLogin }) {
   const entrar = (e) => {
     e.preventDefault();
     if (!sel.clave) { onLogin(sel); return; }
-    if (pass === sel.clave) { onLogin(sel); }
+    if (pass === sel.clave) {
+      onLogin(sel);
+      // Fase 3 (piloto, 2026-08-22): login silencioso a Supabase Auth en
+      // paralelo, solo si este usuario tiene email cargado — nunca bloquea
+      // ni puede hacer fallar el login local, que ya pasó arriba. Requiere
+      // que la contraseña local coincida con la de Supabase Auth (se
+      // sincronizan a mano por ahora, no hay flujo automático todavía).
+      if (sel.email && supabase) {
+        supabase.auth.signInWithPassword({ email: sel.email, password: pass }).then(({ error }) => {
+          if (error) console.warn(`[Fase 3] Login a Supabase falló para ${sel.email}:`, error.message);
+        });
+      }
+    }
     else { setErr("Contraseña incorrecta"); setPass(""); }
   };
 
@@ -151,11 +168,8 @@ export default function App() {
   const [grupo,    setGrupo]    = useState("computo");
   const [tab,      setTab]      = useState("Computo");
   const [collapsed, setCollapsed] = useState(false);
-  const [pendingBackup, setPendingBackup] = useState(null);
-  const [importErr, setImportErr] = useState("");
   const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
-  const fileInputRef = useRef(null);
 
   useEffect(() => { saveLS("smeas_usuarios", usuarios); }, [usuarios]);
   useEffect(() => { saveLS("smeas_tc_global", tcGlobal); }, [tcGlobal]);
@@ -163,27 +177,6 @@ export default function App() {
     if (usuario) sessionStorage.setItem(SESION_USUARIO_KEY, String(usuario.id));
     else sessionStorage.removeItem(SESION_USUARIO_KEY);
   }, [usuario]);
-
-  const elegirArchivoBackup = () => { setImportErr(""); fileInputRef.current?.click(); };
-  const onArchivoBackup = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        setPendingBackup(parseBackup(reader.result));
-      } catch (err) {
-        setImportErr(err.message || "No se pudo leer el archivo.");
-      }
-    };
-    reader.readAsText(file);
-  };
-  const confirmarRestaurar = () => {
-    restoreBackup(pendingBackup);
-    setPendingBackup(null);
-    window.location.reload();
-  };
 
   const navGrupo = (id) => {
     const g = GRUPOS.find(x => x.id === id);
@@ -275,22 +268,6 @@ export default function App() {
 
         {/* Footer */}
         <div style={{ borderTop: `1px solid ${C.border}33`, padding: "10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {!collapsed && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button onClick={exportBackup} title="Descarga un .json con todos los datos de la app"
-                style={{ width:"100%", background:C.ok+"18", border:`1px solid ${C.ok}44`, borderRadius:6, padding:"5px 8px", cursor:"pointer", color:C.ok, fontSize:10, fontWeight:700, letterSpacing:.3 }}>
-                ⬇️ Backup
-              </button>
-              {puedeEliminar(usuario) && (
-                <button onClick={elegirArchivoBackup} title="Restaura los datos desde un archivo de backup .json"
-                  style={{ width:"100%", background:C.info+"18", border:`1px solid ${C.info}44`, borderRadius:6, padding:"5px 8px", cursor:"pointer", color:C.info, fontSize:10, fontWeight:700, letterSpacing:.3 }}>
-                  ⬆️ Restaurar
-                </button>
-              )}
-              <input ref={fileInputRef} type="file" accept="application/json" onChange={onArchivoBackup} style={{ display:"none" }} />
-              {importErr && <div style={{ color:C.err, fontSize:9, fontWeight:600 }}>⚠ {importErr}</div>}
-            </div>
-          )}
           {process.env.NODE_ENV === "development" && !collapsed && (
             <button
               onClick={() => {
@@ -357,20 +334,10 @@ export default function App() {
           {tab === "Anidado"     && <Anidado usuario={usuario} />}
           {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} />}
           {tab === "Historial"   && <Historial usuario={usuario} />}
+          {tab === "Dashboard"   && <Dashboard />}
           {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} />}
         </div>
       </div>
-
-      {pendingBackup && (
-        <ModalConfirmarEliminar
-          verbo="Restaurar"
-          titulo={`backup del ${new Date(pendingBackup.exported_at).toLocaleString("es-UY")}`}
-          subtitulo="Esto reemplaza TODOS los datos actuales de la app (presupuestos, cómputos, historial, biblioteca) por los del archivo. No se puede deshacer."
-          labelBoton="♻️ Restaurar y reemplazar todo"
-          onConfirm={confirmarRestaurar}
-          onClose={() => setPendingBackup(null)}
-        />
-      )}
     </div>
   );
 }
