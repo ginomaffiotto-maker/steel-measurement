@@ -2219,6 +2219,32 @@ tocó código de Steel Measurement.
   de materiales y tarifario sin capa de acceso propia todavía. Ninguna
   conexión a la UI real (Fase 3) arrancada.
 
+## §9.28 — Fase 2, resto de las entidades (2026-08-22, continuación)
+
+Agregadas `loadDB`/`saveDB` para las 5 entidades que faltaban de §9.27:
+`computos` (+ items + piezas), `anidados` (+ grupos + piezas),
+`historial_trabajos`, biblioteca de materiales (4 tipos +
+`historial_precios` de alta, no de reemplazo), tarifario completo.
+Mismo criterio que antes: build limpio, nada cableado a la UI todavía.
+
+- **A diferencia de clientes/presupuestos/ítems (§9.27), estas 5 NO se
+  probaron contra el proyecto real** — se escribieron siguiendo
+  exactamente el mismo patrón ya verificado, y se revisó a mano cada una
+  contra las columnas reales del esquema aplicado (no contra memoria).
+  Recomendación: la próxima vez que se toque cualquiera de estas 5, correr
+  una prueba real antes de darla por buena, mismo criterio que
+  `test-fase2.mjs`.
+- **Dos bugs reales encontrados en esa revisión, corregidos antes de
+  commitear**: a `anidado_grupos` le faltaba la columna `kg_m2` (los
+  grupos tipo "plancha" la usan, a diferencia de "perfil" que usa
+  `kg_m`/`sup_m2m`) — migración nueva en steel-backend. Y la `ficha`
+  de un grupo de Anidado (`granallado`/`pintura`/`galvanizado`) no se
+  estaba aplanando al guardar, se habría perdido.
+- **Ojo para Fase 3**: `historial_trabajos.cliente_id` espera un ID ya
+  resuelto contra `clientes` — la tabla local (`iTrabajo`) hoy guarda
+  `cliente` como texto libre. El caller va a tener que resolverlo antes
+  de llamar a `saveDBTrabajoHistorico`, no lo hace la función sola.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

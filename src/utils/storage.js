@@ -176,6 +176,244 @@ export const saveDBItem = async (presupuestoId, item) => {
   return itemId;
 };
 
+// ─── CÓMPUTOS (Fase 2, sin cablear a la UI) ────────────────────────
+export const loadDBComputos = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("computos").select("*").order("fecha", { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
+export const loadDBComputoCompleto = async (computoId) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data: computo, error: eC } = await supabase.from("computos").select("*").eq("id", computoId).single();
+  if (eC) throw eC;
+  const { data: items, error: eI } = await supabase
+    .from("computo_items").select("*").eq("computo_id", computoId).order("orden");
+  if (eI) throw eI;
+  const itemsConPiezas = [];
+  for (const item of items) {
+    const { data: piezas, error: eP } = await supabase
+      .from("computo_piezas").select("*").eq("computo_item_id", item.id);
+    if (eP) throw eP;
+    itemsConPiezas.push({ ...item, piezas });
+  }
+  return { ...computo, items: itemsConPiezas };
+};
+
+// NOTA: la app local guarda cada pieza con { ...campos, ficha: {...} } (objeto
+// anidado); la tabla computo_piezas tiene esos campos de ficha aplanados
+// directo en la fila. Acá se aplanan al guardar. `largo_mm_input` (string de
+// edición en la UI, distinto de `largo_mm` ya parseado) no tiene columna
+// propia — es un detalle de edición local, no un dato a persistir.
+export const saveDBComputo = async (computo) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { items, ...row } = computo;
+  const { data: savedComputo, error: eC } = await supabase.from("computos").upsert(row).select().single();
+  if (eC) throw eC;
+  const computoId = savedComputo.id;
+
+  const { error: eDel } = await supabase.from("computo_items").delete().eq("computo_id", computoId);
+  if (eDel) throw eDel;
+
+  for (const item of items || []) {
+    const { piezas, id, ...itemRow } = item;
+    const { data: savedItem, error: eI } = await supabase
+      .from("computo_items").insert({ ...itemRow, computo_id: computoId }).select().single();
+    if (eI) throw eI;
+    if (piezas?.length) {
+      const filas = piezas.map((p) => {
+        const { id: pid, ficha, largo_mm_input, ...campos } = p;
+        return { ...campos, ...(ficha || {}), computo_item_id: savedItem.id };
+      });
+      const { error: ePiezas } = await supabase.from("computo_piezas").insert(filas);
+      if (ePiezas) throw ePiezas;
+    }
+  }
+  return computoId;
+};
+
+// ─── ANIDADOS (optimización de corte) (Fase 2, sin cablear a la UI) ─
+export const loadDBAnidados = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("anidados").select("*").order("fecha", { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
+export const loadDBAnidadoCompleto = async (anidadoId) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data: anidado, error: eA } = await supabase.from("anidados").select("*").eq("id", anidadoId).single();
+  if (eA) throw eA;
+  const { data: grupos, error: eG } = await supabase
+    .from("anidado_grupos").select("*").eq("anidado_id", anidadoId).order("orden");
+  if (eG) throw eG;
+  const gruposConPiezas = [];
+  for (const grupo of grupos) {
+    const { data: piezas, error: eP } = await supabase.from("anidado_piezas").select("*").eq("grupo_id", grupo.id);
+    if (eP) throw eP;
+    gruposConPiezas.push({ ...grupo, piezas });
+  }
+  return { ...anidado, grupos: gruposConPiezas };
+};
+
+export const saveDBAnidado = async (anidado) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { grupos, ...row } = anidado;
+  const { data: savedAnidado, error: eA } = await supabase.from("anidados").upsert(row).select().single();
+  if (eA) throw eA;
+  const anidadoId = savedAnidado.id;
+
+  const { error: eDel } = await supabase.from("anidado_grupos").delete().eq("anidado_id", anidadoId);
+  if (eDel) throw eDel;
+
+  for (const grupo of grupos || []) {
+    const { piezas, id, ficha, ...grupoRow } = grupo;
+    const { data: savedGrupo, error: eG } = await supabase
+      .from("anidado_grupos")
+      .insert({ ...grupoRow, ...(ficha || {}), anidado_id: anidadoId })
+      .select()
+      .single();
+    if (eG) throw eG;
+    if (piezas?.length) {
+      const filas = piezas.map((p) => ({ ...p, id: undefined, grupo_id: savedGrupo.id }));
+      const { error: ePiezas } = await supabase.from("anidado_piezas").insert(filas);
+      if (ePiezas) throw ePiezas;
+    }
+  }
+  return anidadoId;
+};
+
+// ─── HISTORIAL DE TRABAJOS (benchmark) (Fase 2, sin cablear a la UI) ─
+// Ojo al conectar esto en Fase 3: la tabla local (iTrabajo) guarda `cliente`
+// como texto libre; la tabla de la base pide `cliente_id` ya resuelto contra
+// `clientes` (mismo criterio de unificación que el resto). El caller tiene
+// que hacer esa resolución antes de llamar a saveDBTrabajoHistorico.
+export const loadDBHistorialTrabajos = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("historial_trabajos").select("*").order("fecha", { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
+export const saveDBTrabajoHistorico = async (trabajo) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("historial_trabajos").upsert(trabajo).select().single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── BIBLIOTECA DE MATERIALES (Fase 2, sin cablear a la UI) ─────────
+const BIBLIOTECA_TABLAS = {
+  perfil: "biblioteca_perfiles",
+  planchuela: "biblioteca_planchuelas",
+  plancha: "biblioteca_planchas",
+  rejilla: "biblioteca_rejillas",
+};
+
+export const loadDBBiblioteca = async (tipo) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const tabla = BIBLIOTECA_TABLAS[tipo];
+  if (!tabla) throw new Error(`Tipo de material desconocido: ${tipo}`);
+  const { data, error } = await supabase.from(tabla).select("*").order("nombre");
+  if (error) throw error;
+  return data;
+};
+
+// historial_precios[] NO se guarda acá — es de alta natural (cada cambio de
+// precio agrega una fila, nunca se reemplaza el historial completo). Ver
+// loadDBHistorialPrecios/addDBHistorialPrecio más abajo.
+export const saveDBMaterial = async (tipo, material) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const tabla = BIBLIOTECA_TABLAS[tipo];
+  if (!tabla) throw new Error(`Tipo de material desconocido: ${tipo}`);
+  const { historial_precios, ...row } = material;
+  const { data, error } = await supabase.from(tabla).upsert(row).select().single();
+  if (error) throw error;
+  return data;
+};
+
+export const loadDBHistorialPrecios = async (tipo, materialId) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase
+    .from("material_historial_precios")
+    .select("*")
+    .eq("material_tipo", tipo)
+    .eq("material_id", materialId)
+    .order("fecha", { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
+export const addDBHistorialPrecio = async (tipo, materialId, entry) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase
+    .from("material_historial_precios")
+    .insert({ ...entry, material_tipo: tipo, material_id: materialId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+// ─── TARIFARIO (Fase 2, sin cablear a la UI) ────────────────────────
+// terc_fabricacion/terc_montajes (legado) y trat_superficie_extra/
+// pantografo_extra (vacíos por defecto) no tienen tabla propia todavía —
+// ver BACKEND-COMPARTIDO-MMN.md. Se ignoran acá si vienen en el objeto.
+const TARIFARIO_TABLAS = [
+  ["mo_fab", "tarifario_mo_fab"],
+  ["mo_mon", "tarifario_mo_mon"],
+  ["mat_generales", "tarifario_mat_generales"],
+  ["terceros", "tarifario_terceros"],
+  ["traslados", "tarifario_traslados"],
+  ["pinturas", "tarifario_pinturas"],
+  ["interes_financiero", "tarifario_interes_financiero"],
+];
+
+const obtenerTenantId = async () => {
+  const { data, error } = await supabase.from("profiles").select("tenant_id").single();
+  if (error) throw error;
+  return data.tenant_id;
+};
+
+export const loadDBTarifario = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const resultado = {};
+  for (const [campo, tabla] of TARIFARIO_TABLAS) {
+    const { data, error } = await supabase.from(tabla).select("*");
+    if (error) throw error;
+    resultado[campo] = data;
+  }
+  const { data: config, error: eCfg } = await supabase.from("tarifario_config").select("*").maybeSingle();
+  if (eCfg) throw eCfg;
+  return {
+    ...resultado,
+    arenado_usd_m2: config?.arenado_usd_m2 ?? 0,
+    galvanizado_usd_kg: config?.galvanizado_usd_kg ?? 0,
+    panto_usd_kg_2d: config?.panto_usd_kg_2d ?? 0,
+    panto_usd_kg_3d: config?.panto_usd_kg_3d ?? 0,
+  };
+};
+
+export const saveDBTarifario = async (tarifario) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  for (const [campo, tabla] of TARIFARIO_TABLAS) {
+    const { error: eDel } = await supabase.from(tabla).delete().not("id", "is", null);
+    if (eDel) throw eDel;
+    const filas = (tarifario[campo] || []).map((f) => ({ ...f, id: undefined }));
+    if (filas.length) {
+      const { error: eIns } = await supabase.from(tabla).insert(filas);
+      if (eIns) throw eIns;
+    }
+  }
+  const tenantId = await obtenerTenantId();
+  const { arenado_usd_m2, galvanizado_usd_kg, panto_usd_kg_2d, panto_usd_kg_3d } = tarifario;
+  const { error: eCfg } = await supabase
+    .from("tarifario_config")
+    .upsert({ tenant_id: tenantId, arenado_usd_m2, galvanizado_usd_kg, panto_usd_kg_2d, panto_usd_kg_3d });
+  if (eCfg) throw eCfg;
+};
+
 // Backup manual: descarga/restaura todas las claves smeas_* de localStorage.
 export const exportBackup = () => {
   const data = {};
