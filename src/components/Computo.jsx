@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, registrarCliente } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, registrarCliente, resolverClienteId, saveDBComputo } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -971,6 +972,19 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
 
   const computo = computos.find(c=>c.id===selId) || null;
 
+  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+  // puede romper el guardado local. Mismo criterio que Presupuesto.jsx.
+  const dualWriteComputo = async (c) => {
+    if (!supabase) return;
+    try {
+      const cliente_id = c.cliente ? await resolverClienteId(c.cliente) : null;
+      const { cliente, ...resto } = c;
+      await saveDBComputo({ ...resto, cliente_id });
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
+    }
+  };
+
   const crearComputo = () => {
     if (!nuevo.nombre.trim()) return;
     const counter = (loadLS("smeas_computo_nro",0)) + 1;
@@ -980,6 +994,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
     setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"" });
+    dualWriteComputo(c);
   };
 
   const clonarComputo = (c) => {
@@ -1012,7 +1027,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   };
   const computoAEliminar = confirmarDelId ? computos.find(c=>c.id===confirmarDelId) : null;
 
-  const updateComputo = (upd) => setComputos(prev=>prev.map(c=>c.id===upd.id?touch(upd):c));
+  const updateComputo = (upd) => {
+    const actualizado = touch(upd);
+    setComputos(prev=>prev.map(c=>c.id===upd.id?actualizado:c));
+    dualWriteComputo(actualizado);
+  };
 
   const updateItem = (itemAct) => {
     if (!computo) return;

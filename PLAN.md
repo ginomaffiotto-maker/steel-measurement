@@ -2303,6 +2303,30 @@ también escriben el presupuesto + sus ítems al backend, resolviendo
   contraseña alineada + verificar login) para que esto empiece a
   escribir datos reales en el backend.
 
+## §9.31 — Fase 3, extendido a Cómputo, Anidado, Historial (2026-08-23)
+
+Mismo patrón seguro que clientes/presupuestos (§9.29, §9.30): dual-write en
+paralelo, nunca bloquea ni puede romper el guardado local.
+
+- `Computo.jsx`: `crearComputo`/`updateComputo` → `saveDBComputo`.
+- `Anidado.jsx`: `crear`/`upd` → `saveDBAnidado`.
+- `Historial.jsx`: `crear`/`upd` → `saveDBTrabajoHistorico` (mapea
+  `desglose_pct.{hier,mat,moFab,moMon,hesp,tFab,tMon,trat,trasl,panto}`
+  a las columnas `pct_*` planas de la tabla).
+- **Cambio de método de verificación**: el login local que se usaba para
+  probar sin credenciales reales ya no existe (reemplazado por Supabase
+  Auth real, ver §9.29/App.js). De acá en más, la verificación en
+  navegador en vivo requiere una sesión real — no se le va a pedir la
+  contraseña a Gino para esto. Esta tanda se validó por build limpio
+  (`CI=true npx react-scripts build`, exit 0) + revisión manual contra el
+  mismo patrón ya verificado en vivo antes, no con una prueba end-to-end
+  nueva. Recomendado: la próxima vez que alguien tenga sesión real activa,
+  confirmar estos tres módulos en consola (sin warnings `[Fase 3]`).
+- **Alcance acotado, igual criterio que antes**: no cubre `clonarComputo`,
+  `clonarAnidado`(si existe), `importarDeM4`, ni ningún flujo de carga
+  masiva/histórica.
+- Pendiente: biblioteca de materiales y tarifario siguen sin dual-write.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

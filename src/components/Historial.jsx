@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe } from "../utils/taxonomia";
@@ -461,12 +462,32 @@ export default function Historial({ usuario }) {
     .filter(t => !filtDesde || (t.fecha||"") >= filtDesde)
     .filter(t => !filtHasta || (t.fecha||"") <= filtHasta);
 
+  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+  // puede romper el guardado local. Mismo criterio que el resto de Fase 3.
+  const dualWriteTrabajo = async (t) => {
+    if (!supabase) return;
+    try {
+      const cliente_id = t.cliente ? await resolverClienteId(t.cliente) : null;
+      const { cliente, desglose_pct, ...resto } = t;
+      const pct = desglose_pct || {};
+      await saveDBTrabajoHistorico({
+        ...resto, cliente_id,
+        pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
+        pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,
+        pct_trasl: pct.trasl, pct_panto: pct.panto,
+      });
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar trabajo "${t.nro_ot || t.id}" con el backend:`, e.message || e);
+    }
+  };
+
   const crear = (form) => {
     const nuevo = { ...iTrabajo(), ...form };
     const all = [nuevo, ...trabajos];
     nuevo.nro_ot = nuevo.nro_ot || genNro(all);
     setTrabajos(all);
     setNuevoOpen(false);
+    dualWriteTrabajo(nuevo);
   };
 
   const importarDeM4 = (presupuesto) => {
@@ -479,7 +500,11 @@ export default function Historial({ usuario }) {
     setVista("detalle");
   };
 
-  const upd = (t) => setTrabajos(prev => prev.map(x => x.id===t.id ? touch(t) : x));
+  const upd = (t) => {
+    const actualizado = touch(t);
+    setTrabajos(prev => prev.map(x => x.id===t.id ? actualizado : x));
+    dualWriteTrabajo(actualizado);
+  };
   const del = (id) => setTrabajos(prev => prev.filter(x => x.id!==id));
   const trabajoAEliminar = confirmarDelId ? trabajos.find(t=>t.id===confirmarDelId) : null;
 

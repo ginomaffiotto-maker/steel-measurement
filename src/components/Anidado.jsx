@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, registrarCliente } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, registrarCliente, resolverClienteId, saveDBAnidado } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
@@ -870,7 +871,21 @@ export default function Anidado({ usuario }) {
 
   const save = list => { setAnidados(list); saveLS("smeas_anidados",list); };
   const actual = anidados.find(a=>a.id===selId)||null;
-  const upd    = a => save(anidados.map(x=>x.id===a.id?touch(a):x));
+
+  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+  // puede romper el guardado local. Mismo criterio que Presupuesto/Cómputo.
+  const dualWriteAnidado = async (a) => {
+    if (!supabase) return;
+    try {
+      const cliente_id = a.cliente ? await resolverClienteId(a.cliente) : null;
+      const { cliente, ...resto } = a;
+      await saveDBAnidado({ ...resto, cliente_id });
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
+    }
+  };
+
+  const upd = a => { const t = touch(a); save(anidados.map(x=>x.id===a.id?t:x)); dualWriteAnidado(t); };
 
   // Auto-importar cuando viene desde Cómputo
   useEffect(()=>{
@@ -898,6 +913,7 @@ export default function Anidado({ usuario }) {
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
     const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),obra:obra.trim(),grupos,...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setObra(""); setComputoSel("");
+    dualWriteAnidado(a);
   };
 
   const anidadosFiltrados = anidados.filter(a => {
