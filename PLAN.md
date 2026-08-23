@@ -2327,6 +2327,34 @@ paralelo, nunca bloquea ni puede romper el guardado local.
   masiva/histórica.
 - Pendiente: biblioteca de materiales y tarifario siguen sin dual-write.
 
+## §9.32 — Fase 3 completa en Steel Measurement: biblioteca + tarifario (2026-08-23)
+
+Cierra la lista de entidades de Steel Measurement — con esto, **las 9
+entidades tienen dual-write** (clientes, presupuestos+ítems, computos,
+anidados, historial_trabajos, y ahora biblioteca de materiales + tarifario).
+
+- `BibliotecaMateriales.jsx`: `actualizar`/`agregarMat` de las 4 secciones
+  (perfiles, planchuelas, planchas, rejillas) → `saveDBMaterial(tipo, ...)`.
+  `aplicarLote` (ajuste de precio en lote) de Perfiles también agrega
+  entradas a `material_historial_precios` vía `addDBHistorialPrecio` — el
+  mismo lote en Planchuelas/Planchas/Rejillas quedó sin ese agregado extra
+  (alcance acotado, se puede sumar después si hace falta).
+- Tarifario: las 5 funciones de guardado (`SeccionCatalogoRubro` genérico
+  para MO/Materiales/Terceros/Traslados/Pinturas, `SeccionInteresFinanciero`,
+  `SeccionTratSuperficie`, `SeccionPantografo`) ahora también llaman
+  `saveDBTarifario(t)` con el objeto completo — mismo criterio que
+  `saveTarifario` local, que también reescribe todo cada vez.
+- `eliminarMat` (borrar un material) **no tiene dual-write** — mismo
+  criterio que el resto de la sesión: ninguna eliminación quedó cubierta
+  todavía, solo alta/edición.
+- Verificado por build limpio únicamente (mismo motivo que §9.31: ya no
+  hay login local para probar sin credenciales reales).
+
+**Con esto se cierra Fase 3 (piloto) completa del lado de Steel
+Measurement.** Falta: Fase 4 (migración de datos históricos reales) y
+Fase 5 (corte de lectura) — ninguna de las dos arrancada todavía. Ver
+`steel-backend/CLAUDE.md` para el estado general del backend compartido.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

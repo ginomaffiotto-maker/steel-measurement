@@ -1,10 +1,43 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, saveDBTarifario } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const hoy = () => new Date().toISOString().split("T")[0];
+
+// Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+// puede romper el guardado local. Compartido por las 4 secciones de
+// biblioteca (perfiles/planchuelas/planchas/rejillas) más abajo.
+const dualWriteMaterial = async (tipo, mat) => {
+  if (!supabase) return;
+  try {
+    const { historial_precios, ...row } = mat;
+    await saveDBMaterial(tipo, row);
+  } catch (e) {
+    console.warn(`[Fase 3] No se pudo sincronizar material "${mat.nombre}" (${tipo}) con el backend:`, e.message || e);
+  }
+};
+const dualWriteHistorialPrecio = async (tipo, materialId, entry) => {
+  if (!supabase) return;
+  try {
+    await addDBHistorialPrecio(tipo, materialId, entry);
+  } catch (e) {
+    console.warn(`[Fase 3] No se pudo sincronizar historial de precio (${tipo}) con el backend:`, e.message || e);
+  }
+};
+// El tarifario se guarda entero cada vez (mismo criterio que saveTarifario
+// local) — saveDBTarifario reemplaza todas las filas de cada catálogo, así
+// que un cambio parcial en cualquier sección igual manda el objeto completo.
+const dualWriteTarifario = async (t) => {
+  if (!supabase) return;
+  try {
+    await saveDBTarifario(t);
+  } catch (e) {
+    console.warn(`[Fase 3] No se pudo sincronizar el tarifario con el backend:`, e.message || e);
+  }
+};
 const n2 = (v) => (+v || 0).toLocaleString("es-UY", { minimumFractionDigits:2, maximumFractionDigits:2 });
 const TH_R = { ...TH, textAlign: "right" };
 const TD_R = { ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" };
@@ -1334,9 +1367,9 @@ function SeccionPerfiles() {
 
   useEffect(() => { saveLS("smeas_perfiles", items); }, [items]);
 
-  const actualizar  = mat => setItems(prev => prev.map(p => p.id === mat.id ? touch(mat) : p));
+  const actualizar  = mat => { const t = touch(mat); setItems(prev => prev.map(p => p.id === mat.id ? t : p)); dualWriteMaterial("perfil", t); };
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
-  const agregarMat  = mat => setItems(prev => [...prev, mat]);
+  const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("perfil", mat); };
 
   const enFiltro = p => (cat === "Todas" || p.cat === cat) && p.nombre.toLowerCase().includes(busq.toLowerCase());
   const lista = items.filter(enFiltro);
@@ -1349,6 +1382,10 @@ function SeccionPerfiles() {
         ? { ...p, precio_usd_kg: v, historial_precios: [entrada, ...(p.historial_precios || [])] }
         : p
     ));
+    items.filter(enFiltro).forEach(p => {
+      dualWriteMaterial("perfil", { ...p, precio_usd_kg: v });
+      dualWriteHistorialPrecio("perfil", p.id, { fecha: entrada.fecha, proveedor: entrada.proveedor, precio: v });
+    });
     setShowLote(false);
   };
 
@@ -1438,9 +1475,9 @@ function SeccionPlanchuelas() {
 
   useEffect(() => { saveLS("smeas_planchuelas", items); }, [items]);
 
-  const actualizar  = mat => setItems(prev => prev.map(p => p.id === mat.id ? touch(mat) : p));
+  const actualizar  = mat => { const t = touch(mat); setItems(prev => prev.map(p => p.id === mat.id ? t : p)); dualWriteMaterial("planchuela", t); };
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
-  const agregarMat  = mat => setItems(prev => [...prev, mat]);
+  const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("planchuela", mat); };
   const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
 
   const aplicarLote = (f) => {
@@ -1527,9 +1564,9 @@ function SeccionPlanchas() {
 
   useEffect(() => { saveLS("smeas_planchas", items); }, [items]);
 
-  const actualizar  = mat => setItems(prev => prev.map(p => p.id === mat.id ? touch(mat) : p));
+  const actualizar  = mat => { const t = touch(mat); setItems(prev => prev.map(p => p.id === mat.id ? t : p)); dualWriteMaterial("plancha", t); };
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
-  const agregarMat  = mat => setItems(prev => [...prev, mat]);
+  const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("plancha", mat); };
 
   const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
 
@@ -1622,9 +1659,9 @@ function SeccionRejillas() {
 
   useEffect(() => { saveLS("smeas_rejillas", items); }, [items]);
 
-  const actualizar  = mat => setItems(prev => prev.map(p => p.id === mat.id ? touch(mat) : p));
+  const actualizar  = mat => { const t = touch(mat); setItems(prev => prev.map(p => p.id === mat.id ? t : p)); dualWriteMaterial("rejilla", t); };
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
-  const agregarMat  = mat => setItems(prev => [...prev, mat]);
+  const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("rejilla", mat); };
 
   const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
 
@@ -1827,7 +1864,7 @@ function AvisoSoloLectura() {
 function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, titulo, descripcion }) {
   const [tarifario, setTarifario] = useState(loadTarifario);
   const soloLectura = usuario?.rol !== "admin";
-  const onChange = (items) => { const t = { ...tarifario, [campo]: items }; setTarifario(t); saveTarifario(t); };
+  const onChange = (items) => { const t = { ...tarifario, [campo]: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
@@ -1843,7 +1880,7 @@ function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, 
 function SeccionInteresFinanciero({ usuario }) {
   const [tarifario, setTarifario] = useState(loadTarifario);
   const soloLectura = usuario?.rol !== "admin";
-  const onChange = (items) => { const t = { ...tarifario, interes_financiero: items }; setTarifario(t); saveTarifario(t); };
+  const onChange = (items) => { const t = { ...tarifario, interes_financiero: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
@@ -1856,8 +1893,8 @@ function SeccionInteresFinanciero({ usuario }) {
 function SeccionTratSuperficie({ usuario }) {
   const [tarifario, setTarifario] = useState(loadTarifario);
   const soloLectura = usuario?.rol !== "admin";
-  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); };
-  const onChangeExtra = (items) => { const t = { ...tarifario, trat_superficie_extra: items }; setTarifario(t); saveTarifario(t); };
+  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
+  const onChangeExtra = (items) => { const t = { ...tarifario, trat_superficie_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
@@ -1891,8 +1928,8 @@ function SeccionTratSuperficie({ usuario }) {
 function SeccionPantografo({ usuario }) {
   const [tarifario, setTarifario] = useState(loadTarifario);
   const soloLectura = usuario?.rol !== "admin";
-  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); };
-  const onChangeExtra = (items) => { const t = { ...tarifario, pantografo_extra: items }; setTarifario(t); saveTarifario(t); };
+  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
+  const onChangeExtra = (items) => { const t = { ...tarifario, pantografo_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
