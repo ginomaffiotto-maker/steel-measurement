@@ -2284,6 +2284,25 @@ falló con RLS (esperado, sin sesión) y no afectó nada.
   silencioso de punta a punta. `presupuestos_sm` y el resto de las
   entidades siguen sin dual-write — este piloto cubrió solo `clientes`.
 
+## §9.30 — Fase 3, piloto extendido a presupuestos_sm (2026-08-22)
+
+Mismo criterio de §9.29: dual-write en paralelo, nunca bloquea ni puede
+romper el guardado local. `Presupuesto.jsx`: `crearPres`/`updPres` ahora
+también escriben el presupuesto + sus ítems al backend, resolviendo
+`cliente` (texto libre) a `cliente_id` con el mismo `resolverClienteId`.
+
+- **Alcance acotado a propósito**: solo `crearPres`/`updPres`. NO cubre
+  `clonarPres`, `cargarHistorico` ni `importarMateriales` — quedan para
+  un paso siguiente.
+- Verificado en navegador: presupuesto nuevo creado localmente sin
+  problemas (P-002, con código de cálculo), los dos intentos de
+  sincronización (cliente y presupuesto) fallaron por RLS como se
+  esperaba (sin sesión de Supabase activa todavía) y quedaron atrapados
+  en `console.warn`, sin afectar el guardado local. Build limpio.
+- Sigue pendiente que Gino complete los 3 pasos de §9.29 (email +
+  contraseña alineada + verificar login) para que esto empiece a
+  escribir datos reales en el backend.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

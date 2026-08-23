@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, registrarCliente, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, registrarCliente, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
@@ -110,7 +111,7 @@ const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 // dropdown en vez de texto libre para que no diverja de la lista canónica —
 // necesario para que el export a steelCRM (§4 de esta sesión) y los reportes
 // cruzados por Familia/Categoría funcionen también con datos de Presupuesto.
-function SelectCategoria({ value, onChange }) {
+export function SelectCategoria({ value, onChange }) {
   return (
     <select style={INP} value={value || ""} onChange={e => onChange(e.target.value)}>
       <option value="">— Sin categoría —</option>
@@ -255,6 +256,7 @@ function generarPDFPresupuesto(pres) {
     totalUSD: c.gran_total,
     condiciones: { moneda: pres.moneda || "USD", formaPago: pres.forma_pago },
     notas: pres.notas,
+    bloques: loadBloquesPDF(),
   });
 }
 
@@ -1751,6 +1753,24 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
     .filter(p => !filtHasta || (p.fecha||"") <= filtHasta);
 
+  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
+  // puede romper el guardado local (localStorage sigue siendo la fuente de
+  // verdad). Resuelve `cliente` (texto libre local) a `cliente_id` real
+  // contra la tabla `clientes` — mismo helper que usa registrarCliente.
+  const dualWritePresupuesto = async (p) => {
+    if (!supabase) return;
+    try {
+      const cliente_id = p.cliente ? await resolverClienteId(p.cliente) : null;
+      const { cliente, clonado_de, items, ...resto } = p;
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
+      for (const item of items || []) {
+        await saveDBItem(p.id, item);
+      }
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar presupuesto "${p.nro || p.id}" con el backend:`, e.message || e);
+    }
+  };
+
   const crearPres = (form) => {
     const nuevo = { ...iPresupuesto(), ...form };
     nuevo.nro = newNroPresupuesto();
@@ -1759,9 +1779,14 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     setSelId(nuevo.id);
     setVista("detalle");
     setNuevoOpen(false);
+    dualWritePresupuesto(nuevo);
   };
 
-  const updPres = (p) => setPres(prev => prev.map(x => x.id===p.id ? touch(p) : x));
+  const updPres = (p) => {
+    const actualizado = touch(p);
+    setPres(prev => prev.map(x => x.id===p.id ? actualizado : x));
+    dualWritePresupuesto(actualizado);
+  };
   const delPres = (id) => setPres(prev => prev.filter(x => x.id!==id));
 
   const clonarPres = (p) => {
