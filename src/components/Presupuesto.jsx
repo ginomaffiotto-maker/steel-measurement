@@ -3,6 +3,7 @@ import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
+import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
@@ -277,8 +278,8 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Nombre / Referencia *</label>
             <input style={INP} value={form.nombre} autoFocus placeholder="ej: Pérgola SACEEM" onChange={e=>set("nombre",e.target.value)}/>
           </div>
-          <div><label style={LBL}>Cliente</label><AutocompleteCliente style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
-          <div><label style={LBL}>Contacto</label><input style={INP} value={form.contacto} placeholder="Nombre" onChange={e=>set("contacto",e.target.value)}/></div>
+          <div><label style={LBL}>Cliente (empresa)</label><AutocompleteEmpresa style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
+          <div><label style={LBL}>Contacto</label><AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/></div>
           <div><label style={LBL}>Obra / Ubicación</label><input style={INP} value={form.obra} placeholder="ej: Planta Canelones" onChange={e=>set("obra",e.target.value)}/></div>
           <div><label style={LBL}>Tipo de trabajo</label>
             <select style={INP} value={form.tipo_trabajo} onChange={e=>set("tipo_trabajo",e.target.value)}>
@@ -1474,10 +1475,10 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
               Datos generales
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-              <div><label style={LBL}>Cliente</label>
-                <AutocompleteCliente style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
+              <div><label style={LBL}>Cliente (empresa)</label>
+                <AutocompleteEmpresa style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
               <div><label style={LBL}>Contacto</label>
-                <input style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={e=>set("contacto",e.target.value)}/></div>
+                <AutocompleteCliente style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={v=>set("contacto",v)}/></div>
               <div><label style={LBL}>Obra / Ubicación</label>
                 <input style={INP} value={pres.obra||""} placeholder="Planta, dirección..." onChange={e=>set("obra",e.target.value)}/></div>
               <div><label style={LBL}>Tipo de trabajo</label>
@@ -1761,7 +1762,15 @@ export default function Presupuesto({ usuario, tcGlobal }) {
   const dualWritePresupuesto = async (p) => {
     if (!supabase) return;
     try {
-      const cliente_id = p.cliente ? await resolverClienteId(p.cliente) : null;
+      // A diferencia de Cómputo/Anidado/Historial, acá "cliente" siempre fue
+      // la razón social (empresa) y "contacto" el nombre de la persona —
+      // mapeo corregido 2026-08-23 (antes se invertía sin querer). Si no
+      // hay contacto cargado, se resuelve igual usando el nombre de la
+      // empresa como si fuera el "nombre" del cliente (mismo criterio de
+      // respaldo que ya usan los otros módulos sin este segundo campo).
+      const nombreParaClientes = (p.contacto || p.cliente || "").trim();
+      const empresaParaClientes = p.contacto ? p.cliente : null;
+      const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
       const { cliente, clonado_de, items, ...resto } = p;
       await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
       for (const item of items || []) {

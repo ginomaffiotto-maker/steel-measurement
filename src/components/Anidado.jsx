@@ -3,6 +3,7 @@ import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
+import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
@@ -853,6 +854,7 @@ export default function Anidado({ usuario }) {
   const [nombre,     setNombre]     = useState("");
   const [fecha,      setFecha]      = useState(new Date().toISOString().split("T")[0]);
   const [cliente,    setCliente]    = useState("");
+  const [empresa,    setEmpresa]    = useState("");
   const [obra,       setObra]       = useState("");
   const [computoSel, setComputoSel] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
@@ -878,7 +880,7 @@ export default function Anidado({ usuario }) {
   const dualWriteAnidado = async (a) => {
     if (!supabase) return;
     try {
-      const cliente_id = a.cliente ? await resolverClienteId(a.cliente) : null;
+      const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
       const { cliente, ...resto } = a;
       await saveDBAnidado({ ...resto, cliente_id });
     } catch (e) {
@@ -912,8 +914,8 @@ export default function Anidado({ usuario }) {
   const crear=()=>{
     if (!nombre.trim()) return;
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
-    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),obra:obra.trim(),grupos,...stamp()};
-    save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setObra(""); setComputoSel("");
+    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),grupos,...stamp()};
+    save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
   };
 
@@ -999,7 +1001,9 @@ export default function Anidado({ usuario }) {
               <label style={LBL}>Fecha</label>
               <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Cliente</label>
-              <AutocompleteCliente placeholder="Ej: CCFC" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom:8 }}/>
+              <AutocompleteCliente placeholder="Ej: Juan Pérez" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom:8 }}/>
+              <label style={LBL}>Empresa</label>
+              <AutocompleteEmpresa placeholder="Ej: CCFC" value={empresa} onChange={setEmpresa} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Obra</label>
               <input type="text" placeholder="Ej: Nave Industrial" value={obra} onChange={e=>setObra(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Importar desde cómputo (opcional)</label>

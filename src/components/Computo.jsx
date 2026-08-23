@@ -3,6 +3,7 @@ import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
+import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ const itemVacio = (n = 1) => ({
 });
 
 const computoVacio = () => ({
-  id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "",
+  id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "", empresa: "",
   cantidad_total: 1,
   items: [itemVacio(1)],
   ...stamp(),
@@ -944,7 +945,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
-  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"" });
+  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"" });
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [busqNombre,    setBusqNombre]    = useState("");
@@ -978,7 +979,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   const dualWriteComputo = async (c) => {
     if (!supabase) return;
     try {
-      const cliente_id = c.cliente ? await resolverClienteId(c.cliente) : null;
+      const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
       const { cliente, ...resto } = c;
       await saveDBComputo({ ...resto, cliente_id });
     } catch (e) {
@@ -991,10 +992,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
     const counter = (loadLS("smeas_computo_nro",0)) + 1;
     saveLS("smeas_computo_nro", counter);
     const nro = nuevo.nro?.trim() || `C-${String(counter).padStart(3,"0")}`;
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim() };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim() };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
-    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"" });
+    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"" });
     dualWriteComputo(c);
   };
 
@@ -1127,8 +1128,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
               onChange={e=>setNuevo(v=>({...v,fecha:e.target.value}))}
               style={{ ...INP,marginBottom:10 }} />
             <label style={LBL}>Cliente</label>
-            <AutocompleteCliente placeholder="Ej: CCFC" value={nuevo.cliente}
+            <AutocompleteCliente placeholder="Ej: Juan Pérez" value={nuevo.cliente}
               onChange={v=>setNuevo(s=>({...s,cliente:v}))}
+              style={{ ...INP,marginBottom:10 }} />
+            <label style={LBL}>Empresa</label>
+            <AutocompleteEmpresa placeholder="Ej: CCFC" value={nuevo.empresa}
+              onChange={v=>setNuevo(s=>({...s,empresa:v}))}
               style={{ ...INP,marginBottom:14 }} />
             <div style={{ display:"flex",gap:8 }}>
               <button onClick={crearComputo} style={{ ...BTN("ok"),flex:1 }}>Crear</button>

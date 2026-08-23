@@ -3,6 +3,7 @@ import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
+import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe } from "../utils/taxonomia";
@@ -52,7 +53,7 @@ function genNro(lista) {
 
 export const iTrabajo = () => ({
   id: uid(), nro_ot: "", fecha: new Date().toISOString().slice(0, 10),
-  cliente: "", obra: "", categoria: "", tipo_trabajo: "Fabricación",
+  cliente: "", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación",
   kg_total: 0, metros_total: 0, usd_total: 0,
   desglose_pct: { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 },
   horas_fab_est: 0, horas_fab_real: 0, horas_mon_est: 0, horas_mon_real: 0,
@@ -114,7 +115,8 @@ function ModalNuevo({ onSave, onClose }) {
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14 }}>
           <div><label style={LBL}>N° OT</label><input style={INP} value={f.nro_ot} placeholder="OT-001" onChange={e=>set("nro_ot",e.target.value)}/></div>
           <div><label style={LBL}>Fecha</label><input type="date" style={INP} value={f.fecha} onChange={e=>set("fecha",e.target.value)}/></div>
-          <div><label style={LBL}>Cliente</label><input style={INP} value={f.cliente} onChange={e=>set("cliente",e.target.value)}/></div>
+          <div><label style={LBL}>Cliente</label><AutocompleteCliente style={INP} value={f.cliente} placeholder="Ej: Juan Pérez" onChange={v=>set("cliente",v)}/></div>
+          <div><label style={LBL}>Empresa</label><AutocompleteEmpresa style={INP} value={f.empresa} placeholder="Ej: CCFC" onChange={v=>set("empresa",v)}/></div>
           <div><label style={LBL}>Obra</label><input style={INP} value={f.obra} onChange={e=>set("obra",e.target.value)}/></div>
           <div><label style={LBL}>Categoría</label><input style={INP} value={f.categoria} placeholder="ej: Naves industriales" onChange={e=>set("categoria",e.target.value)}/></div>
           <div>
@@ -287,7 +289,8 @@ function DetalleTrabajo({ t, onChange, onBack }) {
               {TIPOS.map(x=><option key={x} value={x}>{x}</option>)}
             </select>
           </div>
-          <div><label style={lblMini}>Cliente</label><input style={inpMini} value={t.cliente} onChange={e=>set("cliente",e.target.value)}/></div>
+          <div><label style={lblMini}>Cliente</label><AutocompleteCliente style={inpMini} value={t.cliente} onChange={v=>set("cliente",v)}/></div>
+          <div><label style={lblMini}>Empresa</label><AutocompleteEmpresa style={inpMini} value={t.empresa} onChange={v=>set("empresa",v)}/></div>
           <div><label style={lblMini}>Obra</label><input style={inpMini} value={t.obra} onChange={e=>set("obra",e.target.value)}/></div>
           <div><label style={lblMini}>Categoría</label><input style={inpMini} value={t.categoria} onChange={e=>set("categoria",e.target.value)}/></div>
         </div>
@@ -468,7 +471,7 @@ export default function Historial({ usuario }) {
   const dualWriteTrabajo = async (t) => {
     if (!supabase) return;
     try {
-      const cliente_id = t.cliente ? await resolverClienteId(t.cliente) : null;
+      const cliente_id = t.cliente ? await resolverClienteId(t.cliente, t.empresa) : null;
       const { cliente, desglose_pct, ...resto } = t;
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({

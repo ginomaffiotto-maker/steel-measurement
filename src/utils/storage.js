@@ -112,28 +112,56 @@ export const useListaClientes = () => {
 // no existe — usado por el dual-write de Fase 3 para resolver el `cliente`
 // de texto libre que usa hoy la UI local a un `cliente_id` real. Cachea en
 // memoria durante la sesión para no repetir la búsqueda en cada tipeo.
+// `empresa` (2026-08-23) es opcional: si el contacto ya existe pero sin
+// empresa cargada, se la completa; nunca pisa una empresa ya cargada.
 const _cacheClienteIds = new Map();
-export const resolverClienteId = async (nombre) => {
+export const resolverClienteId = async (nombre, empresa) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const n = (nombre || "").trim();
   if (!n) return null;
+  const emp = (empresa || "").trim() || null;
   const key = n.toLowerCase();
   if (_cacheClienteIds.has(key)) return _cacheClienteIds.get(key);
 
-  const { data: existentes, error: eSel } = await supabase.from("clientes").select("id, nombre").ilike("nombre", n);
+  const { data: existentes, error: eSel } = await supabase.from("clientes").select("id, nombre, empresa").ilike("nombre", n);
   if (eSel) throw eSel;
   const match = existentes?.find((c) => (c.nombre || "").trim().toLowerCase() === key);
 
   let id;
   if (match) {
     id = match.id;
+    if (emp && !match.empresa) {
+      const { error: eUpd } = await supabase.from("clientes").update({ empresa: emp }).eq("id", id);
+      if (eUpd) throw eUpd;
+    }
   } else {
-    const { data: creado, error: eIns } = await supabase.from("clientes").insert({ nombre: n }).select("id").single();
+    const { data: creado, error: eIns } = await supabase.from("clientes").insert({ nombre: n, empresa: emp }).select("id").single();
     if (eIns) throw eIns;
     id = creado.id;
   }
   _cacheClienteIds.set(key, id);
   return id;
+};
+
+// Lista de empresas conocidas (para autocompletar el campo Empresa, 2026-08-23)
+// — deriva de las mismas filas de `clientes`, cacheada en módulo aparte.
+let _cacheListaEmpresas = null;
+export const useListaEmpresas = () => {
+  const [lista, setLista] = useState(() => _cacheListaEmpresas || []);
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    loadDBClientes()
+      .then((rows) => {
+        const empresas = Array.from(new Set((rows || []).map((r) => r.empresa).filter(Boolean)))
+          .sort((a, b) => a.localeCompare(b, "es"));
+        _cacheListaEmpresas = empresas;
+        if (vivo) setLista(empresas);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  return lista;
 };
 
 // ─── PRESUPUESTOS — capa de acceso al backend (Fase 2, sin cablear a la UI
@@ -384,7 +412,7 @@ export const loadDBHistorialTrabajos = async () => {
 // columna en historial_trabajos. Elegir explícitamente evita que aparezca
 // un campo nuevo mañana y rompa el insert otra vez.
 const COLUMNAS_HISTORIAL_TRABAJO = [
-  "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "obra", "categoria",
+  "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "obra", "categoria",
   "tipo_trabajo", "kg_total", "metros_total", "usd_total",
   "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
   "pct_t_fab", "pct_t_mon", "pct_trat", "pct_trasl", "pct_panto",

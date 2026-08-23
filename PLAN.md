@@ -2461,6 +2461,41 @@ decidió arreglarlo de una vez ya que estaba fresco.
   filtra al escribir y que el campo queda editable después de elegir un
   nombre.
 
+## §9.37 — Campo Empresa separado del Cliente (contacto) (2026-08-23)
+
+Pedido de Gino: el campo "Cliente" que se tipea hoy en Cómputo/Anidado/
+Historial en la práctica representa el **contacto (persona)**, no la
+empresa — y la tabla real `clientes` sí distingue `nombre` (contacto) de
+`empresa`. Se agregó el campo Empresa donde faltaba.
+
+- **Esquema** (steel-backend, migración `20260823090000`): columna
+  `empresa` nueva en `presupuestos_sm`, `computos`, `anidados`,
+  `historial_trabajos`.
+- **`resolverClienteId(nombre, empresa)`**: ahora acepta empresa opcional
+  — si el contacto ya existe pero sin empresa cargada, se la completa
+  (nunca pisa una que ya estaba). `useListaEmpresas()` (hook nuevo) y
+  **`AutocompleteEmpresa.jsx`** (componente nuevo, mismo patrón que
+  `AutocompleteCliente` pero sin el registro automático) para el
+  autocompletado.
+- **Cómputo, Anidado, Historial**: campo Empresa nuevo al lado de
+  Cliente, en los formularios de alta (y en Historial también en el
+  detalle editable). Modelo local (`computoVacio`, `iTrabajo`, y el
+  objeto que arma `crear()` de Anidado) suma `empresa: ""`.
+- **Presupuesto — hallazgo importante, mapeo corregido, no se agregó
+  campo nuevo**: acá "Cliente" **ya era** la razón social (placeholder
+  "Razón social") y "Contacto" el nombre de la persona — al revés del
+  resto. El dual-write venía resolviendo `cliente` (empresa) como si
+  fuera el nombre del contacto, invertido sin querer. Corregido:
+  `resolverClienteId(contacto, cliente)` con respaldo si no hay contacto
+  cargado (usa el nombre de la empresa como nombre del cliente, mismo
+  criterio que los demás módulos). Los inputs "Cliente" y "Contacto" de
+  Presupuesto (alta y detalle) pasaron de `AutocompleteCliente`/texto
+  plano a `AutocompleteEmpresa`/`AutocompleteCliente` respectivamente,
+  para que autocompleten contra la lista correcta.
+- Build limpio. **Pendiente que Gino confirme en vivo** los 3 flujos
+  (Cómputo, Anidado, Historial con Empresa nueva; Presupuesto con el
+  mapeo corregido) antes de dar esto por cerrado.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
