@@ -451,6 +451,112 @@ export const saveDBTarifario = async (tarifario) => {
   if (eCfg) throw eCfg;
 };
 
+// ─── MIGRACIÓN ÚNICA (Fase 4, 2026-08-23) ───────────────────────────
+// Sube TODO lo que ya está en localStorage al backend real, usando los
+// mismos loadDB/saveDB de Fase 3 (no es código nuevo sin probar). Pensada
+// para correrse UNA vez, en el navegador de quien ya tiene sesión real —
+// nunca se ejecuta sola, la dispara un botón admin-only en Config. Corre
+// todo secuencial (no en paralelo) para no saturar la base y poder llevar
+// un conteo de errores entidad por entidad sin que uno tumbe a los demás.
+export const migrarTodoALaNube = async (onProgress) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const log = (msg) => { if (onProgress) onProgress(msg); };
+  const resumen = {
+    clientes: { ok: 0, total: 0 }, presupuestos: { ok: 0, total: 0 },
+    computos: { ok: 0, total: 0 }, anidados: { ok: 0, total: 0 },
+    historial: { ok: 0, total: 0 }, biblioteca: { ok: 0, total: 0 },
+    tarifario: { ok: 0, total: 1 }, errores: [],
+  };
+
+  const nombresClientes = loadClientes();
+  resumen.clientes.total = nombresClientes.length;
+  for (const nombre of nombresClientes) {
+    try { await resolverClienteId(nombre); resumen.clientes.ok++; }
+    catch (e) { resumen.errores.push(`Cliente "${nombre}": ${e.message || e}`); }
+  }
+  log(`Clientes: ${resumen.clientes.ok}/${resumen.clientes.total}`);
+
+  const presupuestos = loadLS("smeas_presupuestos", []);
+  resumen.presupuestos.total = presupuestos.length;
+  for (const p of presupuestos) {
+    try {
+      const cliente_id = p.cliente ? await resolverClienteId(p.cliente) : null;
+      const { cliente, clonado_de, items, ...resto } = p;
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
+      for (const item of items || []) await saveDBItem(p.id, item);
+      resumen.presupuestos.ok++;
+    } catch (e) { resumen.errores.push(`Presupuesto ${p.nro || p.id}: ${e.message || e}`); }
+  }
+  log(`Presupuestos: ${resumen.presupuestos.ok}/${resumen.presupuestos.total}`);
+
+  const computos = loadLS("smeas_computos", []);
+  resumen.computos.total = computos.length;
+  for (const c of computos) {
+    try {
+      const cliente_id = c.cliente ? await resolverClienteId(c.cliente) : null;
+      const { cliente, ...resto } = c;
+      await saveDBComputo({ ...resto, cliente_id });
+      resumen.computos.ok++;
+    } catch (e) { resumen.errores.push(`Cómputo ${c.nro || c.id}: ${e.message || e}`); }
+  }
+  log(`Cómputos: ${resumen.computos.ok}/${resumen.computos.total}`);
+
+  const anidados = loadLS("smeas_anidados", []);
+  resumen.anidados.total = anidados.length;
+  for (const a of anidados) {
+    try {
+      const cliente_id = a.cliente ? await resolverClienteId(a.cliente) : null;
+      const { cliente, ...resto } = a;
+      await saveDBAnidado({ ...resto, cliente_id });
+      resumen.anidados.ok++;
+    } catch (e) { resumen.errores.push(`Anidado ${a.nombre || a.id}: ${e.message || e}`); }
+  }
+  log(`Anidados: ${resumen.anidados.ok}/${resumen.anidados.total}`);
+
+  const trabajos = loadLS("smeas_historial", []);
+  resumen.historial.total = trabajos.length;
+  for (const t of trabajos) {
+    try {
+      const cliente_id = t.cliente ? await resolverClienteId(t.cliente) : null;
+      const { cliente, desglose_pct, ...resto } = t;
+      const pct = desglose_pct || {};
+      await saveDBTrabajoHistorico({
+        ...resto, cliente_id,
+        pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
+        pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,
+        pct_trasl: pct.trasl, pct_panto: pct.panto,
+      });
+      resumen.historial.ok++;
+    } catch (e) { resumen.errores.push(`Trabajo ${t.nro_ot || t.id}: ${e.message || e}`); }
+  }
+  log(`Historial: ${resumen.historial.ok}/${resumen.historial.total}`);
+
+  for (const [tipo, key] of Object.entries(BIBLIOTECA_TABLAS_POR_KEY)) {
+    const items = loadLS(key, []);
+    resumen.biblioteca.total += items.length;
+    for (const mat of items) {
+      try {
+        const { historial_precios, ...row } = mat;
+        await saveDBMaterial(tipo, row);
+        resumen.biblioteca.ok++;
+      } catch (e) { resumen.errores.push(`${tipo} "${mat.nombre}": ${e.message || e}`); }
+    }
+  }
+  log(`Biblioteca: ${resumen.biblioteca.ok}/${resumen.biblioteca.total}`);
+
+  try {
+    await saveDBTarifario(loadTarifario());
+    resumen.tarifario.ok = 1;
+  } catch (e) { resumen.errores.push(`Tarifario: ${e.message || e}`); }
+  log(`Tarifario: ${resumen.tarifario.ok ? "OK" : "error"}`);
+
+  return resumen;
+};
+const BIBLIOTECA_TABLAS_POR_KEY = {
+  perfil: "smeas_perfiles", planchuela: "smeas_planchuelas",
+  plancha: "smeas_planchas", rejilla: "smeas_rejillas",
+};
+
 // Backup manual: descarga/restaura todas las claves smeas_* de localStorage.
 export const exportBackup = () => {
   const data = {};

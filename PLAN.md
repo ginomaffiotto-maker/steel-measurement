@@ -2355,6 +2355,31 @@ Measurement.** Falta: Fase 4 (migración de datos históricos reales) y
 Fase 5 (corte de lectura) — ninguna de las dos arrancada todavía. Ver
 `steel-backend/CLAUDE.md` para el estado general del backend compartido.
 
+## §9.33 — Fase 4: migración de datos reales a la nube (2026-08-23)
+
+Herramienta de una sola vez para subir todo lo que ya está en localStorage
+al backend real, usando exactamente las mismas funciones `saveDB*` ya
+probadas en Fase 3 (nada de código nuevo sin probar en esta parte).
+
+- `migrarTodoALaNube(onProgress)` (`storage.js`): recorre clientes,
+  presupuestos+ítems, cómputos, anidados, historial, biblioteca (4 tipos)
+  y tarifario, en ese orden, secuencial (no en paralelo, para no saturar
+  la base y poder aislar errores por entidad). Devuelve un resumen
+  `{ ok, total }` por entidad + lista de errores con detalle.
+- Botón nuevo en **Sistema → Backup y Datos** ("☁️ Migrar datos históricos
+  a la nube"), admin-only, con log en vivo y resumen final. **Marcado
+  explícitamente como parche de una sola vez** — se puede borrar entero
+  una vez que Gino confirme que migró bien (mismo criterio que las
+  herramientas de limpieza de `Importar.jsx` en steelCRM).
+- **No se pudo probar en navegador de mi lado** — desde que se sacó el
+  login local, correr esto requiere sesión real y los datos reales de
+  Gino, ninguna de las dos cosas la tengo yo. Validado por build limpio +
+  revisión manual del código contra el mismo patrón ya probado en Fase 3.
+- **Pendiente que Gino corra esto en su propia sesión real** y confirme
+  el resumen (cuántos de cada tipo, si hubo errores). Puede tardar varios
+  minutos si hay mucho volumen de presupuestos con ítems/piezas anidadas
+  (cada guardado hace varias llamadas secuenciales por rubro).
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

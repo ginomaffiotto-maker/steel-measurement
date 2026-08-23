@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { uid, loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup } from "../utils/storage";
+import { uid, loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube } from "../utils/storage";
+import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
 
@@ -193,6 +194,22 @@ function BackupYDatos({ usuario }) {
   const [pendingBackup, setPendingBackup] = useState(null);
   const [importErr, setImportErr] = useState("");
   const fileInputRef = useRef(null);
+  const [migrando, setMigrando] = useState(false);
+  const [logMigracion, setLogMigracion] = useState([]);
+  const [resumenMigracion, setResumenMigracion] = useState(null);
+
+  const correrMigracion = async () => {
+    setMigrando(true);
+    setLogMigracion([]);
+    setResumenMigracion(null);
+    try {
+      const resumen = await migrarTodoALaNube((msg) => setLogMigracion((prev) => [...prev, msg]));
+      setResumenMigracion(resumen);
+    } catch (e) {
+      setLogMigracion((prev) => [...prev, `❌ Error general: ${e.message || e}`]);
+    }
+    setMigrando(false);
+  };
 
   const elegirArchivo = () => { setImportErr(""); fileInputRef.current?.click(); };
   const onArchivo = (e) => {
@@ -233,6 +250,42 @@ function BackupYDatos({ usuario }) {
       </div>
       <input ref={fileInputRef} type="file" accept="application/json" onChange={onArchivo} style={{ display:"none" }} />
       {importErr && <div style={{ color:C.err, fontSize:11, fontWeight:600, marginTop:10 }}>⚠ {importErr}</div>}
+
+      {/* Fase 4 (piloto, 2026-08-23) — MIGRACIÓN DE UNA SOLA VEZ.
+          Sube todo lo que ya está en localStorage al backend real. Una vez
+          confirmado que funcionó, este bloque entero se puede borrar — no
+          es una función permanente de la app. */}
+      {puedeEliminar(usuario) && supabase && (
+        <div style={{ marginTop:20, paddingTop:16, borderTop:`1px dashed ${C.border}` }}>
+          <div style={{ fontWeight:700, color:C.accent, fontSize:12, marginBottom:4 }}>☁️ Migrar datos históricos a la nube</div>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>
+            Sube TODO lo que ya está cargado (clientes, presupuestos, cómputos, anidados, historial, biblioteca, tarifario) al backend real, una sola vez. Puede tardar varios minutos si hay mucho volumen — no cierres esta pantalla mientras corre.
+          </div>
+          <button onClick={correrMigracion} disabled={migrando}
+            style={{ ...BTN("ghost"), borderColor:C.accent+"66", color:C.accent, opacity: migrando?0.6:1, cursor: migrando?"default":"pointer" }}>
+            {migrando ? "⏳ Migrando…" : "☁️ Migrar todo a la nube"}
+          </button>
+          {logMigracion.length > 0 && (
+            <div style={{ marginTop:10, background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:10, fontSize:11, fontFamily:"monospace", maxHeight:180, overflowY:"auto" }}>
+              {logMigracion.map((l, i) => <div key={i}>{l}</div>)}
+            </div>
+          )}
+          {resumenMigracion && (
+            <div style={{ marginTop:10, fontSize:11 }}>
+              {resumenMigracion.errores.length === 0
+                ? <div style={{ color:C.ok, fontWeight:700 }}>✅ Migración completa, sin errores.</div>
+                : (
+                  <div>
+                    <div style={{ color:C.warn, fontWeight:700, marginBottom:4 }}>⚠ Terminó con {resumenMigracion.errores.length} error(es):</div>
+                    <div style={{ maxHeight:120, overflowY:"auto", color:C.err }}>
+                      {resumenMigracion.errores.map((e, i) => <div key={i}>· {e}</div>)}
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
+        </div>
+      )}
 
       {pendingBackup && (
         <ModalConfirmarEliminar
@@ -293,9 +346,7 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
       {/* TABS — mismo patrón visual que steelCRM */}
       <div style={{ display:"flex", gap:0, marginBottom:20, borderBottom:"2px solid "+C.border+"44", flexWrap:"wrap" }}>
         {TAB_BTN("empresa","🏢","Empresa")}
-        {TAB_BTN("numeracion","🔢","Numeración")}
-        {TAB_BTN("pdf","📄","PDF")}
-        {TAB_BTN("apariencia","🎨","Apariencia")}
+        {TAB_BTN("sistema","⚙️","Sistema")}
         {TAB_BTN("usuarios","👤","Usuarios")}
         {TAB_BTN("backup","💾","Backup y Datos")}
       </div>
@@ -314,22 +365,23 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
           </div>
         )}
 
-        {seccion === "numeracion" && <NumeracionPresupuestos soloLectura={soloLectura} />}
+        {seccion === "sistema" && (
+          <div>
+            <NumeracionPresupuestos soloLectura={soloLectura} />
+            <DisenoPDF soloLectura={soloLectura} />
 
-        {seccion === "pdf" && <DisenoPDF soloLectura={soloLectura} />}
-
-        {seccion === "apariencia" && (
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
-            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🎨 Apariencia</div>
-            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-              Cambia el tema visual de todo el sistema. Podés volver al original en cualquier momento — no se pierde nada, es solo una preferencia de esta instalación.
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🎨 Apariencia</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+                Cambia el tema visual de todo el sistema. Podés volver al original en cualquier momento — no se pierde nada, es solo una preferencia de esta instalación.
+              </div>
+              <label style={LBL}>Tema</label>
+              <select style={INP} value={TEMA_ACTUAL}
+                onChange={e => cambiarTema(e.target.value)}>
+                {TEMAS_DISPONIBLES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+              <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Al cambiarlo, la página se recarga para aplicarlo. Cualquier usuario puede cambiarlo — es solo una preferencia visual, no afecta datos.</div>
             </div>
-            <label style={LBL}>Tema</label>
-            <select style={INP} value={TEMA_ACTUAL}
-              onChange={e => cambiarTema(e.target.value)}>
-              {TEMAS_DISPONIBLES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-            </select>
-            <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Al cambiarlo, la página se recarga para aplicarlo. Cualquier usuario puede cambiarlo — es solo una preferencia visual, no afecta datos.</div>
           </div>
         )}
 
