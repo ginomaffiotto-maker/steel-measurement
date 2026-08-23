@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C } from "./styles/colors";
-import { saveLS, loadLS, iUsuarios, loadClientes } from "./utils/storage";
+import { saveLS, loadLS, iUsuarios, loadClientes, loadClientesConNube } from "./utils/storage";
 import { supabase } from "./utils/supabaseClient";
 import BibliotecaMateriales from "./components/BibliotecaMateriales";
 import Computo from "./components/Computo";
@@ -46,33 +46,57 @@ const GRUPOS = [
   },
 ];
 
-const ROL_COLOR = { admin: "#e8a020", operario: "#4caf82", supervisor: "#4a9eda" };
-const ROL_LABEL = { admin: "Administrador", operario: "Vendedor", supervisor: "Gerencia" };
-
 // ─── PANTALLA LOGIN ──────────────────────────────────────────────
+// Login real vía Supabase Auth (reemplaza selección de usuario + password en
+// texto plano) — mismo mecanismo que steelCRM, mismo "hermano". El objeto que
+// sale de acá (onLogin) mantiene la misma forma que usaba el login viejo
+// ({ id, nombre, rol, emoji, foto }) para no tocar el resto de la app — se
+// busca o crea el registro local por email. Reemplaza también el intento de
+// login silencioso que existía antes en entrar(): ya no hace falta, ahora
+// Supabase Auth es siempre el mecanismo principal.
 function Login({ usuarios, setUsuarios, onLogin }) {
-  const [sel, setSel]       = useState(null);
-  const [pass, setPass]     = useState("");
-  const [err, setErr]       = useState("");
-  const [show, setShow]     = useState(false);
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+  const [show, setShow] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
-  const entrar = (e) => {
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
+    border: `1.5px solid ${err ? C.err : C.border}`,
+    background: C.bg, color: C.text, outline: "none", boxSizing: "border-box",
+  };
+
+  const entrar = async (e) => {
     e.preventDefault();
-    if (!sel.clave) { onLogin(sel); return; }
-    if (pass === sel.clave) {
-      onLogin(sel);
-      // Fase 3 (piloto, 2026-08-22): login silencioso a Supabase Auth en
-      // paralelo, solo si este usuario tiene email cargado — nunca bloquea
-      // ni puede hacer fallar el login local, que ya pasó arriba. Requiere
-      // que la contraseña local coincida con la de Supabase Auth (se
-      // sincronizan a mano por ahora, no hay flujo automático todavía).
-      if (sel.email && supabase) {
-        supabase.auth.signInWithPassword({ email: sel.email, password: pass }).then(({ error }) => {
-          if (error) console.warn(`[Fase 3] Login a Supabase falló para ${sel.email}:`, error.message);
-        });
-      }
+    if (!supabase) { setErr("Backend no configurado (faltan variables de entorno)"); return; }
+    setCargando(true);
+    setErr("");
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (authError) {
+      setErr("Email o contraseña incorrectos");
+      setPass("");
+      setCargando(false);
+      return;
     }
-    else { setErr("Contraseña incorrecta"); setPass(""); }
+    const authUser = data.user;
+    let local = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
+    if (!local) {
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
+      if (profileError || !profile) {
+        setErr("Tu cuenta no tiene un perfil asignado todavía — avisale al administrador.");
+        setCargando(false);
+        return;
+      }
+      local = {
+        id: Date.now(), nombre: profile.nombre, rol: profile.rol,
+        emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
+        email: authUser.email,
+      };
+      setUsuarios(prev => [...prev, local]);
+    }
+    setCargando(false);
+    onLogin(local);
   };
 
   return (
@@ -80,83 +104,53 @@ function Login({ usuarios, setUsuarios, onLogin }) {
 
       {/* Logo */}
       <div style={{ textAlign: "center", marginBottom: 36 }}>
-        <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 14px" }}>📐</div>
+        <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
         <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>Metraje · Cómputo · Presupuesto Industrial</div>
       </div>
 
-      {/* Selección usuario */}
-      {!sel && (
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
-          {usuarios.map(u => (
-            <button key={u.id} onClick={() => { setSel(u); setPass(""); setErr(""); }}
-              style={{ background: C.card, border: `2px solid ${C.border}`, borderRadius: 14, padding: "22px 28px", cursor: "pointer", textAlign: "center", minWidth: 130, transition: "all .15s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.transform = "scale(1.03)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "scale(1)"; }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: (ROL_COLOR[u.rol] || C.accent) + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 10px", border: `2px solid ${(ROL_COLOR[u.rol] || C.accent)}44`, overflow: "hidden" }}>
-                {u.foto ? <img src={u.foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (u.emoji || "👤")}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{u.nombre}</div>
-              <div style={{ fontSize: 10, color: ROL_COLOR[u.rol] || C.muted, fontWeight: 600, marginTop: 3, textTransform: "uppercase", letterSpacing: .5 }}>
-                {ROL_LABEL[u.rol] || u.rol}
-              </div>
-            </button>
-          ))}
-          {usuarios.length === 0 && (
-            <span style={{ color: C.accent, cursor: "pointer", fontSize: 13 }}
-              onClick={() => setUsuarios([{ id: 1, nombre: "Admin", rol: "admin", emoji: "⚙️", clave: "admin" }])}>
-              Crear usuario por defecto
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Formulario contraseña */}
-      {sel && (
-        <form onSubmit={entrar} style={{ width: "100%", maxWidth: 320 }}>
-          <div style={{ background: C.card, border: `2px solid ${C.accent}44`, borderRadius: 14, padding: "28px 24px 22px" }}>
-            <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, margin: "0 auto", border: `3px solid ${C.accent}55`, overflow: "hidden" }}>
-                {sel.foto ? <img src={sel.foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (sel.emoji || "👤")}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: C.text, marginTop: 10 }}>{sel.nombre}</div>
-              <div style={{ fontSize: 10, color: ROL_COLOR[sel.rol] || C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5, marginTop: 3 }}>
-                {ROL_LABEL[sel.rol] || sel.rol}
-              </div>
-            </div>
-
-            {sel.clave ? (
-              <div style={{ marginBottom: 14, position: "relative" }}>
-                <label style={{ fontSize: 11, color: C.muted, marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: .5 }}>Contraseña</label>
-                <input type={show ? "text" : "password"} value={pass} autoFocus
-                  onChange={e => { setPass(e.target.value); setErr(""); }}
-                  placeholder="Ingresá tu contraseña"
-                  style={{ width: "100%", padding: "10px 36px 10px 12px", borderRadius: 8, fontSize: 14, border: `1.5px solid ${err ? C.err : C.border}`, background: C.bg, color: C.text, outline: "none", boxSizing: "border-box" }}
-                />
-                <span onClick={() => setShow(v => !v)} style={{ position: "absolute", right: 10, top: 34, cursor: "pointer", fontSize: 14, color: C.muted }}>
-                  {show ? "🙈" : "👁️"}
-                </span>
-                {err && <div style={{ color: C.err, fontSize: 12, marginTop: 5, fontWeight: 600 }}>⚠ {err}</div>}
-              </div>
-            ) : (
-              <div style={{ color: C.muted, fontSize: 12, textAlign: "center", marginBottom: 14 }}>Sin contraseña configurada.</div>
-            )}
-
-            <button type="submit" style={{ width: "100%", padding: 10, borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 8 }}>
-              Ingresar →
-            </button>
-            <button type="button" onClick={() => setSel(null)} style={{ width: "100%", padding: 8, borderRadius: 8, background: "transparent", color: C.muted, border: `1px solid ${C.border}`, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
-              ← Cambiar usuario
-            </button>
+      <form onSubmit={entrar} style={{ width: "100%", maxWidth: 340 }}>
+        <div style={{ background: C.card, border: `2px solid ${C.accent}66`, borderRadius: 14, padding: "28px 28px 24px", boxShadow: `0 8px 28px ${C.accent}22` }}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setErr(""); }}
+              placeholder="tu@email.com"
+              autoComplete="username"
+              style={inputStyle}
+              required
+            />
           </div>
-        </form>
-      )}
+          <div style={{ marginBottom: 16, position: "relative" }}>
+            <label style={{ display: "block", fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>Contraseña</label>
+            <input
+              type={show ? "text" : "password"}
+              value={pass}
+              onChange={e => { setPass(e.target.value); setErr(""); }}
+              placeholder="Ingresá tu contraseña"
+              autoComplete="new-password"
+              style={inputStyle}
+              required
+            />
+            <span onClick={() => setShow(v => !v)} style={{ position: "absolute", right: 10, top: 34, cursor: "pointer", fontSize: 16, color: C.muted }}>
+              {show ? "🙈" : "👁️"}
+            </span>
+          </div>
+          {err && <div style={{ color: C.err, fontSize: 12, marginBottom: 12, fontWeight: 600 }}>⚠ {err}</div>}
+          <button type="submit" disabled={cargando} style={{ width: "100%", padding: "11px", borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 15, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.7 : 1 }}>
+            {cargando ? "Ingresando…" : "Ingresar →"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
 // ─── APP ─────────────────────────────────────────────────────────
 const SESION_USUARIO_KEY = "smeas_sesion_usuario_id";
+const SESION_TAB_KEY = "smeas_sesion_tab";
 
 export default function App() {
   const [usuarios, setUsuarios] = useState(iUsuarios);
@@ -165,11 +159,21 @@ export default function App() {
     if (savedId == null) return null;
     return iUsuarios.find(u => String(u.id) === savedId) || null;
   });
-  const [grupo,    setGrupo]    = useState("computo");
-  const [tab,      setTab]      = useState("Computo");
+  // Recupera la última pestaña activa tras una recarga (ej. al cambiar el
+  // tema en Config, que fuerza un reload) — antes siempre volvía a Cómputo.
+  const tabGuardado = (() => {
+    try { return JSON.parse(sessionStorage.getItem(SESION_TAB_KEY) || "null"); } catch { return null; }
+  })();
+  const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
+  const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
   const [collapsed, setCollapsed] = useState(false);
   const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
+  // Fase 5 (piloto): arranca con la lista local (instantáneo, sin esperar
+  // red) y se actualiza sola con la unión de nube+local en cuanto responde
+  // Supabase. Si falla, se queda con lo local — nunca deja de mostrar nada.
+  const [clientesLista, setClientesLista] = useState(() => loadClientes());
+  useEffect(() => { loadClientesConNube().then(setClientesLista); }, []);
 
   useEffect(() => { saveLS("smeas_usuarios", usuarios); }, [usuarios]);
   useEffect(() => { saveLS("smeas_tc_global", tcGlobal); }, [tcGlobal]);
@@ -177,6 +181,9 @@ export default function App() {
     if (usuario) sessionStorage.setItem(SESION_USUARIO_KEY, String(usuario.id));
     else sessionStorage.removeItem(SESION_USUARIO_KEY);
   }, [usuario]);
+  useEffect(() => {
+    sessionStorage.setItem(SESION_TAB_KEY, JSON.stringify({ grupo, tab }));
+  }, [grupo, tab]);
 
   const navGrupo = (id) => {
     const g = GRUPOS.find(x => x.id === id);
@@ -203,7 +210,7 @@ export default function App() {
 
       {/* Lista global de clientes para autocompletado (Cómputo/Anidado/Presupuesto) */}
       <datalist id="clientes-datalist">
-        {loadClientes().map(c => <option key={c} value={c} />)}
+        {clientesLista.map(c => <option key={c} value={c} />)}
       </datalist>
 
       {/* ── SIDEBAR ── */}

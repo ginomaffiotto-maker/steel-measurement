@@ -2407,6 +2407,34 @@ Encontró y quedó corregido:
 
 **Pendiente**: que Gino corra la migración de nuevo con estos 2 fixes.
 
+## §9.35 — Fase 4 confirmada + arranque de Fase 5 (piloto: clientes) (2026-08-23)
+
+Gino corrió la migración con los 2 fixes — **235/235 historial, tarifario
+OK, migración completa sin errores**. Fase 4 queda confirmada funcionando
+con datos reales (el resto de las entidades en 0/0 porque su instancia
+real todavía no tiene presupuestos/cómputos/clientes cargados, no por
+ningún error).
+
+Decisiones tomadas para Fase 5: **localStorage como respaldo** (si
+Supabase falla o está dormido por el plan free, la app sigue andando con
+lo local, nunca deja a Gino sin poder trabajar) — no "solo nube sin
+respaldo". Piloto arranca por **clientes**, la entidad más simple y de
+menor riesgo (autocompletado, no es dato de negocio crítico).
+
+- `loadClientesConNube()` (`storage.js`): arranca con la lista local
+  (síncrono, sin esperar red), y en cuanto responde Supabase la mejora
+  con la **unión** de nube + local (nunca reemplaza — así no se pierde un
+  nombre tipeado hace un segundo que todavía no llegó a sincronizarse).
+  Si falla la consulta remota, se queda con lo local sin romper nada.
+- `App.js`: el datalist global de autocompletado de clientes (único punto
+  de lectura de `loadClientes()` en toda la app) pasa de llamada síncrona
+  directa a `useState` + `useEffect` con esta función.
+- Build limpio. **Pendiente que Gino confirme en vivo** que el
+  autocompletado de clientes sigue funcionando normal (y, si tiene forma
+  de probarlo, que después de la migración aparecen ahí nombres que
+  vinieron de la nube y no solo de lo local) antes de seguir extendiendo
+  Fase 5 a más entidades.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

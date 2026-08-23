@@ -70,6 +70,26 @@ export const saveDBCliente = async (cliente) => {
   return data;
 };
 
+// Fase 5 (piloto, 2026-08-23): Supabase como fuente primaria, localStorage
+// como respaldo si falla (sin internet, Supabase caído/dormido en el plan
+// free). Nunca deja al usuario sin la lista — arranca con lo local (síncrono,
+// sin esperar red) y la mejora con lo remoto en cuanto llega. Devuelve la
+// UNIÓN de ambas listas (no reemplaza) para no perder un nombre tipeado
+// hace un segundo que todavía no llegó a sincronizarse.
+export const loadClientesConNube = async () => {
+  const local = loadClientes();
+  if (!supabase) return local;
+  try {
+    const remotos = await loadDBClientes();
+    const nombresRemotos = (remotos || []).map((c) => c.nombre).filter(Boolean);
+    const set = new Set([...nombresRemotos, ...local]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  } catch (e) {
+    console.warn("[Fase 5] No se pudo leer clientes de la nube, usando la lista local:", e.message || e);
+    return local;
+  }
+};
+
 // Busca un cliente por nombre (case-insensitive, match exacto) y lo crea si
 // no existe — usado por el dual-write de Fase 3 para resolver el `cliente`
 // de texto libre que usa hoy la UI local a un `cliente_id` real. Cachea en
