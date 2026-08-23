@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
+import AutocompleteCliente from "./AutocompleteCliente";
 import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe } from "../utils/taxonomia";
@@ -543,8 +544,8 @@ export default function Historial({ usuario }) {
       {vista === "lista" && (
         <>
           <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-            <input style={{ ...INP, maxWidth:160 }} value={filtroCliente} placeholder="🔍 Cliente…" list="clientes-datalist"
-              onChange={e => setFiltroCliente(e.target.value)} />
+            <AutocompleteCliente style={{ ...INP, maxWidth:160 }} value={filtroCliente} placeholder="🔍 Cliente…"
+              onChange={setFiltroCliente} />
             <input style={{ ...INP, maxWidth:150 }} value={filtroObra} placeholder="🔍 Obra…"
               onChange={e => setFiltroObra(e.target.value)} />
             <input style={{ ...INP, maxWidth:120 }} value={filtroOT} placeholder="🔍 N° OT…"

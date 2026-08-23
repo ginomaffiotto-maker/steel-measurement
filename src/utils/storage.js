@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { familiaDe } from "./taxonomia";
 import { supabase } from "./supabaseClient";
 
@@ -88,6 +89,23 @@ export const loadClientesConNube = async () => {
     console.warn("[Fase 5] No se pudo leer clientes de la nube, usando la lista local:", e.message || e);
     return local;
   }
+};
+
+// Hook compartido por AutocompleteCliente (y cualquier otro campo que
+// necesite la lista) — cachea en módulo para no repetir el fetch cada vez
+// que se monta un campo nuevo en la misma pantalla.
+let _cacheListaClientes = null;
+export const useListaClientes = () => {
+  const [lista, setLista] = useState(() => _cacheListaClientes || loadClientes());
+  useEffect(() => {
+    let vivo = true;
+    loadClientesConNube().then((l) => {
+      _cacheListaClientes = l;
+      if (vivo) setLista(l);
+    });
+    return () => { vivo = false; };
+  }, []);
+  return lista;
 };
 
 // Busca un cliente por nombre (case-insensitive, match exacto) y lo crea si

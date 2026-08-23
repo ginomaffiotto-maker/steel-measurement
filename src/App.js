@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C } from "./styles/colors";
-import { saveLS, loadLS, iUsuarios, loadClientes, loadClientesConNube } from "./utils/storage";
+import { saveLS, loadLS, iUsuarios } from "./utils/storage";
 import { supabase } from "./utils/supabaseClient";
 import BibliotecaMateriales from "./components/BibliotecaMateriales";
 import Computo from "./components/Computo";
@@ -169,11 +169,6 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
-  // Fase 5 (piloto): arranca con la lista local (instantáneo, sin esperar
-  // red) y se actualiza sola con la unión de nube+local en cuanto responde
-  // Supabase. Si falla, se queda con lo local — nunca deja de mostrar nada.
-  const [clientesLista, setClientesLista] = useState(() => loadClientes());
-  useEffect(() => { loadClientesConNube().then(setClientesLista); }, []);
 
   useEffect(() => { saveLS("smeas_usuarios", usuarios); }, [usuarios]);
   useEffect(() => { saveLS("smeas_tc_global", tcGlobal); }, [tcGlobal]);
@@ -207,11 +202,6 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, color: C.text }}>
-
-      {/* Lista global de clientes para autocompletado (Cómputo/Anidado/Presupuesto) */}
-      <datalist id="clientes-datalist">
-        {clientesLista.map(c => <option key={c} value={c} />)}
-      </datalist>
 
       {/* ── SIDEBAR ── */}
       <div style={{ width: SW, minHeight: "100vh", background: C.card, borderRight: `2px solid ${C.accent}33`, display: "flex", flexDirection: "column", position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100, overflowX: "hidden", transition: "width .2s", flexShrink: 0 }}>

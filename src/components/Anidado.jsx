@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, registrarCliente, resolverClienteId, saveDBAnidado } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
+import AutocompleteCliente from "./AutocompleteCliente";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
@@ -998,7 +999,7 @@ export default function Anidado({ usuario }) {
               <label style={LBL}>Fecha</label>
               <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Cliente</label>
-              <input type="text" placeholder="Ej: CCFC" value={cliente} list="clientes-datalist" onChange={e=>setCliente(e.target.value)} onBlur={e=>registrarCliente(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
+              <AutocompleteCliente placeholder="Ej: CCFC" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Obra</label>
               <input type="text" placeholder="Ej: Nave Industrial" value={obra} onChange={e=>setObra(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
               <label style={LBL}>Importar desde cómputo (opcional)</label>
@@ -1023,7 +1024,7 @@ export default function Anidado({ usuario }) {
               <input type="text" placeholder="🔍 Nombre…" value={busqNombre} onChange={e=>setBusqNombre(e.target.value)}
                 style={{ ...INP, padding:"5px 8px", fontSize:11 }}/>
               <div style={{ display:"flex", gap:5 }}>
-                <input type="text" placeholder="🔍 Cliente…" list="clientes-datalist" value={busqCliente} onChange={e=>setBusqCliente(e.target.value)}
+                <AutocompleteCliente placeholder="🔍 Cliente…" value={busqCliente} onChange={setBusqCliente}
                   style={{ ...INP, padding:"5px 6px", fontSize:11, flex:1, minWidth:0 }}/>
                 <input type="text" placeholder="🔍 Obra…" value={busqObra} onChange={e=>setBusqObra(e.target.value)}
                   style={{ ...INP, padding:"5px 6px", fontSize:11, flex:1, minWidth:0 }}/>

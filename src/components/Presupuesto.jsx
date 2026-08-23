@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, registrarCliente, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
+import AutocompleteCliente from "./AutocompleteCliente";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
@@ -276,7 +277,7 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Nombre / Referencia *</label>
             <input style={INP} value={form.nombre} autoFocus placeholder="ej: Pérgola SACEEM" onChange={e=>set("nombre",e.target.value)}/>
           </div>
-          <div><label style={LBL}>Cliente</label><input style={INP} value={form.cliente} list="clientes-datalist" placeholder="Razón social" onChange={e=>set("cliente",e.target.value)} onBlur={e=>registrarCliente(e.target.value)}/></div>
+          <div><label style={LBL}>Cliente</label><AutocompleteCliente style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
           <div><label style={LBL}>Contacto</label><input style={INP} value={form.contacto} placeholder="Nombre" onChange={e=>set("contacto",e.target.value)}/></div>
           <div><label style={LBL}>Obra / Ubicación</label><input style={INP} value={form.obra} placeholder="ej: Planta Canelones" onChange={e=>set("obra",e.target.value)}/></div>
           <div><label style={LBL}>Tipo de trabajo</label>
@@ -1474,7 +1475,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label style={LBL}>Cliente</label>
-                <input style={INP} value={pres.cliente||""} list="clientes-datalist" placeholder="Razón social" onChange={e=>set("cliente",e.target.value)} onBlur={e=>registrarCliente(e.target.value)}/></div>
+                <AutocompleteCliente style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
               <div><label style={LBL}>Contacto</label>
                 <input style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={e=>set("contacto",e.target.value)}/></div>
               <div><label style={LBL}>Obra / Ubicación</label>
@@ -1879,8 +1880,8 @@ export default function Presupuesto({ usuario, tcGlobal }) {
       <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
         <input style={{ ...INP, width:190 }} value={filtroNombre} placeholder="🔍 Nombre / N°…"
           onChange={e => setFiltroNombre(e.target.value)} />
-        <input style={{ ...INP, width:170 }} value={filtroCliente} placeholder="🔍 Cliente…" list="clientes-datalist"
-          onChange={e => setFiltroCliente(e.target.value)} />
+        <AutocompleteCliente style={{ ...INP, width:170 }} value={filtroCliente} placeholder="🔍 Cliente…"
+          onChange={setFiltroCliente} />
         <input style={{ ...INP, width:170 }} value={filtroObra} placeholder="🔍 Obra…"
           onChange={e => setFiltroObra(e.target.value)} />
         <select style={{ ...INP, width:150 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>

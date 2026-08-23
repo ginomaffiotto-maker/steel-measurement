@@ -2435,6 +2435,32 @@ menor riesgo (autocompletado, no es dato de negocio crítico).
   vinieron de la nube y no solo de lo local) antes de seguir extendiendo
   Fase 5 a más entidades.
 
+## §9.36 — Fix: autocompletado de Cliente propio (reemplaza <datalist>) (2026-08-23)
+
+Gino reportó, probando el piloto de Fase 5: la lista de clientes no se
+filtraba al escribir, y después de elegir un nombre el campo "no dejaba
+cambiar". El `<input list="clientes-datalist">` nativo de HTML es
+conocido por comportarse mal e inconsistente entre navegadores — no era
+un bug de Fase 5 (la mecánica del input no se había tocado), pero se
+decidió arreglarlo de una vez ya que estaba fresco.
+
+- **`AutocompleteCliente.jsx`** (nuevo, en `components/`): input propio +
+  dropdown de sugerencias filtradas de verdad (substring, case-insensitive),
+  siempre editable después de elegir (usa `onMouseDown` + `preventDefault`
+  en las opciones para evitar la carrera con `onBlur` que suele causar
+  este tipo de "campo trabado").
+- **`useListaClientes()`** (hook nuevo en `storage.js`): mismo patrón
+  nube+local de Fase 5, con caché a nivel de módulo para no repetir el
+  fetch en cada campo montado en la misma pantalla.
+- Reemplazados los **9 usos** de `list="clientes-datalist"` en Computo,
+  Anidado, Historial, Presupuesto (x3) y Dashboard. Se sacó el
+  `<datalist>` global de `App.js` (ya no lo usa nadie) y las llamadas
+  sueltas a `registrarCliente` en cada campo (ahora vive adentro del
+  componente, se llama una sola vez).
+- Build limpio. **Pendiente que Gino confirme en vivo** que ahora sí
+  filtra al escribir y que el campo queda editable después de elegir un
+  nombre.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

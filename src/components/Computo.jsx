@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, registrarCliente, resolverClienteId, saveDBComputo } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
+import AutocompleteCliente from "./AutocompleteCliente";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -1126,9 +1127,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
               onChange={e=>setNuevo(v=>({...v,fecha:e.target.value}))}
               style={{ ...INP,marginBottom:10 }} />
             <label style={LBL}>Cliente</label>
-            <input type="text" placeholder="Ej: CCFC" value={nuevo.cliente} list="clientes-datalist"
-              onChange={e=>setNuevo(v=>({...v,cliente:e.target.value}))}
-              onBlur={e=>registrarCliente(e.target.value)}
+            <AutocompleteCliente placeholder="Ej: CCFC" value={nuevo.cliente}
+              onChange={v=>setNuevo(s=>({...s,cliente:v}))}
               style={{ ...INP,marginBottom:14 }} />
             <div style={{ display:"flex",gap:8 }}>
               <button onClick={crearComputo} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
@@ -1148,7 +1148,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
           <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
             <input type="text" placeholder="🔍 Nombre / N°…" value={busqNombre} onChange={e=>setBusqNombre(e.target.value)}
               style={{ ...INP, width:170, padding:"6px 10px" }}/>
-            <input type="text" placeholder="🔍 Cliente…" list="clientes-datalist" value={busqCliente} onChange={e=>setBusqCliente(e.target.value)}
+            <AutocompleteCliente placeholder="🔍 Cliente…" value={busqCliente} onChange={setBusqCliente}
               style={{ ...INP, width:150, padding:"6px 10px" }}/>
             <input type="date" value={fDesde} onChange={e=>setFDesde(e.target.value)} title="Desde"
               style={{ ...INP, width:140, padding:"6px 8px" }}/>
