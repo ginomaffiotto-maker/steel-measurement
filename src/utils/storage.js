@@ -1,6 +1,13 @@
 import { familiaDe } from "./taxonomia";
 import { supabase } from "./supabaseClient";
 
+// `{ ...obj, id: undefined }` no alcanza para que Postgres use su propio
+// default de id — hay que omitir la clave del todo, no dejarla en undefined.
+// Encontrado en Fase 4 al migrar datos reales (tarifario_mo_fab rechazaba
+// con "null value in column id"). Usar esto en vez de ese patrón siempre
+// que se inserte una fila nueva dejando que la base genere el id.
+const sinId = (obj) => { const { id, ...resto } = obj; return resto; };
+
 export const loadLS = (k, d) => {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; }
 };
@@ -182,7 +189,7 @@ export const saveDBItem = async (presupuestoId, item) => {
   for (const [campo, tabla] of RUBROS_ITEM) {
     const { error: eDel } = await supabase.from(tabla).delete().eq("item_id", itemId);
     if (eDel) throw eDel;
-    const filas = (rubrosData[campo] || []).map((f) => ({ ...f, id: undefined, item_id: itemId }));
+    const filas = (rubrosData[campo] || []).map((f) => ({ ...sinId(f), item_id: itemId }));
     if (filas.length) {
       const { error: eIns } = await supabase.from(tabla).insert(filas);
       if (eIns) throw eIns;
@@ -200,12 +207,12 @@ export const saveDBItem = async (presupuestoId, item) => {
     if (eTrat) throw eTrat;
     if (pinturas.length) {
       const { error: eP } = await supabase.from("item_trat_pinturas")
-        .insert(pinturas.map((p) => ({ ...p, id: undefined, trat_id: savedTrat.id })));
+        .insert(pinturas.map((p) => ({ ...sinId(p), trat_id: savedTrat.id })));
       if (eP) throw eP;
     }
     if (otros.length) {
       const { error: eO } = await supabase.from("item_trat_otros")
-        .insert(otros.map((o) => ({ ...o, id: undefined, trat_id: savedTrat.id })));
+        .insert(otros.map((o) => ({ ...sinId(o), trat_id: savedTrat.id })));
       if (eO) throw eO;
     }
   }
@@ -313,7 +320,7 @@ export const saveDBAnidado = async (anidado) => {
       .single();
     if (eG) throw eG;
     if (piezas?.length) {
-      const filas = piezas.map((p) => ({ ...p, id: undefined, grupo_id: savedGrupo.id }));
+      const filas = piezas.map((p) => ({ ...sinId(p), grupo_id: savedGrupo.id }));
       const { error: ePiezas } = await supabase.from("anidado_piezas").insert(filas);
       if (ePiezas) throw ePiezas;
     }
@@ -333,9 +340,22 @@ export const loadDBHistorialTrabajos = async () => {
   return data;
 };
 
+// Lista blanca en vez de negra: el objeto local (iTrabajo) fue creciendo
+// campos sueltos con el tiempo (created_at/updated_at de touch(), dias_obra,
+// etc. — encontrados recién al migrar datos reales en Fase 4) que no tienen
+// columna en historial_trabajos. Elegir explícitamente evita que aparezca
+// un campo nuevo mañana y rompa el insert otra vez.
+const COLUMNAS_HISTORIAL_TRABAJO = [
+  "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "obra", "categoria",
+  "tipo_trabajo", "kg_total", "metros_total", "usd_total",
+  "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
+  "pct_t_fab", "pct_t_mon", "pct_trat", "pct_trasl", "pct_panto",
+];
 export const saveDBTrabajoHistorico = async (trabajo) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { data, error } = await supabase.from("historial_trabajos").upsert(trabajo).select().single();
+  const row = {};
+  for (const k of COLUMNAS_HISTORIAL_TRABAJO) if (trabajo[k] !== undefined) row[k] = trabajo[k];
+  const { data, error } = await supabase.from("historial_trabajos").upsert(row).select().single();
   if (error) throw error;
   return data;
 };
@@ -437,7 +457,7 @@ export const saveDBTarifario = async (tarifario) => {
   for (const [campo, tabla] of TARIFARIO_TABLAS) {
     const { error: eDel } = await supabase.from(tabla).delete().not("id", "is", null);
     if (eDel) throw eDel;
-    const filas = (tarifario[campo] || []).map((f) => ({ ...f, id: undefined }));
+    const filas = (tarifario[campo] || []).map((f) => sinId(f));
     if (filas.length) {
       const { error: eIns } = await supabase.from(tabla).insert(filas);
       if (eIns) throw eIns;

@@ -2380,6 +2380,33 @@ probadas en Fase 3 (nada de código nuevo sin probar en esta parte).
   minutos si hay mucho volumen de presupuestos con ítems/piezas anidadas
   (cada guardado hace varias llamadas secuenciales por rubro).
 
+## §9.34 — Fase 4: 2 bugs encontrados en la primera corrida real (2026-08-23)
+
+Gino corrió la migración con sus datos reales (235 trabajos históricos,
+0 en el resto de las entidades — su instancia real todavía no tiene
+presupuestos/cómputos/clientes cargados, solo el histórico importado).
+Encontró y quedó corregido:
+
+- **`historial_trabajos` rechazaba todo** (`created_at`/`updated_at`
+  desconocidos, después también `dias_obra`) — el objeto local `iTrabajo`
+  acumuló campos sueltos con el tiempo que nunca tuvieron columna en la
+  tabla. Fix: `saveDBTrabajoHistorico` pasó de "mandar todo menos lo que
+  sé que sobra" a una **lista blanca explícita** de columnas — más robusto
+  a que aparezca un campo nuevo el día de mañana.
+- **`tarifario_mo_fab` rechazaba con "null value in column id"** — el
+  patrón `{ ...f, id: undefined }` que se usaba en 5 lugares del archivo
+  para "omitir el id y que la base genere uno nuevo" **no funciona como
+  se pensaba**: dejar la clave en `undefined` no es lo mismo que no
+  mandarla. Nuevo helper `sinId(obj)` (destructuring real) reemplaza los
+  5 usos: los 3 rubros por ítem de presupuesto, piezas de anidado, y
+  tarifario.
+- Ambos bugs solo aparecieron con datos reales — el patrón de
+  verificación de esta fase (build limpio + revisión manual) no los
+  detectó, confirma que la migración real es la prueba de fondo que
+  faltaba.
+
+**Pendiente**: que Gino corra la migración de nuevo con estos 2 fixes.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
