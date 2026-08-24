@@ -2496,6 +2496,31 @@ empresa — y la tabla real `clientes` sí distingue `nombre` (contacto) de
   (Cómputo, Anidado, Historial con Empresa nueva; Presupuesto con el
   mapeo corregido) antes de dar esto por cerrado.
 
+## §9.38 — Fase 5 extendida: tarifario, biblioteca, historial (2026-08-23)
+
+Tres entidades más leyendo de la nube, cada una con la estrategia de
+respaldo que le corresponde según su forma:
+
+- **Tarifario** (`useTarifarioConNube`): preferir directo lo remoto si
+  responde (sin mezclar) — cada edición ya escribe a los dos lados a la
+  vez desde Fase 3, así que deberían estar sincronizados. Si falla, se
+  queda con el local. Reemplaza `useState(loadTarifario)` en las 4
+  secciones de `BibliotecaMateriales.jsx` que lo editan.
+- **Biblioteca de materiales** (`useMergeBibliotecaNube`, un hook por los
+  4 tipos): a diferencia del tarifario, acá se **fusiona por id** en vez
+  de reemplazar — nunca pierde un material que solo exista local (por si
+  todavía no pasó por la migración de Fase 4), y suma lo que haya remoto
+  y no esté local.
+- **Historial de trabajos** (`useMergeHistorialNube`): mismo criterio de
+  fusión por id que biblioteca.
+- Build limpio. **Deliberadamente sin tocar todavía** presupuestos,
+  cómputos ni anidados — son las entidades con estructura anidada
+  (ítems/piezas/rubros) y las que más se usan día a día; conviene ir con
+  más cuidado ahí, después de confirmar que este patrón anda bien en las
+  entidades más simples.
+- Pendiente que Gino confirme en vivo: tarifario/biblioteca/historial
+  siguen viéndose y funcionando igual que antes.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

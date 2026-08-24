@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, saveDBTarifario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, saveDBTarifario, useTarifarioConNube, useMergeBibliotecaNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
@@ -1359,6 +1359,7 @@ function Stats({ items, filtrados }) {
 // ═══════════════════════════════════════════════════════════════════
 function SeccionPerfiles() {
   const [items,      setItems]      = useState(() => migrar(mergeSeed(loadLS("smeas_perfiles", null), PERFILES_DATA, IDS_UNIFICADOS_GM)));
+  useMergeBibliotecaNube("perfil", setItems);
   const [cat,        setCat]        = useState("Todas");
   const [busq,       setBusq]       = useState("");
   const [fichaId,    setFichaId]    = useState(null);
@@ -1468,6 +1469,7 @@ function SeccionPerfiles() {
 // ═══════════════════════════════════════════════════════════════════
 function SeccionPlanchuelas() {
   const [items,     setItems]     = useState(() => migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA)));
+  useMergeBibliotecaNube("planchuela", setItems);
   const [busq,      setBusq]      = useState("");
   const [fichaId,   setFichaId]   = useState(null);
   const [showLote,  setShowLote]  = useState(false);
@@ -1557,6 +1559,7 @@ function SeccionPlanchuelas() {
 // ═══════════════════════════════════════════════════════════════════
 function SeccionPlanchas() {
   const [items,     setItems]     = useState(() => migrar(mergeSeed(loadLS("smeas_planchas", null), PLANCHAS_DATA)));
+  useMergeBibliotecaNube("plancha", setItems);
   const [busq,      setBusq]      = useState("");
   const [fichaId,   setFichaId]   = useState(null);
   const [showLote,  setShowLote]  = useState(false);
@@ -1652,6 +1655,7 @@ function SeccionPlanchas() {
 // ═══════════════════════════════════════════════════════════════════
 function SeccionRejillas() {
   const [items,     setItems]     = useState(() => migrar(mergeSeed(loadLS("smeas_rejillas", null), REJILLAS_DATA)));
+  useMergeBibliotecaNube("rejilla", setItems);
   const [busq,      setBusq]      = useState("");
   const [fichaId,   setFichaId]   = useState(null);
   const [showLote,  setShowLote]  = useState(false);
@@ -1862,7 +1866,7 @@ function AvisoSoloLectura() {
 
 // Rubro genérico basado en catálogo de lista (MO, Materiales Generales, Terc., Traslados, Pinturas)
 function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, titulo, descripcion }) {
-  const [tarifario, setTarifario] = useState(loadTarifario);
+  const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
   const onChange = (items) => { const t = { ...tarifario, [campo]: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
@@ -1878,7 +1882,7 @@ function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, 
 }
 
 function SeccionInteresFinanciero({ usuario }) {
-  const [tarifario, setTarifario] = useState(loadTarifario);
+  const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
   const onChange = (items) => { const t = { ...tarifario, interes_financiero: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
@@ -1891,7 +1895,7 @@ function SeccionInteresFinanciero({ usuario }) {
 }
 
 function SeccionTratSuperficie({ usuario }) {
-  const [tarifario, setTarifario] = useState(loadTarifario);
+  const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
   const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   const onChangeExtra = (items) => { const t = { ...tarifario, trat_superficie_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
@@ -1926,7 +1930,7 @@ function SeccionTratSuperficie({ usuario }) {
 }
 
 function SeccionPantografo({ usuario }) {
-  const [tarifario, setTarifario] = useState(loadTarifario);
+  const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
   const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   const onChangeExtra = (items) => { const t = { ...tarifario, pantografo_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -424,6 +424,7 @@ function Benchmark({ trabajos }) {
 // ─── HISTORIAL (EXPORT DEFAULT) ───────────────────────────────────
 export default function Historial({ usuario }) {
   const [trabajos, setTrabajos] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
+  useMergeHistorialNube(setTrabajos);
   const [vista, setVista] = useState("lista"); // lista | detalle | benchmark
   const [selId, setSelId] = useState(null);
   const [nuevoOpen, setNuevoOpen] = useState(false);

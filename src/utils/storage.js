@@ -399,6 +399,29 @@ export const saveDBAnidado = async (anidado) => {
 // como texto libre; la tabla de la base pide `cliente_id` ya resuelto contra
 // `clientes` (mismo criterio de unificación que el resto). El caller tiene
 // que hacer esa resolución antes de llamar a saveDBTrabajoHistorico.
+// Fase 5 (piloto, 2026-08-23): mismo criterio de fusión por id que biblioteca
+// — nunca pierde un trabajo que solo existe local.
+export const useMergeHistorialNube = (setTrabajos) => {
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    loadDBHistorialTrabajos()
+      .then((remotos) => {
+        if (!vivo) return;
+        setTrabajos((local) => {
+          const porId = new Map(local.map((t) => [t.id, t]));
+          for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
+          return Array.from(porId.values());
+        });
+      })
+      .catch((e) => {
+        console.warn("[Fase 5] No se pudo leer el historial de la nube, usando solo local:", e.message || e);
+      });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+};
+
 export const loadDBHistorialTrabajos = async () => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const { data, error } = await supabase.from("historial_trabajos").select("*").order("fecha", { ascending: false });
@@ -432,6 +455,30 @@ const BIBLIOTECA_TABLAS = {
   planchuela: "biblioteca_planchuelas",
   plancha: "biblioteca_planchas",
   rejilla: "biblioteca_rejillas",
+};
+
+// Fase 5 (piloto, 2026-08-23): fusiona por id en vez de reemplazar — nunca
+// pierde un material que solo existe local (por ejemplo si todavía no pasó
+// por la migración de Fase 4), y suma lo que exista remoto y no esté local.
+export const useMergeBibliotecaNube = (tipo, setItems) => {
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    loadDBBiblioteca(tipo)
+      .then((remotos) => {
+        if (!vivo) return;
+        setItems((local) => {
+          const porId = new Map(local.map((i) => [i.id, i]));
+          for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
+          return Array.from(porId.values());
+        });
+      })
+      .catch((e) => {
+        console.warn(`[Fase 5] No se pudo leer biblioteca (${tipo}) de la nube, usando solo local:`, e.message || e);
+      });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo]);
 };
 
 export const loadDBBiblioteca = async (tipo) => {
@@ -535,6 +582,31 @@ export const saveDBTarifario = async (tarifario) => {
     .from("tarifario_config")
     .upsert({ tenant_id: tenantId, arenado_usd_m2, galvanizado_usd_kg, panto_usd_kg_2d, panto_usd_kg_3d });
   if (eCfg) throw eCfg;
+};
+
+// Fase 5 (piloto, 2026-08-23): Supabase primero, local de respaldo si falla.
+// A diferencia de la lista de clientes (que se UNE), acá se prefiere directo
+// lo remoto si responde — cada edición de tarifario ya escribe a los dos
+// lados a la vez (Fase 3), así que deberían estar sincronizados; no hay
+// necesidad de mezclar. Cacheado en módulo para que las 4 secciones que
+// editan el tarifario (BibliotecaMateriales.jsx) arranquen con el mismo dato.
+let _cacheTarifario = null;
+export const useTarifarioConNube = () => {
+  const [tarifario, setTarifario] = useState(() => _cacheTarifario || loadTarifario());
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    loadDBTarifario()
+      .then((t) => {
+        _cacheTarifario = t;
+        if (vivo) setTarifario(t);
+      })
+      .catch((e) => {
+        console.warn("[Fase 5] No se pudo leer el tarifario de la nube, usando el local:", e.message || e);
+      });
+    return () => { vivo = false; };
+  }, []);
+  return [tarifario, setTarifario];
 };
 
 // ─── MIGRACIÓN ÚNICA (Fase 4, 2026-08-23) ───────────────────────────
