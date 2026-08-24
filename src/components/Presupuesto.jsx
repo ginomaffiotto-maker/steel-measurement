@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -1400,7 +1400,7 @@ function ResumenRubros({ rubros, total_usd, total_kg }) {
 }
 
 // ─── VISTA DETALLE ────────────────────────────────────────────────
-function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, onAgregarComentario }) {
+function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, onAgregarComentario, onEliminarComentario }) {
   const set = (k, v) => onChange({ ...pres, [k]: v });
   const c   = calcPresupuesto(pres);
   const updItem = (it) => set("items", pres.items.map(x => x.id === it.id ? it : x));
@@ -1510,7 +1510,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
             </div>
           </div>
 
-          <ComentariosPanel comentarios={pres.comentarios} usuario={usuario} onAgregar={onAgregarComentario} />
+          <ComentariosPanel comentarios={pres.comentarios} usuario={usuario} onAgregar={onAgregarComentario} onEliminar={onEliminarComentario} />
 
           {/* Ítems */}
           <div>
@@ -1817,6 +1817,13 @@ export default function Presupuesto({ usuario, tcGlobal }) {
       console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
     }
   };
+  const eliminarComentario = async (p, comentario) => {
+    const actualizado = touch({ ...p, comentarios: (p.comentarios || []).filter(c => c.id !== comentario.id) });
+    setPres(prev => prev.map(x => x.id===p.id ? actualizado : x));
+    if (!supabase) return;
+    try { await deleteDBComentario("comentarios_presupuesto_sm", comentario.id); }
+    catch (e) { console.warn(`[Fase 3] No se pudo borrar el comentario del backend:`, e.message || e); }
+  };
   const delPres = (id) => setPres(prev => prev.filter(x => x.id!==id));
 
   const clonarPres = (p) => {
@@ -1847,7 +1854,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
     return (
       <>
-        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} onAgregarComentario={(c) => agregarComentario(selPres, c)} />
+        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} />
         {materialesPend && (
           <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} onImportar={importarMateriales} onClose={cerrarImportMateriales} />
         )}

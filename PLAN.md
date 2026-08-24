@@ -2922,6 +2922,29 @@ Cuarta y última vuelta del fix de migración: quedaba 1 solo error,
   perder ese vínculo puntual no es una pérdida real.
 - Build limpio, desplegado a producción.
 
+## §9.50 — Borrado de comentarios (2026-08-24)
+
+Pedido de Gino: paridad con steelCRM, que ya permite borrar un
+comentario (autor propio, o admin/supervisor sobre cualquiera), con
+confirmación. `ComentariosPanel.jsx` solo tenía "agregar".
+
+- **Fix de base necesario primero**: `saveDBComentario` dejaba que
+  Postgres generara su propio `id` en el insert, distinto del `id` local
+  (`uid()`, que ya es un uuid real vía `crypto.randomUUID()`) — sin
+  reconciliar nunca los dos. Borrar por id no iba a funcionar así. Se
+  cambió a conservar el `id` local en el insert (mismo id local = remoto
+  desde el vamos), y `deleteDBComentario(tabla, id)` nuevo en storage.js.
+- `ComentariosPanel.jsx`: ícono 🗑️ junto a cada comentario que el usuario
+  puede borrar (autor propio o `puedeEliminar(usuario)`), con
+  `ModalConfirmarBorrado` (el modal liviano con checkbox, ya usado para
+  piezas/grupos/materiales — mismo nivel de fricción que un comentario
+  amerita, no el modal con contraseña de Admin que se usa para borrar un
+  cómputo/anidado/presupuesto entero).
+- `eliminarComentario*` en Presupuesto/Computo/Anidado.jsx: mismo patrón
+  que `agregarComentario*` — actualiza local primero, después borra en
+  Supabase (fire-and-forget con catch, no bloquea ni rompe si falla).
+- Build limpio, desplegado a producción, sin errores de consola.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

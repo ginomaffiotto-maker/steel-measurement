@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -907,6 +907,13 @@ export default function Anidado({ usuario }) {
       console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
     }
   };
+  const eliminarComentarioAnidado = async (a, comentario) => {
+    const t = touch({ ...a, comentarios: (a.comentarios || []).filter(c => c.id !== comentario.id) });
+    save(anidados.map(x => x.id===a.id ? t : x));
+    if (!supabase) return;
+    try { await deleteDBComentario("comentarios_anidado", comentario.id); }
+    catch (e) { console.warn(`[Fase 3] No se pudo borrar el comentario del backend:`, e.message || e); }
+  };
 
   // Auto-importar cuando viene desde Cómputo
   useEffect(()=>{
@@ -1116,7 +1123,8 @@ export default function Anidado({ usuario }) {
             </div>
 
             <ComentariosPanel comentarios={actual.comentarios} usuario={usuario}
-              onAgregar={(c) => agregarComentarioAnidado(actual, c)} />
+              onAgregar={(c) => agregarComentarioAnidado(actual, c)}
+              onEliminar={(c) => eliminarComentarioAnidado(actual, c)} />
 
             {verMateriales && <VistaMaterialesAnidado anidado={actual} onClose={()=>setVerMateriales(false)} />}
 

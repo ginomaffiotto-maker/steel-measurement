@@ -381,10 +381,19 @@ export const loadDBItems = async (presupuestoId) => {
 // ("comentarios_anidado","anidado_id"), ("comentarios_presupuesto_sm","presupuesto_id").
 export const saveDBComentario = async (tabla, campoFK, entityId, comentario) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { id, ...resto } = comentario;
-  const { data, error } = await supabase.from(tabla).insert({ ...resto, [campoFK]: entityId }).select().single();
+  // Se conserva el id local (uid() ya genera uuid real) en vez de dejar
+  // que la base genere el suyo — así local y remoto quedan con el mismo
+  // id y se puede borrar/actualizar el comentario por id más adelante
+  // (2026-08-24, agregado al sumar borrado de comentarios).
+  const { data, error } = await supabase.from(tabla).insert({ ...comentario, [campoFK]: entityId }).select().single();
   if (error) throw error;
   return data;
+};
+
+export const deleteDBComentario = async (tabla, id) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { error } = await supabase.from(tabla).delete().eq("id", id);
+  if (error) throw error;
 };
 
 export const saveDBItem = async (presupuestoId, item) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -1008,6 +1008,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
       console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
     }
   };
+  const eliminarComentarioComputo = async (c, comentario) => {
+    const actualizado = touch({ ...c, comentarios: (c.comentarios || []).filter(x => x.id !== comentario.id) });
+    setComputos(prev => prev.map(x => x.id===c.id ? actualizado : x));
+    if (!supabase) return;
+    try { await deleteDBComentario("comentarios_computo", comentario.id); }
+    catch (e) { console.warn(`[Fase 3] No se pudo borrar el comentario del backend:`, e.message || e); }
+  };
 
   const crearComputo = () => {
     if (!nuevo.nombre.trim()) return;
@@ -1329,7 +1336,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
       </div>
 
       <ComentariosPanel comentarios={computo.comentarios} usuario={usuario}
-        onAgregar={(c) => agregarComentarioComputo(computo, c)} />
+        onAgregar={(c) => agregarComentarioComputo(computo, c)}
+        onEliminar={(c) => eliminarComentarioComputo(computo, c)} />
 
       {/* Ítems accordion */}
       <div style={{ marginBottom:12 }}>
