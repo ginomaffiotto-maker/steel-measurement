@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario } from "../utils/storage";
+import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -151,6 +152,7 @@ const computoVacio = () => ({
   id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "", empresa: "",
   cantidad_total: 1,
   items: [itemVacio(1)],
+  comentarios: [],
   ...stamp(),
 });
 
@@ -981,10 +983,29 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
     if (!supabase) return;
     try {
       const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
-      const { cliente, ...resto } = c;
+      const { cliente, comentarios, ...resto } = c;
       await saveDBComputo({ ...resto, cliente_id });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
+    }
+  };
+
+  // Comentarios internos (2026-08-24): guardado directo, independiente del
+  // guardado general del cómputo.
+  const agregarComentarioComputo = async (c, comentario) => {
+    const actualizado = touch({ ...c, comentarios: [...(c.comentarios || []), comentario] });
+    setComputos(prev => prev.map(x => x.id===c.id ? actualizado : x));
+    if (!supabase) return;
+    try {
+      // Asegura que el cómputo ya exista remoto antes de comentar — si se
+      // comenta justo después de crearlo, el dual-write de la creación
+      // (fire-and-forget) puede no haber terminado todavía (condición de
+      // carrera real, encontrada probando en vivo). upsert es idempotente,
+      // repetirlo acá no rompe nada.
+      await dualWriteComputo(c);
+      await saveDBComentario("comentarios_computo", "computo_id", c.id, comentario);
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
     }
   };
 
@@ -1306,6 +1327,9 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
           </button>
         </div>
       </div>
+
+      <ComentariosPanel comentarios={computo.comentarios} usuario={usuario}
+        onAgregar={(c) => agregarComentarioComputo(computo, c)} />
 
       {/* Ítems accordion */}
       <div style={{ marginBottom:12 }}>

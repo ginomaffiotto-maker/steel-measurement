@@ -294,6 +294,19 @@ export const loadDBItems = async (presupuestoId) => {
   return items;
 };
 
+// Comentarios internos (2026-08-24) — guardado directo al comentar, no
+// espera a que se guarde el registro completo (a diferencia del flujo de
+// dos pasos que tenía steelCRM, que generaba confusión). `tabla`/`campoFK`
+// varían por entidad: ("comentarios_computo","computo_id"),
+// ("comentarios_anidado","anidado_id"), ("comentarios_presupuesto_sm","presupuesto_id").
+export const saveDBComentario = async (tabla, campoFK, entityId, comentario) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { id, ...resto } = comentario;
+  const { data, error } = await supabase.from(tabla).insert({ ...resto, [campoFK]: entityId }).select().single();
+  if (error) throw error;
+  return data;
+};
+
 export const saveDBItem = async (presupuestoId, item) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const {

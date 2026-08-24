@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario } from "../utils/storage";
+import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -137,7 +138,7 @@ const normalizarTipoHora = (v) => v === "comun" ? "Común" : v === "extra" ? "Ex
 const UNIDADES = ["kg", "m²", "m", "u", "hora", "día", "mes"];
 
 export const iPresupuesto = () => ({
-  id: uid(), nro: "", codigo_calculo: "", nombre: "", cliente: "", contacto: "",
+  id: uid(), nro: "", codigo_calculo: "", nombre: "", cliente: "", contacto: "", comentarios: [],
   obra: "", detalle: "", tipo_trabajo: "Fabricación", categoria: "",
   estado: "borrador", clonado_de: null,
   negociacion_pct: 0, negociacion_usd: 0, neg_modo: "pct",
@@ -1399,7 +1400,7 @@ function ResumenRubros({ rubros, total_usd, total_kg }) {
 }
 
 // ─── VISTA DETALLE ────────────────────────────────────────────────
-function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
+function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, onAgregarComentario }) {
   const set = (k, v) => onChange({ ...pres, [k]: v });
   const c   = calcPresupuesto(pres);
   const updItem = (it) => set("items", pres.items.map(x => x.id === it.id ? it : x));
@@ -1508,6 +1509,8 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal }) {
                 <input style={INP} value={pres.notas||""} placeholder="Observaciones, condiciones, cláusulas..." onChange={e=>set("notas",e.target.value)}/></div>
             </div>
           </div>
+
+          <ComentariosPanel comentarios={pres.comentarios} usuario={usuario} onAgregar={onAgregarComentario} />
 
           {/* Ítems */}
           <div>
@@ -1772,7 +1775,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
       const nombreParaClientes = (p.contacto || p.cliente || "").trim();
       const empresaParaClientes = p.contacto ? p.cliente : null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
-      const { cliente, clonado_de, items, ...resto } = p;
+      const { cliente, clonado_de, items, comentarios, ...resto } = p;
       await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
       for (const item of items || []) {
         await saveDBItem(p.id, item);
@@ -1797,6 +1800,22 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     const actualizado = touch(p);
     setPres(prev => prev.map(x => x.id===p.id ? actualizado : x));
     dualWritePresupuesto(actualizado);
+  };
+
+  // Comentarios internos (2026-08-24): guardado directo, no depende del
+  // Guardar general del presupuesto.
+  const agregarComentario = async (p, comentario) => {
+    const actualizado = touch({ ...p, comentarios: [...(p.comentarios || []), comentario] });
+    setPres(prev => prev.map(x => x.id===p.id ? actualizado : x));
+    if (!supabase) return;
+    try {
+      // Asegura que el presupuesto exista remoto antes de comentar (condición
+      // de carrera real si se comenta justo después de crear — ver Cómputo.jsx).
+      await dualWritePresupuesto(p);
+      await saveDBComentario("comentarios_presupuesto_sm", "presupuesto_id", p.id, comentario);
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
+    }
   };
   const delPres = (id) => setPres(prev => prev.filter(x => x.id!==id));
 
@@ -1828,7 +1847,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
     return (
       <>
-        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} />
+        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} onAgregarComentario={(c) => agregarComentario(selPres, c)} />
         {materialesPend && (
           <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} onImportar={importarMateriales} onClose={cerrarImportMateriales} />
         )}

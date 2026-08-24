@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario } from "../utils/storage";
+import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -882,7 +883,7 @@ export default function Anidado({ usuario }) {
     if (!supabase) return;
     try {
       const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
-      const { cliente, ...resto } = a;
+      const { cliente, comentarios, ...resto } = a;
       await saveDBAnidado({ ...resto, cliente_id });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
@@ -890,6 +891,22 @@ export default function Anidado({ usuario }) {
   };
 
   const upd = a => { const t = touch(a); save(anidados.map(x=>x.id===a.id?t:x)); dualWriteAnidado(t); };
+
+  // Comentarios internos (2026-08-24): guardado directo, independiente del
+  // guardado general del anidado.
+  const agregarComentarioAnidado = async (a, comentario) => {
+    const t = touch({ ...a, comentarios: [...(a.comentarios || []), comentario] });
+    save(anidados.map(x => x.id===a.id ? t : x));
+    if (!supabase) return;
+    try {
+      // Asegura que el anidado exista remoto antes de comentar (condición de
+      // carrera real si se comenta justo después de crear — ver Cómputo.jsx).
+      await dualWriteAnidado(a);
+      await saveDBComentario("comentarios_anidado", "anidado_id", a.id, comentario);
+    } catch (e) {
+      console.warn(`[Fase 3] No se pudo sincronizar el comentario con el backend:`, e.message || e);
+    }
+  };
 
   // Auto-importar cuando viene desde Cómputo
   useEffect(()=>{
@@ -915,7 +932,7 @@ export default function Anidado({ usuario }) {
   const crear=()=>{
     if (!nombre.trim()) return;
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
-    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),grupos,...stamp()};
+    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
   };
@@ -1097,6 +1114,9 @@ export default function Anidado({ usuario }) {
                 <button onClick={addGrupoPlancha} style={{ ...BTN("ghost"),fontSize:12,borderColor:C.teal+"66",color:C.teal }}>+ Plancha</button>
               </div>
             </div>
+
+            <ComentariosPanel comentarios={actual.comentarios} usuario={usuario}
+              onAgregar={(c) => agregarComentarioAnidado(actual, c)} />
 
             {verMateriales && <VistaMaterialesAnidado anidado={actual} onClose={()=>setVerMateriales(false)} />}
 

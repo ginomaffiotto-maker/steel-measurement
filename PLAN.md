@@ -2627,6 +2627,40 @@ pueda tener la app en su PC — se le señaló que eso no acerca el objetivo rea
   evaluar si conviene conectar el repo a GitHub para que se despliegue solo
   en cada commit, más adelante.
 
+## §9.41 — Comentarios internos en Cómputo/Anidado/Presupuesto (2026-08-24)
+
+Pedido de Gino, mismo patrón que steelCRM (`{id, autor, texto, fecha, hora}`)
+pero con una mejora de UX consultada y decidida en conjunto: **guardado
+directo al comentar**, no el flujo de dos pasos de steelCRM (comentar +
+esperar al Guardar general) que ya había confundido a Gino una vez.
+
+- 3 tablas nuevas en steel-backend (`comentarios_computo`,
+  `comentarios_anidado`, `comentarios_presupuesto_sm`), mismo patrón de RLS
+  + trigger de tenant_id que el resto.
+- `ComentariosPanel.jsx` (nuevo, reutilizable): lista + textarea + botón,
+  Ctrl+Enter también envía.
+- `saveDBComentario(tabla, campoFK, entityId, comentario)` en storage.js,
+  genérico para las 3 entidades.
+- **Bug real encontrado y corregido probando en vivo** (con la cuenta de
+  prueba, no solo build): comentar justo después de crear un registro nuevo
+  fallaba con violación de FK — el dual-write de la creación es
+  fire-and-forget, así que el registro padre podía no existir remoto
+  todavía. Fix: cada `agregarComentario*` ahora espera (`await`) a que el
+  dual-write del padre termine antes de mandar el comentario (el upsert es
+  idempotente, repetirlo no rompe nada). Sin este fix, comentar
+  inmediatamente después de crear un cómputo/anidado/presupuesto habría
+  fallado en producción real.
+- **Nota para la próxima sesión que debuggee algo parecido**: la consola de
+  DevTools guarda mensajes viejos entre pruebas — un warning que aparece
+  después de un fix puede ser un mensaje *viejo* todavía en el buffer, no
+  una falla nueva. Conviene usar un texto de log único (o revisar
+  timestamps) antes de concluir que un fix no funcionó.
+- `comentarios` se excluye explícitamente del `resto` que viaja a
+  `saveDBPresupuestoSM`/`saveDBComputo`/`saveDBAnidado` (esos campos no
+  existen en esas tablas — viven en las tablas de comentarios aparte).
+- Verificado en vivo de punta a punta con la cuenta de prueba: crear,
+  comentar inmediatamente, y comentario aparece guardado sin error.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
