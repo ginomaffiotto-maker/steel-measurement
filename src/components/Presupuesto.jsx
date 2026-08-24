@@ -8,6 +8,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
+import { useSortable } from "../utils/useSortable";
 import { FAMILIAS, familiaDe } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -245,6 +246,7 @@ function generarPDFPresupuesto(pres) {
 
   abrirPDFPresupuesto({
     empresa: loadLS("smeas_empresa", ""),
+    empresaDatos: JSON.parse(localStorage.getItem("smeas_empresa_datos") || "{}"),
     nro: pres.nro,
     fecha: pres.fecha,
     cliente: { empresa: pres.cliente, contacto: pres.contacto },
@@ -1750,14 +1752,16 @@ export default function Presupuesto({ usuario, tcGlobal }) {
   const selPres = presupuestos.find(p => p.id === selId) || null;
   const cnt = Object.fromEntries(Object.keys(ESTADO_CFG).map(k => [k, presupuestos.filter(p => p.estado===k).length]));
 
-  const lista = presupuestos
+  const listaFiltrada = presupuestos
     .filter(p => !filtEst || p.estado === filtEst)
     .filter(p => !filtroNombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filtroNombre.toLowerCase()))
     .filter(p => !filtroCliente || (p.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
     .filter(p => !filtroObra    || (p.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
     .filter(p => !filtroTipo    || p.tipo === filtroTipo)
     .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
-    .filter(p => !filtHasta || (p.fecha||"") <= filtHasta);
+    .filter(p => !filtHasta || (p.fecha||"") <= filtHasta)
+    .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length }));
+  const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local (localStorage sigue siendo la fuente de
@@ -1949,13 +1953,20 @@ export default function Presupuesto({ usuario, tcGlobal }) {
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead><tr>
-              {["N°","Nombre","Cliente","Obra","Tipo","Fecha","Ítems","Total USD","Estado",""].map(h=>(
-                <th key={h} style={TH}>{h}</th>
+              {[
+                { h:"N°", campo:"nro" }, { h:"Nombre", campo:"nombre" }, { h:"Cliente", campo:"cliente" },
+                { h:"Obra", campo:"obra" }, { h:"Tipo", campo:"tipo_trabajo" }, { h:"Fecha", campo:"fecha" },
+                { h:"Ítems", campo:"_n_items" }, { h:"Total USD", campo:"_total_usd" }, { h:"Estado", campo:"estado" },
+                { h:"", campo:null },
+              ].map(({h,campo}) => (
+                <th key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                  onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
+                  {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
+                </th>
               ))}
             </tr></thead>
             <tbody>
               {lista.map(p => {
-                const c = calcPresupuesto(p);
                 const est = ESTADO_CFG[p.estado] || ESTADO_CFG.borrador;
                 return (
                   <tr key={p.id} onClick={() => { setSelId(p.id); setVista("detalle"); }}
@@ -1970,7 +1981,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
                     <td style={TD}><span style={{ fontSize:11, color:C.muted }}>{p.fecha}</span></td>
                     <td style={{ ...TD, textAlign:"center" }}>{(p.items||[]).length}</td>
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
-                      {c.gran_total>0 ? `$${n2(c.gran_total)}` : "—"}
+                      {p._total_usd>0 ? `$${n2(p._total_usd)}` : "—"}
                     </td>
                     <td style={TD}><span style={BDG(est.color,true)}>{est.label}</span></td>
                     <td style={TD} onClick={e=>e.stopPropagation()}>

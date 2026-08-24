@@ -100,10 +100,19 @@ function normalizarTrabajo(t) {
 }
 
 // ─── FILTROS ───────────────────────────────────────────────────────
-function FiltrosBar({ filt, setFilt }) {
+// Colapsable — la barra completa ocupa espacio fijo en las 4 sub-pestañas
+// aunque el usuario ya haya elegido su filtro y quiera ver más resultado.
+function FiltrosBar({ filt, setFilt, abierto, setAbierto }) {
   const set = (k, v) => setFilt(f => ({ ...f, [k]: v }));
   return (
-    <div style={{ ...CARD(), background: C.iron, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
+    <div style={{ ...CARD(), background: C.iron, marginBottom: 16 }}>
+      <div onClick={() => setAbierto(a => !a)}
+        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none",
+          fontSize: 12, fontWeight: 700, color: C.muted, ...(abierto ? { marginBottom: 10 } : {}) }}>
+        <span>{abierto ? "▾" : "▸"}</span> 🔍 Filtros
+      </div>
+      {abierto && (
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
       <div style={{ minWidth: 130 }}>
         <label style={LBL}>Fuente</label>
         <select style={INP} value={filt.fuente} onChange={e => set("fuente", e.target.value)}>
@@ -145,6 +154,8 @@ function FiltrosBar({ filt, setFilt }) {
         onClick={() => setFilt({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", cliente: "" })}>
         ✕ Todo
       </button>
+      </div>
+      )}
     </div>
   );
 }
@@ -271,6 +282,7 @@ const TABS = [
 export default function Dashboard() {
   const [tab, setTab] = useState("resumen");
   const [filt, setFilt] = useState({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", cliente: "" });
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
 
   const presupuestos = loadLS("smeas_presupuestos", []);
   const historial = loadLS("smeas_historial", HISTORIAL_SEED);
@@ -303,7 +315,7 @@ export default function Dashboard() {
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Dashboard</h2>
       </div>
 
-      <FiltrosBar filt={filt} setFilt={setFilt} />
+      <FiltrosBar filt={filt} setFilt={setFilt} abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
 
       <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid " + C.border + "44", flexWrap: "wrap" }}>
         {TABS.map(t => (

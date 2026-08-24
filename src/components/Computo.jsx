@@ -6,6 +6,7 @@ import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { useSortable, OrdenarControl } from "../utils/useSortable";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const TH_R  = { ...TH, textAlign: "right" };
@@ -1044,13 +1045,14 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
     setSelId(nuevoC.id);
   };
 
-  const computosFiltrados = computos.filter(c => {
+  const computosFiltradosBase = computos.filter(c => {
     const enNombre  = !busqNombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(busqNombre.toLowerCase());
     const enCliente = !busqCliente || (c.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
     const enDesde   = !fDesde || (c.fecha||"") >= fDesde;
     const enHasta   = !fHasta || (c.fecha||"") <= fHasta;
     return enNombre && enCliente && enDesde && enHasta;
   });
+  const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 
   const eliminarComputo = id => {
     setComputos(prev=>prev.filter(c=>c.id!==id));
@@ -1188,6 +1190,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
               style={{ ...INP, width:140, padding:"6px 8px" }}/>
             <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
               style={{ ...INP, width:140, padding:"6px 8px" }}/>
+            <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
+              opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
             <span style={{ fontSize:11, color:C.muted }}>{computosFiltrados.length} de {computos.length}</span>
           </div>
         )}

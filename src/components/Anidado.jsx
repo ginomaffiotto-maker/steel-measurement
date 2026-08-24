@@ -6,6 +6,7 @@ import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { useSortable, OrdenarControl } from "../utils/useSortable";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
 const n3   = v => (Math.round(v * 1000) / 1000).toFixed(3);
@@ -944,7 +945,7 @@ export default function Anidado({ usuario }) {
     dualWriteAnidado(a);
   };
 
-  const anidadosFiltrados = anidados.filter(a => {
+  const anidadosFiltradosBase = anidados.filter(a => {
     const enNombre  = !busqNombre  || (a.nombre||"").toLowerCase().includes(busqNombre.toLowerCase());
     const enCliente = !busqCliente || (a.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
     const enObra    = !busqObra    || (a.obra||"").toLowerCase().includes(busqObra.toLowerCase());
@@ -952,6 +953,7 @@ export default function Anidado({ usuario }) {
     const enHasta   = !fHasta || (a.fecha||"") <= fHasta;
     return enNombre && enCliente && enObra && enDesde && enHasta;
   });
+  const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
 
   const delAnidado=id=>{
     save(anidados.filter(a=>a.id!==id)); if(selId===id)setSelId(null);
@@ -1064,6 +1066,8 @@ export default function Anidado({ usuario }) {
                 <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
                   style={{ ...INP, padding:"5px 6px", fontSize:10, flex:1, minWidth:0 }}/>
               </div>
+              <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
+                opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
             </div>
           )}
           {anidados.length===0&&!creando&&<div style={{ color:C.muted,fontSize:12,padding:"12px 0" }}>No hay anidados aún.</div>}

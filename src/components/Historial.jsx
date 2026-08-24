@@ -7,6 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe } from "../utils/taxonomia";
+import { useSortable } from "../utils/useSortable";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -456,7 +457,7 @@ export default function Historial({ usuario }) {
 
   const usdKgDe = (t) => (+t.kg_total > 0) ? (+t.usd_total || 0) / (+t.kg_total) : 0;
 
-  const lista = trabajos
+  const listaFiltrada = trabajos
     .filter(t => !filtCat || t.categoria === filtCat)
     .filter(t => !filtTipo || t.tipo_trabajo === filtTipo)
     .filter(t => !usdKgMin || (usdKgDe(t) >= +usdKgMin))
@@ -465,7 +466,9 @@ export default function Historial({ usuario }) {
     .filter(t => !filtroObra    || (t.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
     .filter(t => !filtroOT      || (t.nro_ot||"").toLowerCase().includes(filtroOT.toLowerCase()))
     .filter(t => !filtDesde || (t.fecha||"") >= filtDesde)
-    .filter(t => !filtHasta || (t.fecha||"") <= filtHasta);
+    .filter(t => !filtHasta || (t.fecha||"") <= filtHasta)
+    .map(t => ({ ...t, _usd_kg: usdKgDe(t) }));
+  const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local. Mismo criterio que el resto de Fase 3.
@@ -586,13 +589,20 @@ export default function Historial({ usuario }) {
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead><tr>
-                  {["OT","Fecha","Cliente","Obra","Categoría","Kg","USD","USD/kg","Origen",""].map(h=>(
-                    <th key={h} title={TH_TOOLTIPS[h]} style={TH}>{h}</th>
+                  {[
+                    { h:"OT", campo:"nro_ot" }, { h:"Fecha", campo:"fecha" }, { h:"Cliente", campo:"cliente" },
+                    { h:"Obra", campo:"obra" }, { h:"Categoría", campo:"categoria" }, { h:"Kg", campo:"kg_total" },
+                    { h:"USD", campo:"usd_total" }, { h:"USD/kg", campo:"_usd_kg" }, { h:"Origen", campo:"origen" },
+                    { h:"", campo:null },
+                  ].map(({h,campo}) => (
+                    <th key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                      onClick={() => campo && ordenarPor(campo)}>
+                      {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
+                    </th>
                   ))}
                 </tr></thead>
                 <tbody>
                   {lista.map(t => {
-                    const c = calcTrabajo(t);
                     const origen = ORIGEN_CFG[t.origen] || ORIGEN_CFG.manual;
                     return (
                       <tr key={t.id} onClick={() => { setSelId(t.id); setVista("detalle"); }}
@@ -606,7 +616,7 @@ export default function Historial({ usuario }) {
                         <td style={TD}><span style={BDG(C.steel,true)}>{t.categoria||"—"}</span></td>
                         <td style={{ ...TD, textAlign:"right" }}>{n3(t.kg_total)}</td>
                         <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>${n2(t.usd_total)}</td>
-                        <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(c.usd_kg_real)}</td>
+                        <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(t._usd_kg)}</td>
                         <td style={TD}><span style={BDG(origen.color,true)}>{origen.label}</span></td>
                         <td style={TD} onClick={e=>e.stopPropagation()}>
                           {puedeEliminar(usuario) && (
