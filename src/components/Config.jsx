@@ -401,6 +401,17 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
 
   const [empresa, setEmpresa] = useState(() => loadLS("smeas_empresa", ""));
   const guardarEmpresa = (v) => { setEmpresa(v); saveLS("smeas_empresa", v); };
+  // Mismos campos que se agregaron en steelCRM (mismo PDF compartido) —
+  // direccion/RUT/tel/email/web/logo, guardados en un solo objeto.
+  const [empresaDatos, setEmpresaDatos] = useState(() => loadLS("smeas_empresa_datos", { direccion: "", rut: "", tel: "", email: "", web: "", logo: "" }));
+  const setEmpresaDato = (k, v) => setEmpresaDatos(prev => { const n = { ...prev, [k]: v }; saveLS("smeas_empresa_datos", n); return n; });
+  const logoRef = useRef();
+  const handleLogo = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => setEmpresaDato("logo", ev.target.result);
+    r.readAsDataURL(f);
+  };
   const [seccion, setSeccion] = useState("empresa");
 
   const TAB_BTN = (key, icon, lbl) => (
@@ -440,15 +451,45 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
 
       <div style={{ maxWidth:680 }}>
         {seccion === "empresa" && (
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
-            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🏢 Nombre de la empresa</div>
-            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-              Aparece en el PDF de presupuesto y donde el sistema muestre el nombre de la empresa. Sin esto configurado, el PDF sale sin nombre de empresa.
+          <div>
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
+              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🏢 Datos de la empresa</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+                Aparece en el PDF de presupuesto y donde el sistema muestre el nombre de la empresa. Sin el nombre configurado, el PDF sale sin nombre de empresa.
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
+                <div style={{ gridColumn:"span 2" }}>
+                  <label style={LBL}>Nombre de la empresa</label>
+                  <input style={INP} value={empresa} placeholder="Ej: Montajes Núñez S.A." disabled={soloLectura} onChange={e => guardarEmpresa(e.target.value)} />
+                </div>
+                <div style={{ gridColumn:"span 2" }}>
+                  <label style={LBL}>Dirección</label>
+                  <input style={INP} value={empresaDatos.direccion} placeholder="Ej: Ruta 8 km 14, Canelones" disabled={soloLectura} onChange={e => setEmpresaDato("direccion", e.target.value)} />
+                </div>
+                <div><label style={LBL}>RUT / CI</label><input style={INP} value={empresaDatos.rut} placeholder="Ej: 210000000000" disabled={soloLectura} onChange={e => setEmpresaDato("rut", e.target.value)} /></div>
+                <div><label style={LBL}>Teléfono</label><input style={INP} value={empresaDatos.tel} placeholder="Ej: +598 2XXX XXXX" disabled={soloLectura} onChange={e => setEmpresaDato("tel", e.target.value)} /></div>
+                <div><label style={LBL}>Email</label><input style={INP} value={empresaDatos.email} placeholder="Ej: ventas@empresa.com" disabled={soloLectura} onChange={e => setEmpresaDato("email", e.target.value)} /></div>
+                <div><label style={LBL}>Sitio web</label><input style={INP} value={empresaDatos.web} placeholder="Ej: www.empresa.com" disabled={soloLectura} onChange={e => setEmpresaDato("web", e.target.value)} /></div>
+              </div>
             </div>
-            <label style={LBL}>Nombre de la empresa</label>
-            <input style={INP} value={empresa} placeholder="Ej: Montajes Núñez S.A."
-              disabled={soloLectura}
-              onChange={e => guardarEmpresa(e.target.value)} />
+
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🖼️ Logo para el PDF</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Aparece en el encabezado del PDF de presupuesto, junto a los datos de la empresa.</div>
+              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ position:"relative", cursor: soloLectura ? "default" : "pointer" }} onClick={() => !soloLectura && logoRef.current.click()}>
+                  {empresaDatos.logo
+                    ? <img src={empresaDatos.logo} alt="" style={{ width:90, height:64, borderRadius:8, objectFit:"contain", background:"#fff", border:"2px solid "+C.accent, padding:4 }} />
+                    : <div style={{ width:90, height:64, borderRadius:8, background:C.accent+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, border:"2px dashed "+C.accent+"66" }}>🏢</div>}
+                  {!soloLectura && <div style={{ position:"absolute", bottom:-4, right:-4, background:C.accent, borderRadius:"50%", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11 }}>📷</div>}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:6 }}>Click en el recuadro para cambiarlo.</div>
+                  {empresaDatos.logo && !soloLectura && <button onClick={() => setEmpresaDato("logo", "")} style={{ fontSize:11, color:C.err, background:"none", border:"none", cursor:"pointer" }}>✕ Quitar logo</button>}
+                </div>
+                <input ref={logoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleLogo} />
+              </div>
+            </div>
           </div>
         )}
 
