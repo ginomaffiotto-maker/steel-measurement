@@ -2869,6 +2869,34 @@ anterior ya despejado.
 - Build limpio, desplegado a producción. Falta que Gino corra la línea
   nueva del SQL y vuelva a migrar una vez más.
 
+## §9.48 — Barrido general: "" no es null para Postgres (2026-08-24)
+
+Tercera vuelta del mismo fix de migración. Con `anidado_id`/`horas_especiales`
+ya resueltos, aparecieron `invalid input syntax for type uuid: ''` y
+`type numeric: ''` — el patrón de fondo: varios puntos donde la app arma
+la fila para Supabase hacían spread directo del objeto local
+(`{ ...itemRow, ... }`, `{ ...grupoRow, ... }`) sin pasar por ninguna
+limpieza, y un campo vacío en la UI local vale `""`, no `null` — Postgres
+rechaza `""` en cualquier columna que no sea texto.
+
+- Nuevo `saneado()`: convierte cualquier `""` a `null` en un objeto,
+  campo por campo. Seguro aplicarlo siempre (un texto tolera `""` sin
+  problema, así que no hay ningún caso donde esto pierda un significado
+  real).
+- `sinId()` ahora sanea de paso — cubre de un saque todos los rubros de
+  ítem (`RUBROS_ITEM`), pinturas/otros de tratamiento superficial, piezas
+  de anidado y filas de tarifario, que ya pasaban por acá.
+- `soloColumnas()` también sanea — cubre presupuestos/cómputos/anidados/
+  ítems de presupuesto (los 4 que ya tenían lista blanca).
+- Los 4 puntos que armaban la fila con spread directo sin pasar por
+  ninguno de los dos helpers (`computo_items`, `computo_piezas`,
+  `anidado_grupos`, `item_trat_superficie`) ahora envuelven el resultado
+  en `saneado(...)` explícitamente. `saveDBMaterial` (biblioteca) también,
+  por las dudas — no había fallado, pero tiene los mismos campos numéricos.
+- Build limpio, desplegado a producción. Sigue sin confirmar si
+  `anidado_id` (SQL de §9.47) ya se corrió del lado de Gino — el resumen
+  que mandó todavía mostraba "column not found" para eso.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

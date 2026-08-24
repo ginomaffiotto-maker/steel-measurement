@@ -2,12 +2,24 @@ import { useState, useEffect } from "react";
 import { familiaDe } from "./taxonomia";
 import { supabase } from "./supabaseClient";
 
+// "" en una columna numeric/uuid/date rompe el insert — Postgres no la
+// coerciona a null solo (encontrado en Fase 4 con datos reales,
+// 2026-08-24: cantidad_total, anidado_id, computo_id de registros viejos
+// donde el campo quedó vacío en vez de sin tocar). Un campo de texto
+// tolera "" sin problema, así que convertir siempre "" → null acá es
+// seguro — nunca se está mandando algo con significado distinto a "vacío".
+const saneado = (obj) => {
+  const limpio = {};
+  for (const k in obj) limpio[k] = obj[k] === "" ? null : obj[k];
+  return limpio;
+};
+
 // `{ ...obj, id: undefined }` no alcanza para que Postgres use su propio
 // default de id — hay que omitir la clave del todo, no dejarla en undefined.
 // Encontrado en Fase 4 al migrar datos reales (tarifario_mo_fab rechazaba
 // con "null value in column id"). Usar esto en vez de ese patrón siempre
 // que se inserte una fila nueva dejando que la base genere el id.
-const sinId = (obj) => { const { id, ...resto } = obj; return resto; };
+const sinId = (obj) => { const { id, ...resto } = obj; return saneado(resto); };
 
 // UUID válido, no cualquier string en el campo id — encontrado en Fase 4
 // con datos reales (2026-08-24): registros viejos (de antes de que uid()
@@ -36,12 +48,9 @@ const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];
-// "" en un campo numeric rompe el insert (Postgres no lo coerciona a
-// null solo) — encontrado en cantidad_total de un cómputo viejo.
-const numOrNull = (v) => (v === "" || v === undefined ? null : v);
 const soloColumnas = (obj, columnas) => {
   const row = {};
-  for (const k of columnas) if (obj[k] !== undefined) row[k] = obj[k];
+  for (const k of columnas) if (obj[k] !== undefined) row[k] = obj[k] === "" ? null : obj[k];
   return row;
 };
 
@@ -401,7 +410,7 @@ export const saveDBItem = async (presupuestoId, item) => {
   if (trat_superficie) {
     const { pinturas = [], otros = [], id, ...tratRow } = trat_superficie;
     const { data: savedTrat, error: eTrat } = await supabase
-      .from("item_trat_superficie").insert({ ...tratRow, item_id: itemId }).select().single();
+      .from("item_trat_superficie").insert(saneado({ ...tratRow, item_id: itemId })).select().single();
     if (eTrat) throw eTrat;
     if (pinturas.length) {
       const { error: eP } = await supabase.from("item_trat_pinturas")
@@ -492,7 +501,6 @@ export const saveDBComputo = async (computo) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const { items } = computo;
   const row = soloColumnas(conIdValido(computo), COLUMNAS_COMPUTO);
-  row.cantidad_total = numOrNull(row.cantidad_total);
   const { data: savedComputo, error: eC } = await supabase.from("computos").upsert(row).select().single();
   if (eC) throw eC;
   const computoId = savedComputo.id;
@@ -503,12 +511,12 @@ export const saveDBComputo = async (computo) => {
   for (const item of items || []) {
     const { piezas, id, ...itemRow } = item;
     const { data: savedItem, error: eI } = await supabase
-      .from("computo_items").insert({ ...itemRow, computo_id: computoId }).select().single();
+      .from("computo_items").insert({ ...saneado(itemRow), computo_id: computoId }).select().single();
     if (eI) throw eI;
     if (piezas?.length) {
       const filas = piezas.map((p) => {
         const { id: pid, ficha, largo_mm_input, ...campos } = p;
-        return { ...campos, ...(ficha || {}), computo_item_id: savedItem.id };
+        return saneado({ ...campos, ...(ficha || {}), computo_item_id: savedItem.id });
       });
       const { error: ePiezas } = await supabase.from("computo_piezas").insert(filas);
       if (ePiezas) throw ePiezas;
@@ -556,7 +564,7 @@ export const saveDBAnidado = async (anidado) => {
     const { piezas, id, ficha, ...grupoRow } = grupo;
     const { data: savedGrupo, error: eG } = await supabase
       .from("anidado_grupos")
-      .insert({ ...grupoRow, ...(ficha || {}), anidado_id: anidadoId })
+      .insert(saneado({ ...grupoRow, ...(ficha || {}), anidado_id: anidadoId }))
       .select()
       .single();
     if (eG) throw eG;
@@ -715,7 +723,7 @@ export const saveDBMaterial = async (tipo, material) => {
   const tabla = BIBLIOTECA_TABLAS[tipo];
   if (!tabla) throw new Error(`Tipo de material desconocido: ${tipo}`);
   const { historial_precios, ...row } = material;
-  const { data, error } = await supabase.from(tabla).upsert(row).select().single();
+  const { data, error } = await supabase.from(tabla).upsert(saneado(row)).select().single();
   if (error) throw error;
   return data;
 };
