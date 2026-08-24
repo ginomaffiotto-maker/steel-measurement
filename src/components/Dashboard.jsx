@@ -82,7 +82,7 @@ function getUltimosMeses(n) {
 // trabajo de Historial es un agregado (% por rubro), no tiene desglose
 // pieza por pieza. Los presupuestos históricos aproximados (origen_historico)
 // tampoco tienen materiales reales: su "hierro" es la categoría entera
-// puesta como nombre (ver PLAN.md §9.21) — se excluyen del ranking de
+// puesta como nombre (ver PLAN-HISTORIAL.md §9.21) — se excluyen del ranking de
 // materiales para no mezclar un nombre de categoría con un material real.
 function normalizarPresupuesto(p) {
   const c = calcPresupuesto(p);
@@ -235,7 +235,7 @@ function TabMateriales({ registros, fuente }) {
   return (
     <div>
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
-        Sólo cuenta materiales de Presupuestos reales (no los 235 históricos aproximados, que no tienen detalle pieza por pieza — ver PLAN.md §9.21).
+        Sólo cuenta materiales de Presupuestos reales (no los 235 históricos aproximados, que no tienen detalle pieza por pieza — ver PLAN-HISTORIAL.md §9.21).
         {fuente === "historial" && <span style={{ color: C.warn }}> — Fuente actual "Historial" no tiene materiales: cambiá a "Presupuesto" o "Ambos".</span>}
       </div>
       {ranking.length === 0 ? (
