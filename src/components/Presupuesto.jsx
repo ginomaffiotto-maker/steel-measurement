@@ -103,11 +103,14 @@ function materialesUnificadosAnidado(anidado) {
   });
 }
 
+// Íconos (2026-08-24, sistema "Acero", mismo criterio que steelCRM): ya
+// eran solo 3 colores reales acá (gris/info/ok/err, sin redundancia), pero
+// se suma el ícono para que las dos apps se sientan del mismo sistema.
 const ESTADO_CFG = {
-  borrador:  { label: "Borrador",  color: C.muted },
-  enviado:   { label: "Enviado",   color: C.info  },
-  aprobado:  { label: "Aprobado",  color: C.ok    },
-  rechazado: { label: "Rechazado", color: C.err   },
+  borrador:  { label: "Borrador",  color: C.muted, icon: "📝" },
+  enviado:   { label: "Enviado",   color: C.info,  icon: "📤" },
+  aprobado:  { label: "Aprobado",  color: C.ok,    icon: "✅" },
+  rechazado: { label: "Rechazado", color: C.err,   icon: "❌" },
 };
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
@@ -1463,7 +1466,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
             <button key={k} onClick={() => cambiarEstado(k)}
               style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,
                 ...(pres.estado===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
-              {v.label}
+              {v.icon} {v.label}
             </button>
           ))}
         </div>
@@ -1916,7 +1919,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
           <button key={k} onClick={() => setFiltEst(filtEst===k?"":k)}
             style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,
               ...(filtEst===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
-            {v.label} ({cnt[k]||0})
+            {v.icon} {v.label} ({cnt[k]||0})
           </button>
         ))}
       </div>
@@ -1993,7 +1996,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
                       {p._total_usd>0 ? `$${n2(p._total_usd)}` : "—"}
                     </td>
-                    <td style={TD}><span style={BDG(est.color,true)}>{est.label}</span></td>
+                    <td style={TD}><span style={BDG(est.color,true)}>{est.icon} {est.label}</span></td>
                     <td style={TD} onClick={e=>e.stopPropagation()}>
                       <button onClick={() => clonarPres(p)} title="Clonar presupuesto"
                         style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:13, marginRight:8 }}>📋</button>
