@@ -2702,6 +2702,17 @@ pestaña del navegador (steelCRM sí tenía uno, Measurement no).
   navegador) — el manifest y el favicon ya están verificados server-side,
   falta la confirmación visual de Gino en su propio navegador.
 
+## §9.43 — Sidebar responsiva (2026-08-24)
+
+Mismo pedido que steelCRM (relayado por Gino a las dos sesiones). Antes
+solo tenía colapso manual (botón ◀/▶). Replicado 1:1 el patrón que ya
+comiteó y verificó la otra sesión en steelCRM (`c81b5ac`): arranca
+colapsada si el viewport es menor a 768px, y se reajusta sola al
+redimensionar la ventana (listener de `resize`) — el usuario sigue
+pudiendo expandirla a mano. `SW` (ancho del sidebar) ya dependía de
+`collapsed`, así que el contenido principal se reacomoda solo sin tocar
+nada más. Build limpio, desplegado a producción.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

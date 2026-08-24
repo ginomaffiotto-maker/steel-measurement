@@ -166,9 +166,19 @@ export default function App() {
   })();
   const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
   const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
+
+  // Responsive: en pantallas angostas (celular, ventana chica) la barra
+  // colapsa sola al cruzar el umbral — el usuario todavía puede expandirla
+  // a mano con el botón ◀/▶, esto solo fija el estado inicial/al resize.
+  // Mismo patrón que steelCRM (commit c81b5ac).
+  useEffect(() => {
+    const onResize = () => setCollapsed(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => { saveLS("smeas_usuarios", usuarios); }, [usuarios]);
   useEffect(() => { saveLS("smeas_tc_global", tcGlobal); }, [tcGlobal]);
