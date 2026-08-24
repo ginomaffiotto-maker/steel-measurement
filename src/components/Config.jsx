@@ -1,94 +1,155 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { uid, loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
 
-// ─── GESTIÓN DE USUARIOS (alta/edición de vendedor/supervisor, admin-only) ─
-const ROL_OPCIONES = [
-  { value: "admin",      label: "Administrador" },
-  { value: "supervisor", label: "Gerencia" },
-  { value: "operario",   label: "Vendedor" },
-];
+// ─── GESTIÓN DE USUARIOS ─────────────────────────────────────────────────
+// Mismo mecanismo que steelCRM (mismo backend Supabase compartido): no hay
+// alta local (creaba cuentas fantasma que nunca podían loguearse de
+// verdad, y el rol local "operario" no coincidía con el vocabulario real
+// admin/supervisor/vendedor de profiles.rol) — se invita por email y la
+// persona elige su propia contraseña. Cambiar el rol de alguien con cuenta
+// real (profileId) sincroniza profiles.rol en Supabase, permitido solo a
+// admin por la política profiles_update_admin.
+const ROL_LABEL = { admin: "Administrador", supervisor: "Gerencia", vendedor: "Vendedor" };
 
-function FilaUsuario({ u, soloLectura, esUltimoAdmin, onChange, onEliminar }) {
-  const [show, setShow] = useState(false);
-  const fotoRef = useRef();
-  const handleFoto = (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = ev => onChange({ ...u, foto: ev.target.result });
-    r.readAsDataURL(f);
+function MiCuenta({ usuario }) {
+  const [p1, setP1] = useState(""); const [p2, setP2] = useState("");
+  const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const guardar = async () => {
+    if (p1.length < 6) { setErr("La contraseña tiene que tener al menos 6 caracteres"); return; }
+    if (p1 !== p2) { setErr("Las contraseñas no coinciden"); return; }
+    if (!supabase) { setErr("Backend no configurado"); return; }
+    setCargando(true); setErr(""); setMsg("");
+    const { error } = await supabase.auth.updateUser({ password: p1 });
+    setCargando(false);
+    if (error) { setErr("No se pudo guardar: " + error.message); return; }
+    setMsg("✅ Contraseña actualizada."); setP1(""); setP2("");
   };
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
-      <input ref={fotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFoto} />
-      <div title={soloLectura ? "" : "Click para cambiar la foto"}
-        onClick={() => !soloLectura && fotoRef.current.click()}
-        style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, cursor: soloLectura?"default":"pointer",
-          display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
-          background: u.foto ? "transparent" : C.accent+"22", border:"1px solid "+C.border }}>
-        {u.foto
-          ? <img src={u.foto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-          : <span style={{ fontSize:16 }}>{u.emoji || "👤"}</span>}
+    <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
+      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🔑 Mi cuenta</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>{usuario?.email}</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
+        <div><label style={LBL}>Nueva contraseña</label><input type="password" style={INP} value={p1} onChange={e=>{setP1(e.target.value); setErr("");}} autoComplete="new-password" placeholder="Al menos 6 caracteres" /></div>
+        <div><label style={LBL}>Repetir contraseña</label><input type="password" style={INP} value={p2} onChange={e=>{setP2(e.target.value); setErr("");}} autoComplete="new-password" /></div>
       </div>
-      <input value={u.emoji||""} placeholder="👤" disabled={soloLectura}
-        onChange={e=>onChange({...u, emoji:e.target.value})}
-        style={{ ...INP, width:44, textAlign:"center", opacity: soloLectura?0.6:1 }} />
-      <input value={u.nombre} placeholder="Nombre" disabled={soloLectura}
-        onChange={e=>onChange({...u, nombre:e.target.value})}
-        style={{ ...INP, flex:"1 1 120px", opacity: soloLectura?0.6:1 }} />
-      <input value={u.email||""} placeholder="Email (opcional — solo si tiene cuenta real)" disabled={soloLectura}
-        onChange={e=>onChange({...u, email:e.target.value})}
-        title="Si se carga, y la contraseña de acá coincide con la de Supabase Auth, este usuario también queda sincronizado con el backend al loguearse."
-        style={{ ...INP, flex:"1 1 160px", opacity: soloLectura?0.6:1 }} />
-      <select value={u.rol} disabled={soloLectura}
-        onChange={e=>onChange({...u, rol:e.target.value})}
-        style={{ ...INP, width:130, opacity: soloLectura?0.6:1 }}>
-        {ROL_OPCIONES.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
-      </select>
-      <div style={{ position:"relative", width:110 }}>
-        <input type={show?"text":"password"} value={u.clave||""} placeholder="Sin clave" disabled={soloLectura}
-          onChange={e=>onChange({...u, clave:e.target.value})}
-          style={{ ...INP, width:"100%", paddingRight:26, opacity: soloLectura?0.6:1, boxSizing:"border-box" }} />
-        <span onClick={()=>setShow(v=>!v)} style={{ position:"absolute", right:6, top:7, cursor:"pointer", fontSize:12, color:C.muted }}>
-          {show ? "🙈" : "👁️"}
-        </span>
-      </div>
-      {!soloLectura && (
-        <button onClick={onEliminar} disabled={esUltimoAdmin}
-          title={esUltimoAdmin ? "No podés eliminar el último Administrador" : "Eliminar usuario"}
-          style={{ background:"none", border:"none", color: esUltimoAdmin?C.muted:C.err, cursor: esUltimoAdmin?"not-allowed":"pointer", fontSize:14 }}>🗑</button>
+      {err && <div style={{ color:C.err, fontSize:12, marginTop:8, fontWeight:700 }}>⚠ {err}</div>}
+      {msg && <div style={{ color:C.accent, fontSize:12, marginTop:8, fontWeight:700 }}>{msg}</div>}
+      <button onClick={guardar} style={{ ...BTN("ghost"), marginTop:10, fontSize:12, padding:"6px 14px" }}>{cargando ? "Guardando…" : "Cambiar contraseña"}</button>
+    </div>
+  );
+}
+
+function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
+  const [confirmarDelId, setConfirmarDelId] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [rolEdit, setRolEdit] = useState("vendedor");
+  const [nombreEdit, setNombreEdit] = useState("");
+  const objDel = usuarios.find(u => u.id === confirmarDelId);
+  const admins = usuarios.filter(u => u.rol === "admin");
+
+  const abrirEdit = (u) => { setEditId(u.id); setRolEdit(u.rol); setNombreEdit(u.nombre); };
+  const guardarEdit = () => {
+    const original = usuarios.find(u => u.id === editId);
+    setUsuarios(prev => prev.map(u => u.id === editId ? { ...u, nombre: nombreEdit, rol: rolEdit } : u));
+    if (original?.profileId && supabase) {
+      supabase.from("profiles").update({ rol: rolEdit, nombre: nombreEdit }).eq("id", original.profileId)
+        .then(({ error }) => { if (error) console.warn("update profile rol", error); });
+    }
+    setEditId(null);
+  };
+  const del = (id) => { setUsuarios(prev => prev.filter(u => u.id !== id)); setConfirmarDelId(null); };
+
+  return (
+    <div>
+      {usuarios.length === 0 && <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Sin usuarios todavía.</div>}
+      {usuarios.map(u => {
+        const esUltimoAdmin = u.rol === "admin" && admins.length <= 1;
+        return (
+          <div key={u.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:`1px solid ${C.border}33` }}>
+            <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", background: u.foto ? "transparent" : C.accent+"22", border:"1px solid "+C.border }}>
+              {u.foto ? <img src={u.foto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:16 }}>{u.emoji || "👤"}</span>}
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:700 }}>{u.nombre || "(sin nombre)"} {usuario?.id === u.id && <span style={{ fontSize:10, color:C.accent }}>· vos</span>}</div>
+              {!u.profileId && <div style={{ fontSize:10, color:C.muted }}>Sin cuenta real todavía</div>}
+            </div>
+            <div style={{ fontSize:12, color:C.muted, minWidth:100 }}>{ROL_LABEL[u.rol] || u.rol}</div>
+            {esAdmin && <button onClick={() => abrirEdit(u)} style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:12 }}>✏️</button>}
+            {esAdmin && !esUltimoAdmin && usuario?.id !== u.id && (
+              <button onClick={() => setConfirmarDelId(u.id)} style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
+            )}
+          </div>
+        );
+      })}
+
+      {editId && (
+        <div style={{ marginTop:12, padding:12, background:C.bg, borderRadius:8, border:`1px solid ${C.border}44` }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <input value={nombreEdit} onChange={e=>setNombreEdit(e.target.value)} style={{ ...INP, flex:"1 1 140px" }} placeholder="Nombre" />
+            <select value={rolEdit} onChange={e=>setRolEdit(e.target.value)} style={{ ...INP, width:150 }}>
+              <option value="admin">Administrador</option>
+              <option value="supervisor">Gerencia</option>
+              <option value="vendedor">Vendedor</option>
+            </select>
+          </div>
+          <div style={{ marginTop:8, display:"flex", gap:8 }}>
+            <button onClick={guardarEdit} style={{ ...BTN("ghost"), fontSize:12, padding:"6px 14px" }}>💾 Guardar</button>
+            <button onClick={() => setEditId(null)} style={{ ...BTN("ghost"), fontSize:12, padding:"6px 14px" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {confirmarDelId && objDel && (
+        <ModalConfirmarEliminar titulo={`a ${objDel.nombre || "este usuario"}`}
+          subtitulo="Se borra de esta lista local — si tiene cuenta real, sigue existiendo en Supabase."
+          onConfirm={() => del(confirmarDelId)} onClose={() => setConfirmarDelId(null)} />
       )}
     </div>
   );
 }
 
-function GestionUsuarios({ usuarios, setUsuarios, soloLectura }) {
-  const [confirmarDelId, setConfirmarDelId] = useState(null);
-  const upd = (id, nuevo) => setUsuarios(prev => prev.map(u => u.id===id ? nuevo : u));
-  const add = () => setUsuarios(prev => [...prev, { id: uid(), nombre:"", rol:"operario", emoji:"👤", foto:"", clave:"" }]);
-  const del = (id) => { setUsuarios(prev => prev.filter(u=>u.id!==id)); setConfirmarDelId(null); };
-  const admins = usuarios.filter(u=>u.rol==="admin");
-  const objDel = usuarios.find(u=>u.id===confirmarDelId);
-
+function InvitarUsuario() {
+  const [form, setForm] = useState({ nombre:"", email:"", rol:"vendedor" });
+  const [comando, setComando] = useState("");
+  const [copiado, setCopiado] = useState(false);
+  const generar = () => {
+    if (!form.nombre.trim() || !form.email.trim()) { alert("Ingresá nombre y email"); return; }
+    const cmd = [
+      `$env:NUEVO_EMAIL = "${form.email.trim()}"`,
+      `$env:NUEVO_NOMBRE = "${form.nombre.trim()}"`,
+      `$env:NUEVO_ROL = "${form.rol}"`,
+      `node scripts/crear-usuario.mjs`,
+    ].join("\n");
+    setComando(cmd); setCopiado(false);
+  };
+  const copiar = () => { navigator.clipboard.writeText(comando).then(() => { setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }); };
   return (
-    <div>
-      {usuarios.length===0 && <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Sin usuarios todavía.</div>}
-      {usuarios.map(u => (
-        <FilaUsuario key={u.id} u={u} soloLectura={soloLectura}
-          esUltimoAdmin={u.rol==="admin" && admins.length<=1}
-          onChange={nuevo=>upd(u.id,nuevo)}
-          onEliminar={()=>setConfirmarDelId(u.id)} />
-      ))}
-      {!soloLectura && (
-        <button onClick={add} style={{ ...BTN("ghost"), marginTop:4, fontSize:11, padding:"5px 12px" }}>+ Agregar usuario</button>
-      )}
-      {confirmarDelId && objDel && (
-        <ModalConfirmarEliminar titulo={`a ${objDel.nombre || "este usuario"}`}
-          subtitulo="El usuario ya no va a poder ingresar al sistema."
-          onConfirm={()=>del(confirmarDelId)} onClose={()=>setConfirmarDelId(null)} />
+    <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginTop:16 }}>
+      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>✉️ Invitar usuario nuevo</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>La persona recibe un mail para elegir su propia contraseña — sirve para entrar acá y a steelCRM (mismo backend), si el tenant también lo usa.</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12 }}>
+        <div><label style={LBL}>Nombre</label><input style={INP} value={form.nombre} onChange={e=>setForm(f=>({...f, nombre:e.target.value}))} placeholder="Nombre completo" /></div>
+        <div><label style={LBL}>Email</label><input type="email" style={INP} value={form.email} onChange={e=>setForm(f=>({...f, email:e.target.value}))} placeholder="persona@ejemplo.com" /></div>
+        <div><label style={LBL}>Rol</label>
+          <select style={INP} value={form.rol} onChange={e=>setForm(f=>({...f, rol:e.target.value}))}>
+            <option value="admin">Administrador</option>
+            <option value="supervisor">Gerencia</option>
+            <option value="vendedor">Vendedor</option>
+          </select>
+        </div>
+      </div>
+      <button onClick={generar} style={{ ...BTN("ghost"), marginTop:10, fontSize:12, padding:"6px 14px" }}>Generar comando de invitación</button>
+      {comando && (
+        <div style={{ marginTop:12, background:C.bg, borderRadius:8, padding:"10px 12px", border:`1px solid ${C.border}44` }}>
+          <pre style={{ margin:0, fontFamily:"monospace", fontSize:11, color:C.muted, whiteSpace:"pre-wrap" }}>{comando}</pre>
+          <button onClick={copiar} style={{ marginTop:8, fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>{copiado ? "✅ Copiado" : "📋 Copiar"}</button>
+          <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Pegalo en tu terminal, en la carpeta steel-backend (con SUPABASE_SERVICE_ROLE_KEY ya configurada ahí).</div>
+        </div>
       )}
     </div>
   );
@@ -386,13 +447,17 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
         )}
 
         {seccion === "usuarios" && (
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
-            <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>👤 Usuarios</div>
-            <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-              Administrador ve todo el sistema · Gerencia ve el equipo y aprueba · Vendedor ve sus propios datos.
-              No se puede eliminar el último Administrador.
+          <div>
+            <MiCuenta usuario={usuario} />
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>👤 Equipo</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+                Administrador ve todo el sistema · Gerencia ve el equipo y aprueba · Vendedor ve sus propios datos.
+                No se puede eliminar el último Administrador.
+              </div>
+              <EquipoUsuarios usuarios={usuarios} setUsuarios={setUsuarios} usuario={usuario} esAdmin={usuario?.rol === "admin"} />
             </div>
-            <GestionUsuarios usuarios={usuarios} setUsuarios={setUsuarios} soloLectura={soloLectura} />
+            {usuario?.rol === "admin" && <InvitarUsuario />}
           </div>
         )}
 
