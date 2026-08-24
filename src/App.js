@@ -333,7 +333,11 @@ export default function App() {
   // en producción (Vercel) no hay proxy y falla en silencio, igual que en
   // steelCRM.
   useEffect(() => {
-    fetch("http://localhost:3003/api/cotizacion")
+    // Local (server.js, proxy en 3003) o producción (api/cotizacion.js,
+    // función serverless de Vercel, mismo path relativo) — 2026-08-24.
+    const urlCotizacion = window.location.hostname === "localhost"
+      ? "http://localhost:3003/api/cotizacion" : "/api/cotizacion";
+    fetch(urlCotizacion)
       .then(r => r.json())
       .then(d => { if (d.venta) setTcGlobal(d.venta); })
       .catch(() => {});
