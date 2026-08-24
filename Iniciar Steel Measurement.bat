@@ -20,6 +20,12 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr :3002 ^| findstr LISTENING') 
   taskkill /F /PID %%p >> "%LOGFILE%" 2>&1
 )
 
+rem Idem puerto 3003 (proxy de cotizacion del BROU, server.js)
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr :3003 ^| findstr LISTENING') do (
+  echo Matando proceso %%p que ocupaba el puerto 3003 >> "%LOGFILE%"
+  taskkill /F /PID %%p >> "%LOGFILE%" 2>&1
+)
+
 if exist node_modules goto INICIAR
 
 echo Instalando dependencias... >> "%LOGFILE%"
@@ -27,6 +33,8 @@ call npm install >> "%LOGFILE%" 2>&1
 if errorlevel 1 goto FALLO_INSTALL
 
 :INICIAR
+echo Iniciando proxy de cotizacion (server.js, puerto 3003)... >> "%LOGFILE%"
+start "" /B node server.js >> "%~dp0steel-measurement-cotizacion-log.txt" 2>&1
 set PORT=3002
 echo Iniciando servidor... >> "%LOGFILE%"
 call npm start >> "%LOGFILE%" 2>&1

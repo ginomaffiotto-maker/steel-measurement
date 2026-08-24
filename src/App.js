@@ -325,6 +325,19 @@ export default function App() {
 
   useEffect(() => { saveLS("smeas_usuarios", usuarios); }, [usuarios]);
   useEffect(() => { saveLS("smeas_tc_global", tcGlobal); }, [tcGlobal]);
+  // Cotización real del BROU al arrancar — pisa el TC global con la venta
+  // real (a diferencia de steelCRM, acá el TC alimenta directo los cálculos
+  // de cómputos/presupuestos, así que se decidió autocompletar siempre en
+  // vez de solo mostrarlo como referencia). El usuario sigue pudiendo
+  // editarlo a mano después. Solo funciona corriendo local con server.js —
+  // en producción (Vercel) no hay proxy y falla en silencio, igual que en
+  // steelCRM.
+  useEffect(() => {
+    fetch("http://localhost:3003/api/cotizacion")
+      .then(r => r.json())
+      .then(d => { if (d.venta) setTcGlobal(d.venta); })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (usuario) sessionStorage.setItem(SESION_USUARIO_KEY, String(usuario.id));
     else sessionStorage.removeItem(SESION_USUARIO_KEY);
