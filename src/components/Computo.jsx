@@ -17,6 +17,22 @@ const normStr = s => String(s||"").toLowerCase()
   .replace(/×/g,"x").replace(/²/g,"2").replace(/½/g,"1/2")
   .replace(/¼/g,"1/4").replace(/¾/g,"3/4").replace(/\s+/g," ").trim();
 
+// Genera el próximo N° de cómputo salteando cualquiera que ya esté en uso
+// (el contador guardado puede haber quedado atrás de cómputos importados o
+// creados manualmente con un N° más alto — encontrado el 24/8: "C-003" se
+// sugirió de nuevo pese a que ya existía un cómputo real con ese número).
+const siguienteNroComputo = (computos) => {
+  const usados = new Set((computos || []).map(c => c.nro).filter(Boolean));
+  let counter = loadLS("smeas_computo_nro", 0);
+  let nro;
+  do {
+    counter++;
+    nro = `C-${String(counter).padStart(3,"0")}`;
+  } while (usados.has(nro));
+  saveLS("smeas_computo_nro", counter);
+  return nro;
+};
+
 // ─── TOGGLE UI helper ─────────────────────────────────────────────
 function Toggle({ on, onChange, label, color = C.ok }) {
   return (
@@ -1019,9 +1035,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
 
   const crearComputo = () => {
     if (!nuevo.nombre.trim()) return;
-    const counter = (loadLS("smeas_computo_nro",0)) + 1;
-    saveLS("smeas_computo_nro", counter);
-    const nro = nuevo.nro?.trim() || `C-${String(counter).padStart(3,"0")}`;
+    const nroManual = nuevo.nro?.trim();
+    if (nroManual && computos.some(c => c.nro === nroManual)) {
+      alert(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
+      return;
+    }
+    const nro = nroManual || siguienteNroComputo(computos);
     const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim() };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
@@ -1030,9 +1049,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   };
 
   const clonarComputo = (c) => {
-    const counter = (loadLS("smeas_computo_nro",0)) + 1;
-    saveLS("smeas_computo_nro", counter);
-    const nro = `C-${String(counter).padStart(3,"0")}`;
+    const nro = siguienteNroComputo(computos);
     const nuevoC = {
       ...c, id: uid(), nro, nombre: `${c.nombre} (copia)`,
       items: c.items.map(it => ({
