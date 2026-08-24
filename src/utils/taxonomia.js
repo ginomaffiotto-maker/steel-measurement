@@ -1,3 +1,5 @@
+import { INP } from "../styles/colors";
+
 // Taxonomía compartida MMN — Familia (nivel 1) → Categoría (nivel 2).
 //
 // Fuente canónica: Predictor Eq v25 (`DEFAULT_FAMILIES`). Ver
@@ -25,3 +27,22 @@ Object.entries(FAMILIAS).forEach(([familia, categorias]) => {
 // Dada una Categoría (el campo `categoria` que ya existe en Historial),
 // devuelve su Familia. No requiere ningún cambio de datos existentes.
 export const familiaDe = (categoria) => CATEGORIA_A_FAMILIA[categoria] || "Sin familia";
+
+export const TIPOS_TRABAJO = ["Fabricación", "Montaje", "Fab+Mont"];
+
+// Dropdown de Categoría reusado en Cómputo, Anidado y Presupuesto (2026-08-24,
+// pedido de Gino: clasificar desde el arranque del flujo — Cómputo → Anidado
+// → Presupuesto — en vez de recién al final) — centralizado acá en vez de
+// vivir solo en Presupuesto.jsx para que las 3 pantallas lo importen igual.
+export function SelectCategoria({ value, onChange, style }) {
+  return (
+    <select style={{ ...INP, ...style }} value={value || ""} onChange={e => onChange(e.target.value)}>
+      <option value="">— Sin categoría —</option>
+      {Object.entries(FAMILIAS).map(([familia, cats]) => (
+        <optgroup key={familia} label={familia}>
+          {cats.map(c => <option key={c} value={c}>{c}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}

@@ -9,7 +9,7 @@ import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
 import { useSortable } from "../utils/useSortable";
-import { FAMILIAS, familiaDe } from "../utils/taxonomia";
+import { familiaDe, SelectCategoria } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -113,23 +113,6 @@ const ESTADO_CFG = {
   rechazado: { label: "Rechazado", color: C.err,   icon: "❌" },
 };
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
-
-// Categoría: mismo mapeo Familia→Categoría que ya usa Historial (taxonomia.js),
-// dropdown en vez de texto libre para que no diverja de la lista canónica —
-// necesario para que el export a steelCRM (§4 de esta sesión) y los reportes
-// cruzados por Familia/Categoría funcionen también con datos de Presupuesto.
-export function SelectCategoria({ value, onChange }) {
-  return (
-    <select style={INP} value={value || ""} onChange={e => onChange(e.target.value)}>
-      <option value="">— Sin categoría —</option>
-      {Object.entries(FAMILIAS).map(([familia, cats]) => (
-        <optgroup key={familia} label={familia}>
-          {cats.map(c => <option key={c} value={c}>{c}</option>)}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
 
 const TIPO_HORA_OPCIONES = [
   { label: "Común",    pct: 0   },
@@ -337,7 +320,7 @@ const QuickPick = ({ catalogo, onPick }) => {
 };
 
 // ─── TAB: HIERROS ────────────────────────────────────────────────
-function TabHierros({ item, set }) {
+function TabHierros({ item, set, onAnidadoVinculado }) {
   const rows = item.hierros || [];
   const upd = (id, field, val) => set("hierros", rows.map(r => {
     if (r.id !== id) return r;
@@ -377,7 +360,11 @@ function TabHierros({ item, set }) {
       {anidados.length > 0 && (
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:14 }}>
           <div style={{ fontWeight:700, color:C.pur, fontSize:12, marginBottom:8 }}>🔗 Anidado vinculado</div>
-          <select value={anidadoSelId} onChange={e=>set("anidado_id", e.target.value)} style={{...INP, marginBottom: anidadoSel ? 10 : 0}}>
+          <select value={anidadoSelId} onChange={e=>{
+              set("anidado_id", e.target.value);
+              const a = anidados.find(x => x.id === e.target.value);
+              if (a && (a.categoria || a.tipo_trabajo)) onAnidadoVinculado?.(a.categoria, a.tipo_trabajo);
+            }} style={{...INP, marginBottom: anidadoSel ? 10 : 0}}>
             <option value="">— Ninguno —</option>
             {anidados.map(a => <option key={a.id} value={a.id}>{a.nombre} ({a.fecha})</option>)}
           </select>
@@ -1123,7 +1110,7 @@ function TabPanto({ item, set }) {
 }
 
 // ─── EDITOR DE RUBROS (9 PESTAÑAS) ───────────────────────────────
-function EditorRubros({ item, onChange, onClose }) {
+function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
   const TABS = [
     { id:"resumen",          icon:"📊",  label:"Resumen"      },
     { id:"hierros",          icon:"⚙️",  label:"Hierros"      },
@@ -1266,7 +1253,7 @@ function EditorRubros({ item, onChange, onClose }) {
               </div>
             );
           })()}
-          {tab === "hierros"          && <TabHierros      item={item} set={set} />}
+          {tab === "hierros"          && <TabHierros      item={item} set={set} onAnidadoVinculado={onAnidadoVinculado} />}
           {tab === "mat_generales"    && <TabMatGenerales item={item} set={set} />}
           {tab === "mo_fabricacion"   && <TabMO           item={item} set={set} tipo="fabricacion" />}
           {tab === "mo_montajes"      && <TabMO           item={item} set={set} tipo="montaje" />}
@@ -1288,7 +1275,7 @@ function EditorRubros({ item, onChange, onClose }) {
 }
 
 // ─── FILA ITEM ────────────────────────────────────────────────────
-function FilaItem({ item, onChange, onDelete }) {
+function FilaItem({ item, onChange, onDelete, onAnidadoVinculado }) {
   const [editando, setEditando] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const c = calcItem(item);
@@ -1359,7 +1346,7 @@ function FilaItem({ item, onChange, onDelete }) {
       </div>
 
       {editorOpen && (
-        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} />
+        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} onAnidadoVinculado={onAnidadoVinculado} />
       )}
     </>
   );
@@ -1545,7 +1532,14 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               </div>
             )}
             {(pres.items||[]).map(it => (
-              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)} />
+              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)}
+                onAnidadoVinculado={(categoria, tipo) => {
+                  // Traspaso automático desde el Anidado — solo si el
+                  // presupuesto todavía no tiene su propia clasificación
+                  // (nunca pisa lo que el usuario ya haya elegido a mano).
+                  if (categoria && !pres.categoria) set("categoria", categoria);
+                  if (tipo && !pres.tipo_trabajo) set("tipo_trabajo", tipo);
+                }} />
             ))}
           </div>
         </div>

@@ -7,6 +7,7 @@ import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { SelectCategoria, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const TH_R  = { ...TH, textAlign: "right" };
@@ -167,6 +168,7 @@ const itemVacio = (n = 1) => ({
 
 const computoVacio = () => ({
   id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "", empresa: "",
+  categoria: "", tipo_trabajo: "Fabricación",
   cantidad_total: 1,
   items: [itemVacio(1)],
   comentarios: [],
@@ -717,7 +719,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
             onBlur={e=>{e.target.style.background="transparent";e.target.style.borderColor=C.border+"66";}}
             placeholder="Nombre del ítem"
             title="Click para editar el nombre del ítem"
-            style={{ ...INP, width:220, fontSize:14, fontWeight:700, padding:"4px 8px",
+            style={{ ...INP, width:340, fontSize:14, fontWeight:700, padding:"4px 8px",
               background:"transparent", border:`1px solid ${C.border}66`, cursor:"text",
               color:C.text }} />
 
@@ -965,7 +967,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
-  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"" });
+  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [busqNombre,    setBusqNombre]    = useState("");
@@ -1041,10 +1043,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim() };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación" };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
-    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"" });
+    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
     dualWriteComputo(c);
   };
 
@@ -1182,7 +1184,15 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
             <label style={LBL}>Empresa</label>
             <AutocompleteEmpresa placeholder="Ej: CCFC" value={nuevo.empresa}
               onChange={v=>setNuevo(s=>({...s,empresa:v}))}
-              style={{ ...INP,marginBottom:14 }} />
+              style={{ ...INP,marginBottom:10 }} />
+            <label style={LBL}>Tipo de trabajo</label>
+            <select value={nuevo.tipo_trabajo} onChange={e=>setNuevo(v=>({...v,tipo_trabajo:e.target.value}))}
+              style={{ ...INP,marginBottom:10 }}>
+              {TIPOS_TRABAJO.map(t=><option key={t}>{t}</option>)}
+            </select>
+            <label style={LBL}>Categoría</label>
+            <SelectCategoria value={nuevo.categoria} onChange={v=>setNuevo(s=>({...s,categoria:v}))}
+              style={{ marginBottom:14 }} />
             <div style={{ display:"flex",gap:8 }}>
               <button onClick={crearComputo} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
               <button onClick={()=>setCreando(false)} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
@@ -1238,6 +1248,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
                     {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginBottom:6, marginLeft:6, display:"inline-block" }}>×{multTotal} estructuras</span>}
                     <div style={{ fontWeight:800, fontSize:15, color:C.text, lineHeight:1.3, marginTop:4 }}>{c.nombre||"Sin nombre"}</div>
                     <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.fecha}{c.cliente?` · ${c.cliente}`:""}</div>
+                    {c.categoria && <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{c.categoria}</div>}
                   </div>
                 </div>
                 {/* Stats */}
@@ -1320,8 +1331,20 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
             onBlur={e=>{e.target.style.background="transparent";e.target.style.borderColor=C.border+"66";}}
             title="Click para editar el nombre de la obra"
             style={{ ...INP, fontSize:17, fontWeight:800, background:"transparent",
-              border:`1px solid ${C.border}66`, padding:"2px 6px", width:"auto", minWidth:200, cursor:"text" }} />
+              border:`1px solid ${C.border}66`, padding:"2px 6px", width:360, cursor:"text" }} />
           <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{computo.fecha}</div>
+        </div>
+
+        {/* Tipo de trabajo + Categoría — se heredan solos en Anidado/Presupuesto */}
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+          <select value={computo.tipo_trabajo||"Fabricación"}
+            onChange={e=>updateComputo({...computo,tipo_trabajo:e.target.value})}
+            style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
+            {TIPOS_TRABAJO.map(t=><option key={t}>{t}</option>)}
+          </select>
+          <SelectCategoria value={computo.categoria} onChange={v=>updateComputo({...computo,categoria:v})}
+            style={{ padding:"3px 6px", fontSize:11, width:140 }} />
+          {computo.categoria && <div style={{ fontSize:11, color:C.steel, fontWeight:600 }}>Familia: {familiaDe(computo.categoria)}</div>}
         </div>
 
         {/* Cantidad total del cómputo — multiplicador de estructuras iguales */}
@@ -1336,17 +1359,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
           <span style={{ fontSize:10, color:C.muted }}>estructura{(computo.cantidad_total??1)!==1?"s":""} igual{(computo.cantidad_total??1)!==1?"es":""}</span>
         </div>
 
-        {/* Totales */}
-        {totalesGlobales && totalesGlobales.kg>0 && <>
-          <div style={{ background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", textAlign:"center" }}>
-            <div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:.5 }}>Total obra</div>
-            <div style={{ fontSize:20,fontWeight:800,color:C.ok }}>{n2(totalesGlobales.kg)} kg</div>
-          </div>
-          <div style={{ background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", textAlign:"center" }}>
-            <div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:.5 }}>Superficie</div>
-            <div style={{ fontSize:20,fontWeight:800,color:C.teal }}>{n2(totalesGlobales.sup)} m²</div>
-          </div>
-        </>}
+        {/* Totales — siempre visibles (se van actualizando a medida que se
+            cargan piezas), no solo cuando ya hay peso */}
+        <div style={{ background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", textAlign:"center" }}>
+          <div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:.5 }}>Total obra</div>
+          <div style={{ fontSize:20,fontWeight:800,color:C.ok }}>{n2(totalesGlobales?.kg||0)} kg</div>
+        </div>
+        <div style={{ background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 14px", textAlign:"center" }}>
+          <div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:.5 }}>Superficie</div>
+          <div style={{ fontSize:20,fontWeight:800,color:C.teal }}>{n2(totalesGlobales?.sup||0)} m²</div>
+        </div>
 
         <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
           <button onClick={()=>{saveLS("smeas_anidar_pending",selId);onNidar&&onNidar();}}

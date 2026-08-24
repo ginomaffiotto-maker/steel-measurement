@@ -7,6 +7,7 @@ import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { SelectCategoria, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
 const n3   = v => (Math.round(v * 1000) / 1000).toFixed(3);
@@ -940,7 +941,13 @@ export default function Anidado({ usuario }) {
   const crear=()=>{
     if (!nombre.trim()) return;
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
-    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),grupos,comentarios:[],...stamp()};
+    // Tipo de trabajo/Categoría se heredan solos del cómputo de origen (si
+    // se importó desde uno) — 2026-08-24, pedido de Gino: clasificar desde
+    // el arranque del flujo en vez de recién al presupuestar.
+    const computoOrigen = computoSel ? computos.find(c=>c.id===computoSel) : null;
+    const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),
+      categoria:computoOrigen?.categoria||"", tipo_trabajo:computoOrigen?.tipo_trabajo||"Fabricación",
+      grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
   };
@@ -1006,101 +1013,111 @@ export default function Anidado({ usuario }) {
           onClose={() => setConfirmarDelId(null)}
         />
       )}
+      {!actual && (
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:20 }}>
         <span style={{ fontSize:20 }}>✂️</span>
         <h2 style={{ margin:0,fontSize:18,fontWeight:800,color:C.text }}>Optimizador de Corte</h2>
         <span style={BDG(C.pur,true)}>MÓDULO 3</span>
+        <div style={{ marginLeft:"auto" }}>
+          <button onClick={()=>setCreando(v=>!v)} style={{ ...BTN("primary"),padding:"6px 18px",fontSize:12 }}>+ Nuevo</button>
+        </div>
       </div>
+      )}
 
-      <div style={{ display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap" }}>
-
-        {/* Panel izquierdo */}
-        <div style={{ width:230,flexShrink:0 }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
-            <span style={{ fontSize:12,color:C.muted,textTransform:"uppercase",letterSpacing:.5,fontWeight:700 }}>Anidados</span>
-            <button onClick={()=>setCreando(v=>!v)} style={{ ...BTN("primary"),padding:"4px 12px",fontSize:11 }}>+ Nuevo</button>
+      {!actual && creando&&(
+        <div style={{ background:C.iron,border:`1px solid ${C.accent}44`,borderRadius:10,padding:20,marginBottom:20,maxWidth:480 }}>
+          <div style={{ fontWeight:700, fontSize:14, color:C.accent, marginBottom:14 }}>Nuevo anidado</div>
+          <label style={LBL}>Nombre</label>
+          <input type="text" placeholder="Ej: Pilares CCFC" value={nombre} onChange={e=>setNombre(e.target.value)} onKeyDown={e=>e.key==="Enter"&&crear()} autoFocus style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Fecha</label>
+          <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Cliente</label>
+          <AutocompleteCliente placeholder="Ej: Juan Pérez" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Empresa</label>
+          <AutocompleteEmpresa placeholder="Ej: CCFC" value={empresa} onChange={setEmpresa} style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Obra</label>
+          <input type="text" placeholder="Ej: Nave Industrial" value={obra} onChange={e=>setObra(e.target.value)} style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Importar desde cómputo (opcional)</label>
+          <select value={computoSel} onChange={e=>setComputoSel(e.target.value)} style={{ ...INP,marginBottom:6 }}>
+            <option value="">— vacío —</option>
+            {computos.map(c=><option key={c.id} value={c.id}>{c.nombre} ({c.fecha})</option>)}
+          </select>
+          {computoSel && (computos.find(c=>c.id===computoSel)?.cantidad_total||1)>1 && (
+            <div style={{ fontSize:11, color:C.pur, marginBottom:10 }}>
+              ⚠ Incluye ×{computos.find(c=>c.id===computoSel).cantidad_total} (cantidad total del cómputo)
+            </div>
+          )}
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={crear} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
+            <button onClick={()=>setCreando(false)} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
           </div>
+        </div>
+      )}
 
-          {creando&&(
-            <div style={{ background:C.iron,border:`1px solid ${C.accent}44`,borderRadius:8,padding:12,marginBottom:10 }}>
-              <label style={LBL}>Nombre</label>
-              <input type="text" placeholder="Ej: Pilares CCFC" value={nombre} onChange={e=>setNombre(e.target.value)} onKeyDown={e=>e.key==="Enter"&&crear()} autoFocus style={{ ...INP,marginBottom:8 }}/>
-              <label style={LBL}>Fecha</label>
-              <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
-              <label style={LBL}>Cliente</label>
-              <AutocompleteCliente placeholder="Ej: Juan Pérez" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom:8 }}/>
-              <label style={LBL}>Empresa</label>
-              <AutocompleteEmpresa placeholder="Ej: CCFC" value={empresa} onChange={setEmpresa} style={{ ...INP,marginBottom:8 }}/>
-              <label style={LBL}>Obra</label>
-              <input type="text" placeholder="Ej: Nave Industrial" value={obra} onChange={e=>setObra(e.target.value)} style={{ ...INP,marginBottom:8 }}/>
-              <label style={LBL}>Importar desde cómputo (opcional)</label>
-              <select value={computoSel} onChange={e=>setComputoSel(e.target.value)} style={{ ...INP,marginBottom:6 }}>
-                <option value="">— vacío —</option>
-                {computos.map(c=><option key={c.id} value={c.id}>{c.nombre} ({c.fecha})</option>)}
-              </select>
-              {computoSel && (computos.find(c=>c.id===computoSel)?.cantidad_total||1)>1 && (
-                <div style={{ fontSize:11, color:C.pur, marginBottom:10 }}>
-                  ⚠ Incluye ×{computos.find(c=>c.id===computoSel).cantidad_total} (cantidad total del cómputo)
-                </div>
-              )}
-              <div style={{ display:"flex",gap:6 }}>
-                <button onClick={crear} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
-                <button onClick={()=>setCreando(false)} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
-              </div>
-            </div>
-          )}
+      {!actual && anidados.length>0&&(
+        <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+          <input type="text" placeholder="🔍 Nombre…" value={busqNombre} onChange={e=>setBusqNombre(e.target.value)}
+            style={{ ...INP, width:170, padding:"6px 10px" }}/>
+          <AutocompleteCliente placeholder="🔍 Cliente…" value={busqCliente} onChange={setBusqCliente}
+            style={{ ...INP, width:150, padding:"6px 10px" }}/>
+          <input type="text" placeholder="🔍 Obra…" value={busqObra} onChange={e=>setBusqObra(e.target.value)}
+            style={{ ...INP, width:150, padding:"6px 10px" }}/>
+          <input type="date" value={fDesde} onChange={e=>setFDesde(e.target.value)} title="Desde"
+            style={{ ...INP, width:140, padding:"6px 8px" }}/>
+          <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
+            style={{ ...INP, width:140, padding:"6px 8px" }}/>
+          <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
+            opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
+          <span style={{ fontSize:11, color:C.muted }}>{anidadosFiltrados.length} de {anidados.length}</span>
+        </div>
+      )}
 
-          {anidados.length>0&&(
-            <div style={{ marginBottom:10, display:"flex", flexDirection:"column", gap:5 }}>
-              <input type="text" placeholder="🔍 Nombre…" value={busqNombre} onChange={e=>setBusqNombre(e.target.value)}
-                style={{ ...INP, padding:"5px 8px", fontSize:11 }}/>
-              <div style={{ display:"flex", gap:5 }}>
-                <AutocompleteCliente placeholder="🔍 Cliente…" value={busqCliente} onChange={setBusqCliente}
-                  style={{ ...INP, padding:"5px 6px", fontSize:11, flex:1, minWidth:0 }}/>
-                <input type="text" placeholder="🔍 Obra…" value={busqObra} onChange={e=>setBusqObra(e.target.value)}
-                  style={{ ...INP, padding:"5px 6px", fontSize:11, flex:1, minWidth:0 }}/>
-              </div>
-              <div style={{ display:"flex", gap:5 }}>
-                <input type="date" value={fDesde} onChange={e=>setFDesde(e.target.value)} title="Desde"
-                  style={{ ...INP, padding:"5px 6px", fontSize:10, flex:1, minWidth:0 }}/>
-                <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
-                  style={{ ...INP, padding:"5px 6px", fontSize:10, flex:1, minWidth:0 }}/>
-              </div>
-              <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
-                opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
-            </div>
-          )}
-          {anidados.length===0&&!creando&&<div style={{ color:C.muted,fontSize:12,padding:"12px 0" }}>No hay anidados aún.</div>}
-          {anidados.length>0&&anidadosFiltrados.length===0&&<div style={{ color:C.muted,fontSize:12,padding:"12px 0" }}>Sin resultados.</div>}
+      {!actual && (
+      <>
+        {anidados.length===0&&!creando&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>No hay anidados aún.</div>}
+        {anidados.length>0&&anidadosFiltrados.length===0&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>Sin resultados.</div>}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))", gap:14 }}>
           {anidadosFiltrados.map(a=>{
-            const isA=a.id===selId, nG=a.grupos?.length||0;
+            const nG=a.grupos?.length||0;
             return(
-              <div key={a.id} onClick={()=>setSelId(a.id)} style={{ background:isA?C.accent+"18":C.card,border:`1px solid ${isA?C.accent:C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6,cursor:"pointer" }}>
-                <div style={{ fontWeight:700,fontSize:13,color:isA?C.accent:C.text,marginBottom:2 }}>{a.nombre||"Sin nombre"}</div>
+              <div key={a.id} onClick={()=>setSelId(a.id)}
+                style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,cursor:"pointer",transition:"border-color .15s" }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                <div style={{ fontWeight:700,fontSize:14,color:C.text,marginBottom:4 }}>{a.nombre||"Sin nombre"}</div>
                 <div style={{ fontSize:11,color:C.muted }}>{a.fecha} · {nG} grupo{nG!==1?"s":""}</div>
-                {(a.cliente||a.obra)&&<div style={{ fontSize:10,color:C.steel,marginTop:2 }}>{[a.cliente,a.obra].filter(Boolean).join(" · ")}</div>}
-                {isA&&puedeEliminar(usuario)&&<button onClick={e=>{e.stopPropagation();setConfirmarDelId(a.id);}} style={{ marginTop:6,...BTN("danger"),padding:"2px 8px",fontSize:10 }}>Eliminar</button>}
+                {(a.cliente||a.obra)&&<div style={{ fontSize:11,color:C.steel,marginTop:4 }}>{[a.cliente,a.obra].filter(Boolean).join(" · ")}</div>}
+                {a.categoria&&<div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{a.categoria}</div>}
               </div>
             );
           })}
         </div>
+      </>
+      )}
 
-        {/* Panel derecho */}
-        <div style={{ flex:1,minWidth:0 }}>
-          {!actual&&(
-            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:300,color:C.muted }}>
-              <div style={{ fontSize:40,marginBottom:12 }}>✂️</div>
-              <div style={{ fontSize:14 }}>Seleccioná o creá un anidado</div>
-            </div>
-          )}
-
-          {actual&&(<>
-            <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap" }}>
+      {actual && (
+        <div>
+          <button style={BTN("ghost")} onClick={()=>setSelId(null)}>← Anidados</button>
+          <div>
+            <div style={{ display:"flex",alignItems:"center",gap:12,marginTop:16,marginBottom:16,flexWrap:"wrap" }}>
               <div>
                 <div style={{ fontSize:18,fontWeight:800,color:C.text }}>{actual.nombre}</div>
                 <div style={{ fontSize:12,color:C.muted }}>{actual.fecha}</div>
               </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <select value={actual.tipo_trabajo||"Fabricación"}
+                  onChange={e=>upd({...actual,tipo_trabajo:e.target.value})}
+                  style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
+                  {TIPOS_TRABAJO.map(t=><option key={t}>{t}</option>)}
+                </select>
+                <SelectCategoria value={actual.categoria} onChange={v=>upd({...actual,categoria:v})}
+                  style={{ padding:"3px 6px", fontSize:11, width:140 }} />
+                {actual.categoria && <div style={{ fontSize:9, color:C.muted }}>{familiaDe(actual.categoria)}</div>}
+              </div>
               <div style={{ marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
+                {puedeEliminar(usuario) && (
+                  <button onClick={()=>setConfirmarDelId(actual.id)} style={{ ...BTN("danger"),fontSize:12 }}>Eliminar</button>
+                )}
                 {actual.grupos.length>0&&(
                   <button onClick={calcularTodo} style={{ ...BTN("primary"),fontSize:12 }}>
                     ⚡ Calcular todo ({actual.grupos.length})
@@ -1152,9 +1169,9 @@ export default function Anidado({ usuario }) {
                 onClose={()=>setConfirmarGrupoId(null)}
               />
             )}
-          </>)}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
