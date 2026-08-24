@@ -39,7 +39,7 @@ function temaActivo() {
 }
 export const TEMA_ACTUAL = temaActivo();
 export const TEMAS_DISPONIBLES = [
-  { key: "industrial_dark", label: "Industrial (oscuro) — original" },
+  { key: "industrial_dark", label: "Industrial (oscuro)" },
   { key: "metalsales_light", label: "MetalSales (claro)" },
 ];
 export function cambiarTema(key) {
