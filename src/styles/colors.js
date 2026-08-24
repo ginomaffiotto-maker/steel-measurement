@@ -1,14 +1,68 @@
-// Paleta idéntica a Steel CRM
-export const C = {
-  bg: "#0d0f12", card: "#13161c", iron: "#1e2330", border: "#252a36",
-  steel: "#8fa3b8", steelDk: "#4a5568", accent: "#e85d04", text: "#d4dde8",
-  muted: "#6b7a90", mutedL: "#8fa3b8", ok: "#2ea043", err: "#d73a49",
-  warn: "#f0a500", info: "#1f6feb", pur: "#8b5cf6", gold: "#c9a84c",
-  teal: "#0d9488", pink: "#ec4899"
+// Registro de temas — permite volver al tema actual o sumar uno nuevo por
+// cliente sin tocar el resto de la app: todo lo demás (BTN/INP/CARD/etc.)
+// consume el objeto C sin saber de dónde salió.
+const THEMES = {
+  // El tema original de Steel Measurement — paleta idéntica a steelCRM.
+  industrial_dark: {
+    bg: "#0d0f12", card: "#13161c", iron: "#1e2330", border: "#252a36",
+    steel: "#8fa3b8", steelDk: "#4a5568", accent: "#e85d04", text: "#d4dde8",
+    muted: "#6b7a90", mutedL: "#8fa3b8", ok: "#2ea043", err: "#d73a49",
+    warn: "#f0a500", info: "#1f6feb", pur: "#8b5cf6", gold: "#c9a84c",
+    teal: "#0d9488", pink: "#ec4899",
+    radiusSm: 6, radiusLg: 10,
+    fontSans: "'Inter', sans-serif",
+    fontMono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  },
+  // Basado en la referencia visual de Gino (Lovable, paleta zinc + IBM Plex).
+  // Colores convertidos de OKLCH a hex 1:1 desde la escala zinc de Tailwind.
+  // accent/info/pur/gold/teal/pink: la referencia solo define ok/warn/danger
+  // (monocromo puro) — el resto son criterio propio para no perder las
+  // distinciones de color que ya usa la app (ej. azul = perfiles lineales).
+  metalsales_light: {
+    bg: "#f4f4f5", card: "#fafafa", iron: "#ffffff", border: "#e4e4e7",
+    steel: "#71717a", steelDk: "#52525b", accent: "#18181b", text: "#18181b",
+    muted: "#71717a", mutedL: "#a1a1aa", ok: "#059669", err: "#dc2626",
+    warn: "#d97706", info: "#2563eb", pur: "#8b5cf6", gold: "#b45309",
+    teal: "#0d9488", pink: "#ec4899",
+    radiusSm: 8, radiusLg: 10,
+    fontSans: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
+    fontMono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  },
 };
 
+const TEMA_DEFAULT = "industrial_dark";
+function temaActivo() {
+  try {
+    const t = localStorage.getItem("smeas_tema");
+    return THEMES[t] ? t : TEMA_DEFAULT;
+  } catch { return TEMA_DEFAULT; }
+}
+export const TEMA_ACTUAL = temaActivo();
+export const TEMAS_DISPONIBLES = [
+  { key: "industrial_dark", label: "Industrial (oscuro) — original" },
+  { key: "metalsales_light", label: "MetalSales (claro)" },
+];
+export function cambiarTema(key) {
+  if (!THEMES[key]) return;
+  localStorage.setItem("smeas_tema", key);
+  window.location.reload();
+}
+
+export const C = THEMES[TEMA_ACTUAL];
+
+// Aplica el tema como variables CSS globales — cubre lo que vive fuera de
+// React (fondo de <body>, scrollbar) además de lo que ya usa C.* inline.
+if (typeof document !== "undefined") {
+  const root = document.documentElement.style;
+  root.setProperty("--bg", C.bg);
+  root.setProperty("--text", C.text);
+  root.setProperty("--border", C.border);
+  root.setProperty("--accent", C.accent);
+  root.setProperty("--font-sans", C.fontSans);
+}
+
 export const INP = {
-  background: C.iron, border: `1px solid ${C.border}`, borderRadius: 6,
+  background: C.iron, border: `1px solid ${C.border}`, borderRadius: C.radiusSm,
   padding: "9px 12px", color: C.text, fontSize: 14, width: "100%",
   boxSizing: "border-box", outline: "none",
 };
@@ -32,7 +86,7 @@ export const BDG = (c, sm) => ({
   display: "inline-block", whiteSpace: "nowrap",
 });
 export const CARD = (a) => ({
-  background: C.card, border: `1px solid ${a || C.border}`, borderRadius: 10,
+  background: C.card, border: `1px solid ${a || C.border}`, borderRadius: C.radiusLg,
   padding: 18, marginBottom: 14,
 });
 export const BTN = (variant = "ghost") => {
@@ -42,5 +96,5 @@ export const BTN = (variant = "ghost") => {
     ok:       { background: C.ok + "22", color: C.ok, border: `1px solid ${C.ok}44` },
     danger:   { background: "transparent", color: C.err, border: `1px solid ${C.err}44` },
   };
-  return { ...map[variant], borderRadius: 6, padding: "8px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
+  return { ...map[variant], borderRadius: C.radiusSm, padding: "8px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
 };

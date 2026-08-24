@@ -17,6 +17,139 @@ function filaDetalle(label, val) {
     : "";
 }
 
+// Bloques configurables de la página — orden y on/off editable por instalación
+// (Config), guardado como localStorage `..._pdf_bloques`. Este es el orden y
+// el set por defecto: todo activo, mismo layout que la versión original.
+export const BLOQUES_DEFAULT = [
+  { tipo: "header", activo: true },
+  { tipo: "cliente_proyecto", activo: true },
+  { tipo: "detalle", activo: true },
+  { tipo: "condiciones", activo: true },
+  { tipo: "notas", activo: true },
+  { tipo: "footer", activo: true },
+];
+export const BLOQUES_LABELS = {
+  header: "Encabezado (empresa, N°, fecha)",
+  cliente_proyecto: "Cliente y proyecto",
+  detalle: "Detalle del presupuesto (kg, USD/kg, monto)",
+  condiciones: "Condiciones comerciales",
+  notas: "Notas y cláusulas",
+  footer: "Pie de página",
+};
+
+// Cada función de bloque recibe el `data` completo y devuelve el HTML de esa
+// sección, o "" si no corresponde mostrarla (ej. sin notas cargadas).
+const RENDER_BLOQUE = {
+  header: (data) => `
+  <div class="header">
+    <div>
+      <div class="co-name">${data.empresa || ""}</div>
+      <div class="co-sub">Estructuras Metálicas</div>
+    </div>
+    <div>
+      <div class="pres-label">Presupuesto</div>
+      <div class="pres-num">${data.nro || "—"}</div>
+      <div class="pres-fecha">Fecha: ${fmtD(data.fecha)}</div>
+      ${data.validoHasta ? `<div class="pres-fecha">Válido hasta: ${fmtD(data.validoHasta)}</div>` : ""}
+    </div>
+  </div>`,
+
+  cliente_proyecto: (data) => {
+    const cli = data.cliente || {};
+    const proy = data.proyecto || {};
+    return `
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="section-title">Cliente</div>
+      <table class="info-table">
+        ${filaDetalle("Empresa", cli.empresa)}
+        ${filaDetalle("Contacto", cli.contacto)}
+        ${filaDetalle("Email", cli.email)}
+        ${filaDetalle("Teléfono", cli.telefono)}
+      </table>
+    </div>
+    <div class="info-box">
+      <div class="section-title">Proyecto</div>
+      <table class="info-table">
+        ${filaDetalle("Descripción", proy.descripcion)}
+        ${filaDetalle("Obra", proy.obra)}
+        ${filaDetalle("Tipo de trabajo", proy.tipo)}
+        ${filaDetalle("Categoría", proy.categoria)}
+      </table>
+    </div>
+  </div>`;
+  },
+
+  detalle: (data) => {
+    const items = data.items || [];
+    const filasItems = items.map(it => `
+      <tr>
+        <td>${it.label || "—"}${it.sub ? `<br><span style="font-size:10px;color:#888">${it.sub}</span>` : ""}</td>
+        <td style="text-align:right">${it.kg != null ? fmtN(it.kg) : "—"}</td>
+        <td style="text-align:right">${it.usdKg != null ? Number(it.usdKg).toFixed(2) : "—"}</td>
+        <td>${fmtU(it.totalUSD)}</td>
+      </tr>`).join("");
+    return `
+  <div class="section-title">Detalle del presupuesto</div>
+  <table class="main">
+    <thead>
+      <tr>
+        <th style="width:45%">Descripción</th>
+        <th style="width:18%;text-align:right">KG Cotizados</th>
+        <th style="width:18%;text-align:right">USD / KG</th>
+        <th style="width:19%">Total USD</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filasItems}
+      <tr class="total-row">
+        <td colspan="3">TOTAL PRESUPUESTO</td>
+        <td>${fmtU(data.totalUSD)}</td>
+      </tr>
+    </tbody>
+  </table>`;
+  },
+
+  condiciones: (data) => {
+    const cond = data.condiciones || {};
+    const info = data.infoProyecto || {};
+    const hayAlgo = cond.acabadoSuperficial || (cond.plazoPago !== undefined && cond.plazoPago !== "") || cond.formaPago || cond.moneda || info.estadoObra || info.idCalculo;
+    if (!hayAlgo) return "";
+    return `
+  <div class="detail-grid">
+    <div class="detail-box">
+      <div class="section-title">Condiciones comerciales</div>
+      <table class="info-table">
+        ${filaDetalle("Moneda", cond.moneda)}
+        ${filaDetalle("Forma de pago", cond.plazoPago === 0 ? "Contado" : cond.plazoPago ? cond.plazoPago + " días" : (cond.formaPago || null))}
+        ${filaDetalle("Acabado superficial", cond.acabadoSuperficial)}
+        ${cond.descuentoPct ? filaDetalle("Descuento aplicado", cond.descuentoPct + "%") : ""}
+      </table>
+    </div>
+    <div class="detail-box">
+      <div class="section-title">Información del proyecto</div>
+      <table class="info-table">
+        ${filaDetalle("Estado de obra", info.estadoObra)}
+        ${filaDetalle("ID de cálculo", info.idCalculo)}
+      </table>
+    </div>
+  </div>`;
+  },
+
+  notas: (data) => data.notas
+    ? `<div class="notas"><strong style="color:#92400e">📝 Notas / Cláusulas:</strong> ${data.notas.replace(/\n/g, "<br>")}</div>`
+    : "",
+
+  footer: (data) => {
+    const hoy = new Date().toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return `
+  <div class="footer">
+    <span>${data.empresa || ""} — Generado el ${hoy}</span>
+    <span>Generado con Steel Platform</span>
+  </div>`;
+  },
+};
+
 // data = {
 //   empresa, nro, fecha, validoHasta,
 //   cliente: { empresa, contacto, email, telefono },
@@ -25,23 +158,15 @@ function filaDetalle(label, val) {
 //   totalUSD,
 //   condiciones: { moneda, acabadoSuperficial, plazoPago, formaPago, descuentoPct },
 //   infoProyecto: { estadoObra, idCalculo },
-//   notas   // notas / cláusulas
+//   notas,   // notas / cláusulas
+//   bloques  // opcional — [{ tipo, activo }], orden y on/off de las secciones. Default: BLOQUES_DEFAULT
 // }
 export function buildPresupuestoHTML(data) {
-  const hoy = new Date().toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const items = data.items || [];
-  const cli = data.cliente || {};
-  const proy = data.proyecto || {};
-  const cond = data.condiciones || {};
-  const info = data.infoProyecto || {};
-
-  const filasItems = items.map(it => `
-      <tr>
-        <td>${it.label || "—"}${it.sub ? `<br><span style="font-size:10px;color:#888">${it.sub}</span>` : ""}</td>
-        <td style="text-align:right">${it.kg != null ? fmtN(it.kg) : "—"}</td>
-        <td style="text-align:right">${it.usdKg != null ? Number(it.usdKg).toFixed(2) : "—"}</td>
-        <td>${fmtU(it.totalUSD)}</td>
-      </tr>`).join("");
+  const bloques = data.bloques && data.bloques.length ? data.bloques : BLOQUES_DEFAULT;
+  const cuerpo = bloques
+    .filter(b => b.activo && RENDER_BLOQUE[b.tipo])
+    .map(b => RENDER_BLOQUE[b.tipo](data))
+    .join("\n");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Presupuesto ${data.nro || ""}</title>
@@ -74,87 +199,7 @@ export function buildPresupuestoHTML(data) {
     .footer{margin-top:32px;padding-top:12px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:10px;color:#aaa}
     @media print{body{padding:16px}@page{margin:1.2cm}}
   </style></head><body>
-
-  <div class="header">
-    <div>
-      <div class="co-name">${data.empresa || ""}</div>
-      <div class="co-sub">Estructuras Metálicas</div>
-    </div>
-    <div>
-      <div class="pres-label">Presupuesto</div>
-      <div class="pres-num">${data.nro || "—"}</div>
-      <div class="pres-fecha">Fecha: ${fmtD(data.fecha)}</div>
-      ${data.validoHasta ? `<div class="pres-fecha">Válido hasta: ${fmtD(data.validoHasta)}</div>` : ""}
-    </div>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-box">
-      <div class="section-title">Cliente</div>
-      <table class="info-table">
-        ${filaDetalle("Empresa", cli.empresa)}
-        ${filaDetalle("Contacto", cli.contacto)}
-        ${filaDetalle("Email", cli.email)}
-        ${filaDetalle("Teléfono", cli.telefono)}
-      </table>
-    </div>
-    <div class="info-box">
-      <div class="section-title">Proyecto</div>
-      <table class="info-table">
-        ${filaDetalle("Descripción", proy.descripcion)}
-        ${filaDetalle("Obra", proy.obra)}
-        ${filaDetalle("Tipo de trabajo", proy.tipo)}
-        ${filaDetalle("Categoría", proy.categoria)}
-      </table>
-    </div>
-  </div>
-
-  <div class="section-title">Detalle del presupuesto</div>
-  <table class="main">
-    <thead>
-      <tr>
-        <th style="width:45%">Descripción</th>
-        <th style="width:18%;text-align:right">KG Cotizados</th>
-        <th style="width:18%;text-align:right">USD / KG</th>
-        <th style="width:19%">Total USD</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${filasItems}
-      <tr class="total-row">
-        <td colspan="3">TOTAL PRESUPUESTO</td>
-        <td>${fmtU(data.totalUSD)}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  ${(cond.acabadoSuperficial || (cond.plazoPago !== undefined && cond.plazoPago !== "") || cond.formaPago || cond.moneda || info.estadoObra || info.idCalculo) ? `
-  <div class="detail-grid">
-    <div class="detail-box">
-      <div class="section-title">Condiciones comerciales</div>
-      <table class="info-table">
-        ${filaDetalle("Moneda", cond.moneda)}
-        ${filaDetalle("Forma de pago", cond.plazoPago === 0 ? "Contado" : cond.plazoPago ? cond.plazoPago + " días" : (cond.formaPago || null))}
-        ${filaDetalle("Acabado superficial", cond.acabadoSuperficial)}
-        ${cond.descuentoPct ? filaDetalle("Descuento aplicado", cond.descuentoPct + "%") : ""}
-      </table>
-    </div>
-    <div class="detail-box">
-      <div class="section-title">Información del proyecto</div>
-      <table class="info-table">
-        ${filaDetalle("Estado de obra", info.estadoObra)}
-        ${filaDetalle("ID de cálculo", info.idCalculo)}
-      </table>
-    </div>
-  </div>` : ""}
-
-  ${data.notas ? `<div class="notas"><strong style="color:#92400e">📝 Notas / Cláusulas:</strong> ${data.notas.replace(/\n/g, "<br>")}</div>` : ""}
-
-  <div class="footer">
-    <span>${data.empresa || ""} — Generado el ${hoy}</span>
-    <span>Generado con Steel Platform</span>
-  </div>
-
+  ${cuerpo}
   <script>window.onload = () => window.print();</script>
   </body></html>`;
 }
