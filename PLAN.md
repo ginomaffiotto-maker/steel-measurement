@@ -2593,7 +2593,7 @@ fallar a Tiao en silencio:
   corregido. Se lo planteé a Gino como decisión aparte (instalador
   liviano tipo Inno Setup vs. Electron) — sin definir todavía cuál.
 
-## §9.40 — Desplegado en Vercel (reemplaza el plan de instalador de escritorio) (2026-08-24)
+## §9.40 — Desplegado en Vercel (reemplaza el plan de instalador de escritorio) (2026-08-23)
 
 Gino planteó un instalador de escritorio (Tauri/Electron) para que el equipo
 pueda tener la app en su PC — se le señaló que eso no acerca el objetivo real
@@ -2627,7 +2627,7 @@ pueda tener la app en su PC — se le señaló que eso no acerca el objetivo rea
   evaluar si conviene conectar el repo a GitHub para que se despliegue solo
   en cada commit, más adelante.
 
-## §9.41 — Comentarios internos en Cómputo/Anidado/Presupuesto (2026-08-24)
+## §9.41 — Comentarios internos en Cómputo/Anidado/Presupuesto (2026-08-23)
 
 Pedido de Gino, mismo patrón que steelCRM (`{id, autor, texto, fecha, hora}`)
 pero con una mejora de UX consultada y decidida en conjunto: **guardado
@@ -2661,7 +2661,7 @@ esperar al Guardar general) que ya había confundido a Gino una vez.
 - Verificado en vivo de punta a punta con la cuenta de prueba: crear,
   comentar inmediatamente, y comentario aparece guardado sin error.
 
-## §9.42 — PWA instalable + logo real en la pestaña (2026-08-24)
+## §9.42 — PWA instalable + logo real en la pestaña (2026-08-23)
 
 Pedido de Gino: acceso directo al escritorio al primer uso ("hacelo para
 los dos" — steelCRM lo replica la otra sesión) + logo faltante en la
@@ -2702,7 +2702,7 @@ pestaña del navegador (steelCRM sí tenía uno, Measurement no).
   navegador) — el manifest y el favicon ya están verificados server-side,
   falta la confirmación visual de Gino en su propio navegador.
 
-## §9.43 — Sidebar responsiva (2026-08-24)
+## §9.43 — Sidebar responsiva (2026-08-23)
 
 Mismo pedido que steelCRM (relayado por Gino a las dos sesiones). Antes
 solo tenía colapso manual (botón ◀/▶). Replicado 1:1 el patrón que ya
