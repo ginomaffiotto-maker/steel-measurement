@@ -33,6 +33,12 @@ const COLUMNAS_PRESUPUESTO_SM = [
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro"];
 const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra"];
+const COLUMNAS_ITEM_PRESUPUESTO = [
+  "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
+];
+// "" en un campo numeric rompe el insert (Postgres no lo coerciona a
+// null solo) — encontrado en cantidad_total de un cómputo viejo.
+const numOrNull = (v) => (v === "" || v === undefined ? null : v);
 const soloColumnas = (obj, columnas) => {
   const row = {};
   for (const k of columnas) if (obj[k] !== undefined) row[k] = obj[k];
@@ -364,8 +370,9 @@ export const saveDBItem = async (presupuestoId, item) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const {
     hierros, mat_generales, mo_fabricacion, mo_montajes, terc_fabricacion, terc_montajes,
-    traslados, corte_pantografo, trat_superficie, ...row
+    traslados, corte_pantografo, trat_superficie,
   } = item;
+  const row = soloColumnas(item, COLUMNAS_ITEM_PRESUPUESTO);
 
   const { data: savedItem, error: eItem } = await supabase
     .from("items_presupuesto_sm").upsert({ ...row, presupuesto_id: presupuestoId }).select().single();
@@ -485,6 +492,7 @@ export const saveDBComputo = async (computo) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const { items } = computo;
   const row = soloColumnas(conIdValido(computo), COLUMNAS_COMPUTO);
+  row.cantidad_total = numOrNull(row.cantidad_total);
   const { data: savedComputo, error: eC } = await supabase.from("computos").upsert(row).select().single();
   if (eC) throw eC;
   const computoId = savedComputo.id;
@@ -750,7 +758,13 @@ const TARIFARIO_TABLAS = [
 ];
 
 const obtenerTenantId = async () => {
-  const { data, error } = await supabase.from("profiles").select("tenant_id").single();
+  // Sin filtrar por el usuario actual, esto seleccionaba TODOS los
+  // profiles visibles por RLS (cualquier cuenta del mismo tenant) —
+  // con más de una cuenta real (ej. la de prueba compartida), .single()
+  // fallaba con "Cannot coerce the result to a single JSON object"
+  // (encontrado migrando datos reales, 2026-08-24).
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase.from("profiles").select("tenant_id").eq("id", user.id).single();
   if (error) throw error;
   return data.tenant_id;
 };

@@ -2839,6 +2839,36 @@ haber andado bien acá, más allá de cualquier fix de sesión.
 - Build limpio, desplegado a producción. **Falta que Gino corra el SQL en
   Supabase y vuelva a migrar** — sin eso, nada de este fix tiene efecto.
 
+## §9.47 — Segunda vuelta del fix de migración: items, cantidad_total, tenant ambiguo (2026-08-24)
+
+Tras el fix de §9.46, Gino corrió el SQL y volvió a migrar: Clientes,
+Historial, Biblioteca y Anidados quedaron completos (2/2, 235/235,
+722/722, 8/8). Quedaron 3 problemas nuevos, visibles recién con el ruido
+anterior ya despejado.
+
+- **`items_presupuesto_sm` sin `anidado_id`**: un ítem se puede vincular a
+  un anidado igual que a un cómputo (`computo_id`, columna que sí
+  existía) — la app local lo soporta desde antes, la tabla nunca tuvo la
+  columna. Migración nueva: `alter table items_presupuesto_sm add column
+  anidado_id uuid references anidados(id) on delete set null`.
+  `horas_especiales` (rubro sin UI para agregar filas, ya documentado
+  como "siempre vacío en la práctica") se colaba igual en el insert
+  porque `saveDBItem` no lo excluía de `row` — nuevo
+  `COLUMNAS_ITEM_PRESUPUESTO` (mismo patrón de lista blanca).
+- **`saveDBComputo`: `cantidad_total: ""`** en un cómputo viejo rompía el
+  insert (`invalid input syntax for type numeric: ''`) — Postgres no
+  coerciona string vacío a null solo. Nuevo helper `numOrNull()`.
+- **El bug real de "Tarifario: error" (recién visible con texto claro
+  esta vuelta — "Cannot coerce the result to a single JSON object")**:
+  `obtenerTenantId()` hacía `.from("profiles").select("tenant_id")` SIN
+  filtrar por el usuario actual — con una sola cuenta en el tenant nunca
+  se notó, pero con más de una (la cuenta de prueba compartida que se usó
+  días atrás sigue en el mismo tenant) devolvía más de una fila y
+  `.single()` explotaba. Fix: filtra por `auth.getUser().id` antes de
+  pedir `.single()`.
+- Build limpio, desplegado a producción. Falta que Gino corra la línea
+  nueva del SQL y vuelva a migrar una vez más.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
