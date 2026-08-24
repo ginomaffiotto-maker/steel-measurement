@@ -2897,6 +2897,31 @@ rechaza `""` en cualquier columna que no sea texto.
   `anidado_id` (SQL de §9.47) ya se corrió del lado de Gino — el resumen
   que mandó todavía mostraba "column not found" para eso.
 
+## §9.49 — Referencia huérfana a un id ya renombrado (2026-08-24)
+
+Cuarta y última vuelta del fix de migración: quedaba 1 solo error,
+"Presupuesto P-001: invalid input syntax for type uuid: 'seed_anid_001'".
+
+- Causa: `normalizarIds` (§9.47) corrige el `id` de un anidado con id
+  viejo, pero un ÍTEM de presupuesto lo referencia por separado
+  (`anidado_id`) — esa referencia no se actualiza sola. En una migración
+  desde cero (misma corrida) esto se resuelve con un mapa id-viejo→
+  id-nuevo aplicado a los ítems antes de subirlos (reordenado además:
+  cómputos y anidados se normalizan y suben ANTES que presupuestos, para
+  que el mapa exista a tiempo y la FK ya esté satisfecha). Pero acá el
+  anidado ya se había renombrado en una corrida ANTERIOR (antes de que
+  existiera el mapa) — el id viejo ya no está en ningún lado para
+  reconstruir la referencia.
+- Red de seguridad agregada en `soloColumnas()`: si un campo de
+  referencia (`cliente_id`/`computo_id`/`anidado_id`/`clonado_de_id`) no
+  es un uuid válido y no se pudo corregir con el mapa, se suelta a `null`
+  en vez de hacer fallar todo el presupuesto por un vínculo que de
+  cualquier forma ya no apunta a nada real. `"seed_anid_001"` en particular
+  además pinta a resto de un click en "Seed datos prueba" (botón dev-only
+  que ya se decidió no tocar el 2026-08-16) mezclado con datos reales —
+  perder ese vínculo puntual no es una pérdida real.
+- Build limpio, desplegado a producción.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

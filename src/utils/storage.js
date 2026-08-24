@@ -48,9 +48,21 @@ const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];
+// Referencias a otro registro por id — si quedaron apuntando a un id
+// viejo que ya no existe en ningún lado (ej. un anidado renombrado en una
+// corrida de migración anterior, cuyo id viejo no se pudo reconstruir
+// retroactivamente), es más seguro soltar la referencia que hacer
+// fallar todo el presupuesto por un vínculo que de todos modos ya no
+// apunta a nada real.
+const CAMPOS_REF_UUID = new Set(["cliente_id", "computo_id", "anidado_id", "clonado_de_id"]);
 const soloColumnas = (obj, columnas) => {
   const row = {};
-  for (const k of columnas) if (obj[k] !== undefined) row[k] = obj[k] === "" ? null : obj[k];
+  for (const k of columnas) {
+    if (obj[k] === undefined) continue;
+    let v = obj[k] === "" ? null : obj[k];
+    if (v != null && CAMPOS_REF_UUID.has(k) && !UUID_RE.test(String(v))) v = null;
+    row[k] = v;
+  }
   return row;
 };
 
@@ -856,15 +868,26 @@ export const useTarifarioConNube = () => {
 // saveDBItem(p.id,...) más abajo use el mismo id que terminó subiendo el
 // presupuesto/cómputo/anidado dueño, y para que ediciones futuras (Fase 3)
 // ya encuentren el id bueno en vez de volver a fallar cada vez.
+// Devuelve además un mapa id-viejo → id-nuevo: los ítems de presupuesto
+// referencian cómputos/anidados por id (computo_id/anidado_id) — sin este
+// mapa, corregir el id del cómputo/anidado por un lado deja la referencia
+// del ítem apuntando a un id que ya no existe en ningún lado (encontrado
+// con "seed_anid_001" como anidado_id de un ítem real, 2026-08-24).
 const normalizarIds = (key) => {
   const arr = loadLS(key, []);
   let cambio = false;
+  const mapa = new Map();
   const normalizado = arr.map((r) => {
-    if (r.id && !UUID_RE.test(String(r.id))) { cambio = true; return { ...r, id: uid() }; }
+    if (r.id && !UUID_RE.test(String(r.id))) {
+      const nuevo = uid();
+      mapa.set(r.id, nuevo);
+      cambio = true;
+      return { ...r, id: nuevo };
+    }
     return r;
   });
   if (cambio) saveLS(key, normalizado);
-  return normalizado;
+  return { arr: normalizado, mapa };
 };
 
 export const migrarTodoALaNube = async (onProgress) => {
@@ -885,20 +908,11 @@ export const migrarTodoALaNube = async (onProgress) => {
   }
   log(`Clientes: ${resumen.clientes.ok}/${resumen.clientes.total}`);
 
-  const presupuestos = normalizarIds("smeas_presupuestos");
-  resumen.presupuestos.total = presupuestos.length;
-  for (const p of presupuestos) {
-    try {
-      const cliente_id = p.cliente ? await resolverClienteId(p.cliente) : null;
-      const { cliente, clonado_de, items, ...resto } = p;
-      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
-      for (const item of items || []) await saveDBItem(p.id, item);
-      resumen.presupuestos.ok++;
-    } catch (e) { resumen.errores.push(`Presupuesto ${p.nro || p.id}: ${e.message || e}`); }
-  }
-  log(`Presupuestos: ${resumen.presupuestos.ok}/${resumen.presupuestos.total}`);
-
-  const computos = normalizarIds("smeas_computos");
+  // Cómputos y anidados se normalizan y suben ANTES que presupuestos: sus
+  // ítems los referencian por id (computo_id/anidado_id), así que tienen
+  // que existir ya en la base (FK) y con el id ya corregido (para poder
+  // reescribir la referencia del ítem con el mapa de abajo).
+  const { arr: computos, mapa: mapaComputos } = normalizarIds("smeas_computos");
   resumen.computos.total = computos.length;
   for (const c of computos) {
     try {
@@ -910,7 +924,7 @@ export const migrarTodoALaNube = async (onProgress) => {
   }
   log(`Cómputos: ${resumen.computos.ok}/${resumen.computos.total}`);
 
-  const anidados = normalizarIds("smeas_anidados");
+  const { arr: anidados, mapa: mapaAnidados } = normalizarIds("smeas_anidados");
   resumen.anidados.total = anidados.length;
   for (const a of anidados) {
     try {
@@ -921,6 +935,28 @@ export const migrarTodoALaNube = async (onProgress) => {
     } catch (e) { resumen.errores.push(`Anidado ${a.nombre || a.id}: ${e.message || e}`); }
   }
   log(`Anidados: ${resumen.anidados.ok}/${resumen.anidados.total}`);
+
+  const { arr: presupuestos } = normalizarIds("smeas_presupuestos");
+  resumen.presupuestos.total = presupuestos.length;
+  for (const p of presupuestos) {
+    try {
+      const cliente_id = p.cliente ? await resolverClienteId(p.cliente) : null;
+      const { cliente, clonado_de, items, ...resto } = p;
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
+      for (const item of items || []) {
+        const itemCorregido = { ...item };
+        if (itemCorregido.computo_id && mapaComputos.has(itemCorregido.computo_id)) {
+          itemCorregido.computo_id = mapaComputos.get(itemCorregido.computo_id);
+        }
+        if (itemCorregido.anidado_id && mapaAnidados.has(itemCorregido.anidado_id)) {
+          itemCorregido.anidado_id = mapaAnidados.get(itemCorregido.anidado_id);
+        }
+        await saveDBItem(p.id, itemCorregido);
+      }
+      resumen.presupuestos.ok++;
+    } catch (e) { resumen.errores.push(`Presupuesto ${p.nro || p.id}: ${e.message || e}`); }
+  }
+  log(`Presupuestos: ${resumen.presupuestos.ok}/${resumen.presupuestos.total}`);
 
   const trabajos = loadLS("smeas_historial", []);
   resumen.historial.total = trabajos.length;
