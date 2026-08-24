@@ -2759,6 +2759,30 @@ avisó para revisar acá.
   errores de consola.
 - Build limpio, desplegado a producción.
 
+## §9.45 — Íconos PNG reales para el criterio de instalabilidad (2026-08-23)
+
+La otra sesión encontró, probando en vivo en steelCRM, que el manifest
+con un solo ícono SVG no le alcanzaba a Chrome para disparar el aviso
+automático de instalar (`beforeinstallprompt`) — hace falta al menos un
+PNG real en 192x192 y 512x512, el SVG solo no cumple el criterio aunque
+esté bien referenciado.
+
+- `public/logo192.png` / `logo512.png` (nuevos): generados con
+  PowerShell + `System.Drawing` (GDI+), sin ImageMagick/sharp — se
+  redibujó el mismo diseño del `icon.svg` (triángulo/escuadra + ticks +
+  círculo, acento `#e85d04` sobre `#0d0f12`) como formas vectoriales
+  (`DrawPolygon`/`DrawLine`/`FillEllipse`) en vez de rasterizar el SVG
+  directamente, ya que `System.Drawing` no tiene parser de SVG nativo.
+  Revisado visualmente antes de subir — coincide con el diseño original.
+- `manifest.json`: los PNG van primero (`purpose: "any"`), el SVG queda
+  como `purpose: "maskable"` de respaldo. `index.html` suma
+  `<link rel="icon" type="image/png" sizes="192x192">` y
+  `apple-touch-icon` ahora apunta al PNG (antes al SVG, que iOS no
+  soporta bien para esto).
+- Build limpio, desplegado a producción, verificado que
+  `manifest.json`/`logo512.png` responden bien en el sitio real y no hay
+  errores de consola.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
