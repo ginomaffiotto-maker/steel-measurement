@@ -2713,6 +2713,52 @@ pudiendo expandirla a mano. `SW` (ancho del sidebar) ya dependía de
 `collapsed`, así que el contenido principal se reacomoda solo sin tocar
 nada más. Build limpio, desplegado a producción.
 
+## §9.44 — Fix real: Fase 5 vacía en origen nuevo (Vercel) + service worker para instalar (2026-08-23)
+
+Gino reportó, probando en `steel-measurement.vercel.app` (origen sin nada
+en localStorage): no ve NADA de sus datos. La otra sesión encontró y
+corrigió el mismo síntoma en steelCRM (efectos de Fase 5 con
+`useEffect(..., [])` disparando al montar App.js, antes de que
+`usuarioActivo` saliera de `null` — sin sesión, RLS bloqueaba todo) y
+avisó para revisar acá.
+
+- **Revisado, no es el mismo bug de raíz**: en Measurement, `App.js` gatea
+  todo el árbol con `if (!usuario) return <Login/>` — los componentes que
+  llaman a los hooks de Fase 5 (`useMergePresupuestosNube`,
+  `useMergeComputosNube`, etc.) ni siquiera existen en el DOM hasta
+  DESPUÉS de que `onLogin(local)` se dispara, y eso solo pasa tras
+  `await supabase.auth.signInWithPassword(...)` exitoso (mismo `Login`
+  llega a consultar `profiles` con RLS antes de eso). El bug específico de
+  steelCRM (montar antes de loguear) no debería reproducirse acá.
+- **Igual se blindó** (`esperarSesion()`, nuevo helper en `storage.js`):
+  cada uno de los 8 hooks de Fase 5 ahora espera
+  `supabase.auth.getSession()` antes de consultar — cierra un caso
+  relacionado pero distinto (recargar una pestaña ya logueada: `usuario`
+  se restaura sincrónico desde `sessionStorage`, pero supabase-js recién
+  termina de rehidratar la sesión persistida de forma asíncrona). Costo
+  cero en el caso que ya andaba bien (login fresco, sesión ya lista).
+- **Sospecha más fuerte, sin confirmar todavía**: ya había quedado
+  anotado sin resolver que la migración de Fase 4 de Measurement pudo
+  haber subido datos VACÍOS por el bug de origen `localhost` vs
+  `127.0.0.1` de ese mismo día (`loadLS` en `migrarTodoALaNube` lee el
+  localStorage de la pestaña donde se corre el botón — si esa pestaña
+  era `127.0.0.1` y los datos reales vivían en `localhost`, la migración
+  reporta "sin errores" pero sube 0 filas reales). Si Supabase
+  genuinamente no tiene los datos, ningún fix de timing en el frontend
+  soluciona nada — hay que re-correr "Migrar todo a la nube" desde una
+  pestaña con los datos reales y confirmar en el Table Editor. **Avisado
+  a Gino directamente, pendiente que lo confirme.**
+- **Service worker nuevo** (`public/service-worker.js` + registro en
+  `src/index.js`): la otra sesión encontró que el manifest solo no
+  alcanza para que Chrome dispare el aviso de instalación automático —
+  hace falta un service worker con fetch handler registrado. Mismo
+  patrón que aplicaron en steelCRM: sin caché, cada pedido pasa directo a
+  la red (`event.respondWith(fetch(event.request))`), cero riesgo de
+  servir una versión vieja. Verificado en producción: se registra
+  (`serviceWorker.getRegistrations()` confirma el script activo), sin
+  errores de consola.
+- Build limpio, desplegado a producción.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

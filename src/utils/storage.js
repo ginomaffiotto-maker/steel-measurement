@@ -9,6 +9,22 @@ import { supabase } from "./supabaseClient";
 // que se inserte una fila nueva dejando que la base genere el id.
 const sinId = (obj) => { const { id, ...resto } = obj; return resto; };
 
+// Barrera de arranque para Fase 5 (2026-08-23, tras el bug de origen vacío en
+// Vercel): un `useEffect(..., [])` corre al MONTAR, pero supabase-js recién
+// termina de restaurar la sesión persistida (localStorage del cliente auth)
+// de forma asíncrona — en un origen nuevo con `usuario` ya restaurado
+// sincrónicamente de sessionStorage, una query podía salir antes de que el
+// cliente tuviera el JWT adjunto, RLS la bloqueaba, y devolvía vacío en
+// silencio (mismo bug de fondo que encontró la sesión de steelCRM, distinta
+// causa concreta acá). `getSession()` espera esa inicialización si todavía
+// está en curso — usar esto como primera línea de cualquier efecto de
+// Fase 5 antes de consultar la base.
+const esperarSesion = async () => {
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getSession();
+  return !!data?.session;
+};
+
 export const loadLS = (k, d) => {
   try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch { return d; }
 };
@@ -99,10 +115,13 @@ export const useListaClientes = () => {
   const [lista, setLista] = useState(() => _cacheListaClientes || loadClientes());
   useEffect(() => {
     let vivo = true;
-    loadClientesConNube().then((l) => {
+    (async () => {
+      await esperarSesion();
+      if (!vivo) return;
+      const l = await loadClientesConNube();
       _cacheListaClientes = l;
       if (vivo) setLista(l);
-    });
+    })();
     return () => { vivo = false; };
   }, []);
   return lista;
@@ -164,14 +183,17 @@ export const useListaEmpresas = () => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
-    loadDBClientes()
-      .then((rows) => {
-        const empresas = Array.from(new Set((rows || []).map((r) => r.empresa).filter(Boolean)))
-          .sort((a, b) => a.localeCompare(b, "es"));
-        _cacheListaEmpresas = empresas;
-        if (vivo) setLista(empresas);
-      })
-      .catch(() => {});
+    (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
+      loadDBClientes()
+        .then((rows) => {
+          const empresas = Array.from(new Set((rows || []).map((r) => r.empresa).filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b, "es"));
+          _cacheListaEmpresas = empresas;
+          if (vivo) setLista(empresas);
+        })
+        .catch(() => {});
+    })();
     return () => { vivo = false; };
   }, []);
   return lista;
@@ -207,6 +229,7 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
     if (!supabase) return;
     let vivo = true;
     (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
       try {
         const remotos = await loadDBPresupuestosSM();
         let faltantes = [];
@@ -394,6 +417,7 @@ export const useMergeComputosNube = (setComputos) => {
     if (!supabase) return;
     let vivo = true;
     (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
       try {
         const remotos = await loadDBComputos();
         let faltantes = [];
@@ -512,6 +536,7 @@ export const useMergeAnidadosNube = (setAnidados) => {
     if (!supabase) return;
     let vivo = true;
     (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
       try {
         const remotos = await loadDBAnidados();
         let faltantes = [];
@@ -551,18 +576,21 @@ export const useMergeHistorialNube = (setTrabajos) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
-    loadDBHistorialTrabajos()
-      .then((remotos) => {
-        if (!vivo) return;
-        setTrabajos((local) => {
-          const porId = new Map(local.map((t) => [t.id, t]));
-          for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
-          return Array.from(porId.values());
+    (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
+      loadDBHistorialTrabajos()
+        .then((remotos) => {
+          if (!vivo) return;
+          setTrabajos((local) => {
+            const porId = new Map(local.map((t) => [t.id, t]));
+            for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
+            return Array.from(porId.values());
+          });
+        })
+        .catch((e) => {
+          console.warn("[Fase 5] No se pudo leer el historial de la nube, usando solo local:", e.message || e);
         });
-      })
-      .catch((e) => {
-        console.warn("[Fase 5] No se pudo leer el historial de la nube, usando solo local:", e.message || e);
-      });
+    })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -610,18 +638,21 @@ export const useMergeBibliotecaNube = (tipo, setItems) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
-    loadDBBiblioteca(tipo)
-      .then((remotos) => {
-        if (!vivo) return;
-        setItems((local) => {
-          const porId = new Map(local.map((i) => [i.id, i]));
-          for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
-          return Array.from(porId.values());
+    (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
+      loadDBBiblioteca(tipo)
+        .then((remotos) => {
+          if (!vivo) return;
+          setItems((local) => {
+            const porId = new Map(local.map((i) => [i.id, i]));
+            for (const r of remotos || []) if (!porId.has(r.id)) porId.set(r.id, r);
+            return Array.from(porId.values());
+          });
+        })
+        .catch((e) => {
+          console.warn(`[Fase 5] No se pudo leer biblioteca (${tipo}) de la nube, usando solo local:`, e.message || e);
         });
-      })
-      .catch((e) => {
-        console.warn(`[Fase 5] No se pudo leer biblioteca (${tipo}) de la nube, usando solo local:`, e.message || e);
-      });
+    })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo]);
@@ -742,14 +773,17 @@ export const useTarifarioConNube = () => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
-    loadDBTarifario()
-      .then((t) => {
-        _cacheTarifario = t;
-        if (vivo) setTarifario(t);
-      })
-      .catch((e) => {
-        console.warn("[Fase 5] No se pudo leer el tarifario de la nube, usando el local:", e.message || e);
-      });
+    (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
+      loadDBTarifario()
+        .then((t) => {
+          _cacheTarifario = t;
+          if (vivo) setTarifario(t);
+        })
+        .catch((e) => {
+          console.warn("[Fase 5] No se pudo leer el tarifario de la nube, usando el local:", e.message || e);
+        });
+    })();
     return () => { vivo = false; };
   }, []);
   return [tarifario, setTarifario];
