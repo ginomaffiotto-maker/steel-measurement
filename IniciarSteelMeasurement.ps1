@@ -5,16 +5,15 @@
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $dir
 
-# CreateNoWindow=true evita que la consola llegue a crearse (no es lo mismo
-# que crearla y ocultarla, que es lo que hacía Start-Process -WindowStyle
-# Hidden y seguía dando un parpadeo visible).
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = "cmd.exe"
-$psi.Arguments = '/c "Iniciar Steel Measurement.bat"'
-$psi.WorkingDirectory = $dir
-$psi.CreateNoWindow = $true
-$psi.UseShellExecute = $false
-[System.Diagnostics.Process]::Start($psi) | Out-Null
+# Se lanza el .bat directo como FileName (no envuelto en "cmd.exe /c
+# ""...""") porque el nombre tiene espacios ("Iniciar Steel Measurement.bat")
+# y esa combinación dispara un bug de parseo clásico de cmd.exe: toma
+# "Iniciar" como si fuera el comando y el resto como argumentos, y todo
+# falla en silencio (encontrado 2026-08-23 probando esto en la práctica,
+# no en teoría — el .bat nunca llegaba a escribir ni su propio log).
+# Start-Process -WindowStyle Hidden sí sigue mostrando un parpadeo de
+# consola brevísimo, pero es preferible a que el launcher no arranque.
+Start-Process -FilePath "Iniciar Steel Measurement.bat" -WorkingDirectory $dir -WindowStyle Hidden
 
 function Wait-Port($port, $maxSeconds) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
