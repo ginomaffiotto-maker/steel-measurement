@@ -1,0 +1,12 @@
+{
+  "short_name": "Steel Measurement",
+  "name": "Steel Measurement — Cómputo y Presupuestos",
+  "icons": [
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0d0f12",
+  "background_color": "#0d0f12"
+}

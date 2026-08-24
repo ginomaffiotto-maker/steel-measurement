@@ -2661,6 +2661,47 @@ esperar al Guardar general) que ya había confundido a Gino una vez.
 - Verificado en vivo de punta a punta con la cuenta de prueba: crear,
   comentar inmediatamente, y comentario aparece guardado sin error.
 
+## §9.42 — PWA instalable + logo real en la pestaña (2026-08-24)
+
+Pedido de Gino: acceso directo al escritorio al primer uso ("hacelo para
+los dos" — steelCRM lo replica la otra sesión) + logo faltante en la
+pestaña del navegador (steelCRM sí tenía uno, Measurement no).
+
+- Al revisar, Measurement no tenía **nada** de esto: `public/` solo tenía
+  `index.html`, sin favicon, sin manifest, sin ningún ícono. Se detectó
+  además que el "logo" de steelCRM no es un logo real — son los
+  `logo192.png`/`logo512.png` del boilerplate de Create React App sin
+  personalizar (el átomo de React), con `manifest.json` todavía diciendo
+  `"name": "Create React App Sample"`. Avisado a la otra sesión para que
+  no lo replique tal cual — el pedido real es un ícono de marca para cada
+  sistema, no copiar el placeholder.
+- **`public/icon.svg`** (nuevo): marca geométrica simple — escuadra +
+  ticks de regla + agujero, en el color de acento (`#e85d04`) sobre fondo
+  oscuro (`#0d0f12`), mismo lenguaje visual que el emoji 📐 que ya usa el
+  login. Un solo SVG para favicon + manifest (`sizes: "any"`, con variante
+  `purpose: "maskable"`) — sin PNG rasterizado: no hay ImageMagick/sharp/
+  Inkscape instalado en esta máquina, y Chrome/Edge de escritorio (el
+  target real, no iOS) soportan SVG en `<link rel="icon">` y en
+  `manifest.icons` sin problema. Si más adelante hace falta soporte
+  serio de iOS/Android (ícono en la home real, no solo la pestaña), ahí
+  sí conviene generar PNGs de verdad en 192/512.
+- **`public/manifest.json`** (nuevo): `name`/`short_name` reales,
+  `display: "standalone"`, `theme_color`/`background_color` en el fondo
+  oscuro de la app (no el blanco/negro genérico de CRA).
+  `public/index.html`: agregado `<link rel="icon">`,
+  `<link rel="manifest">`, `<link rel="apple-touch-icon">` y
+  `<meta name="theme-color">` — antes no tenía ninguno de los cuatro.
+- Verificado: el dev server ya corriendo sirvió los 3 archivos nuevos sin
+  reiniciar (CRA sirve `public/` como estático, no pasa por webpack). Build
+  de producción limpio, redeploy a Vercel, y confirmado en el sitio público
+  real (`https://steel-measurement.vercel.app/manifest.json` responde bien,
+  sin errores de consola relacionados a manifest/ícono).
+- **Pendiente de confirmar con Gino**: que Chrome/Edge le ofrezca el ícono
+  ⊕ de instalar en la barra de direcciones al entrar al sitio real, y que
+  el atajo que crea abra la app en su propia ventana (sin barra de
+  navegador) — el manifest y el favicon ya están verificados server-side,
+  falta la confirmación visual de Gino en su propio navegador.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
