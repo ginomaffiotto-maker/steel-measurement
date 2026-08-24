@@ -49,6 +49,8 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
   const [editId, setEditId] = useState(null);
   const [rolEdit, setRolEdit] = useState("vendedor");
   const [nombreEdit, setNombreEdit] = useState("");
+  const [comandoEliminar, setComandoEliminar] = useState("");
+  const [comandoEliminarCopiado, setComandoEliminarCopiado] = useState(false);
   const objDel = usuarios.find(u => u.id === confirmarDelId);
   const admins = usuarios.filter(u => u.rol === "admin");
 
@@ -62,7 +64,17 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
     }
     setEditId(null);
   };
-  const del = (id) => { setUsuarios(prev => prev.filter(u => u.id !== id)); setConfirmarDelId(null); };
+  // Borrar acá solo saca a la persona de la lista local — no alcanza para
+  // impedirle loguearse de nuevo, porque revocar la cuenta real de Supabase
+  // Auth necesita la service_role key (nunca puede tocar el navegador). Si
+  // tenía cuenta real (profileId), arma el comando para eliminar-usuario.mjs.
+  const del = (id) => {
+    const u = usuarios.find(x => x.id === id);
+    setUsuarios(prev => prev.filter(x => x.id !== id));
+    setConfirmarDelId(null);
+    if (u?.profileId && u?.email) setComandoEliminar(`$env:EMAIL_ELIMINAR = "${u.email}"\nnode scripts/eliminar-usuario.mjs`);
+  };
+  const copiarComandoEliminar = () => { navigator.clipboard.writeText(comandoEliminar).then(() => { setComandoEliminarCopiado(true); setTimeout(() => setComandoEliminarCopiado(false), 2000); }); };
 
   return (
     <div>
@@ -87,6 +99,18 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
         );
       })}
 
+      {comandoEliminar && (
+        <div style={{ background:C.err+"0e", borderRadius:8, padding:"10px 12px", border:`1px solid ${C.err}44`, marginTop:8 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:C.err, marginBottom:6 }}>⚠ Falta revocar el acceso real</div>
+          <pre style={{ margin:0, fontFamily:"monospace", fontSize:11, color:C.muted, whiteSpace:"pre-wrap" }}>{comandoEliminar}</pre>
+          <div style={{ display:"flex", gap:12, marginTop:8, alignItems:"center" }}>
+            <button onClick={copiarComandoEliminar} style={{ fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>{comandoEliminarCopiado ? "✅ Copiado" : "📋 Copiar"}</button>
+            <button onClick={() => setComandoEliminar("")} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", padding:0 }}>Ya lo corrí, cerrar</button>
+          </div>
+          <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Pegalo en tu terminal, en steel-backend — sin esto, la persona sigue pudiendo loguearse.</div>
+        </div>
+      )}
+
       {editId && (
         <div style={{ marginTop:12, padding:12, background:C.bg, borderRadius:8, border:`1px solid ${C.border}44` }}>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -106,7 +130,9 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
 
       {confirmarDelId && objDel && (
         <ModalConfirmarEliminar titulo={`a ${objDel.nombre || "este usuario"}`}
-          subtitulo="Se borra de esta lista local — si tiene cuenta real, sigue existiendo en Supabase."
+          subtitulo={objDel.profileId
+            ? "Se borra de esta lista — su cuenta real va a seguir pudiendo loguearse hasta que corras el comando de revocación que va a aparecer después."
+            : "Se borra de esta lista local."}
           onConfirm={() => del(confirmarDelId)} onClose={() => setConfirmarDelId(null)} />
       )}
     </div>
