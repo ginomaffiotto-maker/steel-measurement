@@ -40,11 +40,17 @@ export const BLOQUES_LABELS = {
 // Cada función de bloque recibe el `data` completo y devuelve el HTML de esa
 // sección, o "" si no corresponde mostrarla (ej. sin notas cargadas).
 const RENDER_BLOQUE = {
-  header: (data) => `
+  header: (data) => {
+    const ed = data.empresaDatos || {};
+    const detalles = [ed.direccion, ed.rut && "RUT " + ed.rut, ed.tel, ed.email, ed.web].filter(Boolean).join(" · ");
+    return `
   <div class="header">
-    <div>
-      <div class="co-name">${data.empresa || ""}</div>
-      <div class="co-sub">Estructuras Metálicas</div>
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      ${ed.logo ? `<img src="${ed.logo}" class="co-logo" alt="" />` : ""}
+      <div>
+        <div class="co-name">${data.empresa || ""}</div>
+        <div class="co-sub">${detalles || "Estructuras Metálicas"}</div>
+      </div>
     </div>
     <div>
       <div class="pres-label">Presupuesto</div>
@@ -52,7 +58,8 @@ const RENDER_BLOQUE = {
       <div class="pres-fecha">Fecha: ${fmtD(data.fecha)}</div>
       ${data.validoHasta ? `<div class="pres-fecha">Válido hasta: ${fmtD(data.validoHasta)}</div>` : ""}
     </div>
-  </div>`,
+  </div>`;
+  },
 
   cliente_proyecto: (data) => {
     const cli = data.cliente || {};
@@ -176,6 +183,7 @@ export function buildPresupuestoHTML(data) {
     .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #1a2a4a}
     .co-name{font-size:22px;font-weight:900;color:#1a2a4a;letter-spacing:-0.5px}
     .co-sub{font-size:11px;color:#666;margin-top:3px}
+    .co-logo{width:64px;height:64px;object-fit:contain}
     .pres-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;text-align:right}
     .pres-num{font-size:28px;font-weight:900;color:#1a2a4a;text-align:right;line-height:1}
     .pres-fecha{font-size:11px;color:#666;text-align:right;margin-top:4px}
