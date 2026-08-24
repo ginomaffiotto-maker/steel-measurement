@@ -402,7 +402,7 @@ export const saveDBItem = async (presupuestoId, item) => {
     hierros, mat_generales, mo_fabricacion, mo_montajes, terc_fabricacion, terc_montajes,
     traslados, corte_pantografo, trat_superficie,
   } = item;
-  const row = soloColumnas(item, COLUMNAS_ITEM_PRESUPUESTO);
+  const row = soloColumnas(conIdValido(item), COLUMNAS_ITEM_PRESUPUESTO);
 
   const { data: savedItem, error: eItem } = await supabase
     .from("items_presupuesto_sm").upsert({ ...row, presupuesto_id: presupuestoId }).select().single();
