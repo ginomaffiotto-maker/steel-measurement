@@ -499,8 +499,8 @@ export default function App() {
         <div style={{ padding: 24, flex: 1 }}>
           {tab === "Buscador"    && <Buscador onIrA={irATab} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
-          {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} tcGlobal={tcGlobal} />}
-          {tab === "Anidado"     && <Anidado usuario={usuario} />}
+          {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} />}
+          {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} />}
           {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} />}
           {tab === "Historial"   && <Historial usuario={usuario} />}
           {tab === "Dashboard"   && <Dashboard />}

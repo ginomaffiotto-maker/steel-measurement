@@ -168,7 +168,7 @@ const itemVacio = (n = 1) => ({
 
 const computoVacio = () => ({
   id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "", empresa: "",
-  categoria: "", tipo_trabajo: "Fabricación",
+  categoria: "", tipo_trabajo: "Fabricación", vendedor: "",
   cantidad_total: 1,
   items: [itemVacio(1)],
   comentarios: [],
@@ -206,6 +206,14 @@ function calcPiezaUSD(p, tc) {
   if (por === "m")   return precioUSD * (calc.total_m || 0);
   if (por === "m2")  return precioUSD * calc.total_sup;
   return 0;
+}
+
+// Monto total USD de un cómputo entero (suma de calcPiezaUSD de todas las
+// piezas de todos los ítems × cantidad total de la obra) — usado en la
+// tarjeta/fila de la lista y en el header del detalle.
+function calcMontoUSDComputo(c, tc) {
+  const mult = c.cantidad_total || 1;
+  return c.items.reduce((s, it) => s + it.piezas.reduce((s2, p) => s2 + calcPiezaUSD(p, tc), 0), 0) * mult;
 }
 
 function calcResumen(piezas) {
@@ -961,7 +969,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlobal }) {
+export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuarios = [], tcGlobal }) {
   const [computos,      setComputos]      = useState(() => loadLS("smeas_computos", []));
   useMergeComputosNube(setComputos);
   const [selId,         setSelId]         = useState(null);
@@ -1043,7 +1051,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación" };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"" };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
     setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
@@ -1227,60 +1235,64 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
           <div style={{ textAlign:"center", color:C.muted, padding:"40px 0", fontSize:13 }}>Sin resultados.</div>
         )}
 
-        {/* Grid de obras */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:14 }}>
+        {/* Lista de obras — una fila por cómputo, ancho completo (2026-08-24,
+            pedido de Gino: mas info visible, tipo Excel, no en grilla de
+            tarjetas angostas) */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {computosFiltrados.map(c => {
             const multTotal = c.cantidad_total || 1;
             const tot = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_kg,0)*(it.cantidad||1),0) * multTotal;
-            const sup = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_sup,0)*(it.cantidad||1),0) * multTotal;
+            const monto = calcMontoUSDComputo(c, c.tc ?? tcGlobal);
+            const vendedorNombre = usuarios.find(u=>u.id===c.vendedor)?.nombre;
             return (
               <div key={c.id}
-                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
-                  padding:20, cursor:"pointer", transition:"border-color .15s",
-                  display:"flex", flexDirection:"column", gap:10 }}
+                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,
+                  padding:"12px 16px", cursor:"pointer", transition:"border-color .15s",
+                  display:"flex", alignItems:"center", gap:18, flexWrap:"wrap" }}
                 onClick={()=>setSelId(c.id)}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                {/* Header */}
-                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8 }}>
-                  <div>
-                    {c.nro && <span style={{ ...BDG(C.accent,true), marginBottom:6, display:"inline-block" }}>{c.nro}</span>}
-                    {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginBottom:6, marginLeft:6, display:"inline-block" }}>×{multTotal} estructuras</span>}
-                    <div style={{ fontWeight:800, fontSize:15, color:C.text, lineHeight:1.3, marginTop:4 }}>{c.nombre||"Sin nombre"}</div>
-                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.fecha}{c.cliente?` · ${c.cliente}`:""}</div>
-                    {c.categoria && <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{c.categoria}</div>}
-                  </div>
+                <div style={{ minWidth:70 }}>
+                  {c.nro && <span style={BDG(C.accent,true)}>{c.nro}</span>}
                 </div>
-                {/* Stats */}
-                <div style={{ display:"flex", gap:8 }}>
-                  <div style={{ flex:1, background:C.iron, borderRadius:8, padding:"10px 12px" }}>
-                    <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.5 }}>Total kg</div>
-                    <div style={{ fontSize:22, fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</div>
+                <div style={{ flex:"2 1 220px", minWidth:0 }}>
+                  <div style={{ fontWeight:800, fontSize:14, color:C.text, lineHeight:1.3 }}>{c.nombre||"Sin nombre"}
+                    {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginLeft:8, fontSize:10 }}>×{multTotal}</span>}
                   </div>
-                  <div style={{ flex:1, background:C.iron, borderRadius:8, padding:"10px 12px" }}>
-                    <div style={{ fontSize:10, color:C.muted, textTransform:"uppercase", letterSpacing:.5 }}>Superficie</div>
-                    <div style={{ fontSize:22, fontWeight:800, color:C.teal }}>{sup>0?n2(sup):"—"} <span style={{ fontSize:13 }}>m²</span></div>
-                  </div>
+                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.fecha}{c.cliente?` · ${c.cliente}`:""} · {c.items.length} ítem{c.items.length!==1?"s":""}</div>
                 </div>
-                {/* Footer */}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                  <span style={{ fontSize:11, color:C.muted }}>{c.items.length} ítem{c.items.length!==1?"s":""}</span>
-                  <div style={{ display:"flex", gap:6 }} onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>clonarComputo(c)} title="Clonar este cómputo completo"
-                      style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
-                      ⧉ Clonar
+                <div style={{ flex:"1 1 130px", minWidth:0 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
+                  <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</div>
+                  <div style={{ fontSize:11, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</div>
+                </div>
+                <div style={{ flex:"1 1 110px", minWidth:0 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Vendedor</div>
+                  <div style={{ fontSize:12, color:C.text, fontWeight:600 }}>{vendedorNombre||"— Sin asignar —"}</div>
+                </div>
+                <div style={{ textAlign:"right", minWidth:90 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Kg</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</div>
+                </div>
+                <div style={{ textAlign:"right", minWidth:100 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Monto U$S</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</div>
+                </div>
+                <div style={{ display:"flex", gap:6, marginLeft:"auto" }} onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>clonarComputo(c)} title="Clonar este cómputo completo"
+                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
+                    ⧉ Clonar
+                  </button>
+                  <button onClick={()=>{saveLS("smeas_anidar_pending",c.id); onNidar&&onNidar();}}
+                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>
+                    ✂️ Anidar
+                  </button>
+                  {puedeEliminar(usuario) && (
+                    <button onClick={()=>setConfirmarDelId(c.id)}
+                      style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
+                      Eliminar
                     </button>
-                    <button onClick={()=>{saveLS("smeas_anidar_pending",c.id); onNidar&&onNidar();}}
-                      style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>
-                      ✂️ Anidar
-                    </button>
-                    {puedeEliminar(usuario) && (
-                      <button onClick={()=>setConfirmarDelId(c.id)}
-                        style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
-                        Eliminar
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             );
@@ -1345,6 +1357,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlo
           <SelectCategoria value={computo.categoria} onChange={v=>updateComputo({...computo,categoria:v})}
             style={{ padding:"3px 6px", fontSize:11, width:140 }} />
           {computo.categoria && <div style={{ fontSize:11, color:C.steel, fontWeight:600 }}>Familia: {familiaDe(computo.categoria)}</div>}
+        </div>
+
+        {/* Vendedor */}
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+          <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>Vendedor</span>
+          <select value={computo.vendedor||""} onChange={e=>updateComputo({...computo,vendedor:e.target.value})}
+            style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
+            <option value="">— Sin asignar —</option>
+            {usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
+          </select>
         </div>
 
         {/* Cantidad total del cómputo — multiplicador de estructuras iguales */}

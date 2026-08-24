@@ -850,7 +850,7 @@ function exportarListaCorte(anidado) {
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Anidado({ usuario }) {
+export default function Anidado({ usuario, usuarios = [] }) {
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(setAnidados);
   const [selId,      setSelId]      = useState(null);
@@ -947,6 +947,7 @@ export default function Anidado({ usuario }) {
     const computoOrigen = computoSel ? computos.find(c=>c.id===computoSel) : null;
     const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),
       categoria:computoOrigen?.categoria||"", tipo_trabajo:computoOrigen?.tipo_trabajo||"Fabricación",
+      vendedor:computoOrigen?.vendedor||usuario?.id||"",
       grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
@@ -966,6 +967,16 @@ export default function Anidado({ usuario }) {
     save(anidados.filter(a=>a.id!==id)); if(selId===id)setSelId(null);
   };
   const anidadoAEliminar = confirmarDelId ? anidados.find(a=>a.id===confirmarDelId) : null;
+
+  // Clonar (2026-08-24, pedido de Gino: mismo criterio que Cómputo/Presupuesto)
+  const clonarAnidado = (a) => {
+    const nuevo = { ...a, id: uid(), nombre: `${a.nombre} (copia)`,
+      grupos: a.grupos.map(g => ({ ...g, id: uid(), piezas: (g.piezas||[]).map(p => ({ ...p, id: uid() })) })),
+      comentarios: [], ...stamp() };
+    save([nuevo, ...anidados]);
+    setSelId(nuevo.id);
+    dualWriteAnidado(nuevo);
+  };
 
   const addGrupoPerf=()=>{ if(!actual)return; upd({...actual,grupos:[...actual.grupos,{id:uid(),tipo:"perfil",material_id:"",material_nombre:"",kg_m:0,sup_m2m:0,largo_barra_mm:6000,kerf_mm:0,piezas:[],resultado:null}]}); };
   const addGrupoPlancha=()=>{ if(!actual)return; upd({...actual,grupos:[...actual.grupos,{id:uid(),tipo:"plancha",material_id:"",material_nombre:"",kg_m2:0,sheet_w:6000,sheet_h:1500,piezas:[],resultado:null}]}); };
@@ -1076,18 +1087,49 @@ export default function Anidado({ usuario }) {
       <>
         {anidados.length===0&&!creando&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>No hay anidados aún.</div>}
         {anidados.length>0&&anidadosFiltrados.length===0&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>Sin resultados.</div>}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))", gap:14 }}>
+        {/* Lista — una fila por anidado, ancho completo (2026-08-24, mismo
+            criterio que Cómputo: mas info visible, tipo Excel) */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {anidadosFiltrados.map(a=>{
             const nG=a.grupos?.length||0;
+            const materiales = materialesUnificados(a);
+            const kg = materiales.reduce((s,m)=>s+m.kg,0);
+            const monto = materiales.reduce((s,m)=>s+m.precio_total,0);
+            const vendedorNombre = usuarios.find(u=>u.id===a.vendedor)?.nombre;
             return(
               <div key={a.id} onClick={()=>setSelId(a.id)}
-                style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,cursor:"pointer",transition:"border-color .15s" }}
+                style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
+                  padding:"12px 16px",cursor:"pointer",transition:"border-color .15s",
+                  display:"flex",alignItems:"center",gap:18,flexWrap:"wrap" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                <div style={{ fontWeight:700,fontSize:14,color:C.text,marginBottom:4 }}>{a.nombre||"Sin nombre"}</div>
-                <div style={{ fontSize:11,color:C.muted }}>{a.fecha} · {nG} grupo{nG!==1?"s":""}</div>
-                {(a.cliente||a.obra)&&<div style={{ fontSize:11,color:C.steel,marginTop:4 }}>{[a.cliente,a.obra].filter(Boolean).join(" · ")}</div>}
-                {a.categoria&&<div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{a.categoria}</div>}
+                <div style={{ flex:"2 1 220px", minWidth:0 }}>
+                  <div style={{ fontWeight:800,fontSize:14,color:C.text }}>{a.nombre||"Sin nombre"}</div>
+                  <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{a.fecha} · {nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
+                </div>
+                <div style={{ flex:"1 1 130px", minWidth:0 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
+                  <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</div>
+                  <div style={{ fontSize:11, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</div>
+                </div>
+                <div style={{ flex:"1 1 110px", minWidth:0 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Vendedor</div>
+                  <div style={{ fontSize:12, color:C.text, fontWeight:600 }}>{vendedorNombre||"— Sin asignar —"}</div>
+                </div>
+                <div style={{ textAlign:"right", minWidth:90 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Kg</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.ok }}>{kg>0?n2(kg):"—"}</div>
+                </div>
+                <div style={{ textAlign:"right", minWidth:100 }}>
+                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Monto U$S</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</div>
+                </div>
+                <div style={{ display:"flex", gap:6, marginLeft:"auto" }} onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>clonarAnidado(a)} title="Clonar este anidado completo"
+                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
+                    ⧉ Clonar
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -1113,6 +1155,14 @@ export default function Anidado({ usuario }) {
                 <SelectCategoria value={actual.categoria} onChange={v=>upd({...actual,categoria:v})}
                   style={{ padding:"3px 6px", fontSize:11, width:140 }} />
                 {actual.categoria && <div style={{ fontSize:9, color:C.muted }}>{familiaDe(actual.categoria)}</div>}
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>Vendedor</span>
+                <select value={actual.vendedor||""} onChange={e=>upd({...actual,vendedor:e.target.value})}
+                  style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
+                  <option value="">— Sin asignar —</option>
+                  {usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select>
               </div>
               <div style={{ marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
                 {puedeEliminar(usuario) && (
