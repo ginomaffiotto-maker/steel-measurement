@@ -1393,7 +1393,7 @@ function ResumenRubros({ rubros, total_usd, total_kg }) {
 }
 
 // ─── VISTA DETALLE ────────────────────────────────────────────────
-function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, onAgregarComentario, onEliminarComentario }) {
+function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, usuarios, onAgregarComentario, onEliminarComentario }) {
   const set = (k, v) => onChange({ ...pres, [k]: v });
   const c   = calcPresupuesto(pres);
   const updItem = (it) => set("items", pres.items.map(x => x.id === it.id ? it : x));
@@ -1494,6 +1494,11 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 <SelectCategoria value={pres.categoria} onChange={v=>set("categoria",v)} />
                 {pres.categoria && <div style={{ fontSize:10, color:C.muted, marginTop:3 }}>Familia: {familiaDe(pres.categoria)}</div>}
               </div>
+              <div><label style={LBL}>Vendedor</label>
+                <select style={INP} value={pres.vendedor||""} onChange={e=>set("vendedor",e.target.value)}>
+                  <option value="">— Sin asignar —</option>
+                  {(usuarios||[]).map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select></div>
               <div><label style={LBL}>TC (USD/UYU)</label>
                 <div style={{ ...INP, display:"flex", alignItems:"center", color:C.muted, background:C.bg }}>
                   {pres.tc != null
@@ -1872,7 +1877,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
     return (
       <>
-        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} />
+        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} usuarios={usuarios} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} />
         {materialesPend && (
           <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} onImportar={importarMateriales} onClose={cerrarImportMateriales} />
         )}

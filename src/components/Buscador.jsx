@@ -48,12 +48,17 @@ export default function Buscador({ onIrA }) {
   const todas = normalizar();
   const activo = texto.trim() || cliente.trim() || fechaDesde || fechaHasta || tipoFiltro;
 
-  const resultados = todas
-    .filter(f => !tipoFiltro || f.tipo === tipoFiltro)
+  // Sin el filtro de tipo — así los badges muestran cuántos hay de cada uno
+  // para los filtros de texto/cliente/fecha actuales, no solo del tipo ya
+  // elegido (que siempre daría 0 en los demás).
+  const porTexto = todas
     .filter(f => !texto.trim() || f.texto.toLowerCase().includes(texto.trim().toLowerCase()))
     .filter(f => !cliente.trim() || f.texto.toLowerCase().includes(cliente.trim().toLowerCase()))
     .filter(f => !fechaDesde || (f.fecha && f.fecha >= fechaDesde))
-    .filter(f => !fechaHasta || (f.fecha && f.fecha <= fechaHasta))
+    .filter(f => !fechaHasta || (f.fecha && f.fecha <= fechaHasta));
+
+  const resultados = porTexto
+    .filter(f => !tipoFiltro || f.tipo === tipoFiltro)
     .sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
 
   const ir = (fila) => {
@@ -62,7 +67,7 @@ export default function Buscador({ onIrA }) {
   };
 
   const conteos = { computo:0, anidado:0, presupuesto:0, historial:0 };
-  resultados.forEach(f => conteos[f.tipo]++);
+  porTexto.forEach(f => conteos[f.tipo]++);
 
   return (
     <div>
@@ -77,31 +82,31 @@ export default function Buscador({ onIrA }) {
         fecha. Hacé clic en un resultado para ir directo a él.
       </div>
 
-      <div style={{ display:"flex", gap:12, marginBottom:14, flexWrap:"wrap" }}>
-        <div>
+      <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
+        <div style={{ flex:"2 1 280px" }}>
           <label style={LBL}>Texto (nombre, N°, obra...)</label>
-          <input style={{...INP, width:220}} value={texto} placeholder="Buscar..." onChange={e=>setTexto(e.target.value)} />
+          <input style={{...INP, width:"100%"}} value={texto} placeholder="Buscar..." onChange={e=>setTexto(e.target.value)} />
         </div>
-        <div>
+        <div style={{ flex:"1 1 220px" }}>
           <label style={LBL}>Cliente</label>
-          <input style={{...INP, width:180}} value={cliente} placeholder="Nombre del cliente" onChange={e=>setCliente(e.target.value)} />
+          <input style={{...INP, width:"100%"}} value={cliente} placeholder="Nombre del cliente" onChange={e=>setCliente(e.target.value)} />
         </div>
-        <div>
+        <div style={{ flex:"1 1 180px" }}>
           <label style={LBL}>Desde</label>
-          <input type="date" style={{...INP, width:150}} value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
+          <input type="date" style={{...INP, width:"100%"}} value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
         </div>
-        <div>
+        <div style={{ flex:"1 1 180px" }}>
           <label style={LBL}>Hasta</label>
-          <input type="date" style={{...INP, width:150}} value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
+          <input type="date" style={{...INP, width:"100%"}} value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
-        <button onClick={()=>setTipoFiltro("")} style={{...BTN(tipoFiltro===""?"ok":"ghost"), padding:"4px 12px", fontSize:11}}>Todos ({todas.length})</button>
-        <button onClick={()=>setTipoFiltro("computo")} style={{...BTN(tipoFiltro==="computo"?"ok":"ghost"), padding:"4px 12px", fontSize:11}}>📐 Cómputos</button>
-        <button onClick={()=>setTipoFiltro("anidado")} style={{...BTN(tipoFiltro==="anidado"?"ok":"ghost"), padding:"4px 12px", fontSize:11}}>✂️ Anidados</button>
-        <button onClick={()=>setTipoFiltro("presupuesto")} style={{...BTN(tipoFiltro==="presupuesto"?"ok":"ghost"), padding:"4px 12px", fontSize:11}}>💰 Presupuestos</button>
-        <button onClick={()=>setTipoFiltro("historial")} style={{...BTN(tipoFiltro==="historial"?"ok":"ghost"), padding:"4px 12px", fontSize:11}}>📊 Historial</button>
+      <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+        <button onClick={()=>setTipoFiltro("")} style={{...BTN(tipoFiltro===""?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>Todos ({todas.length})</button>
+        <button onClick={()=>setTipoFiltro("computo")} style={{...BTN(tipoFiltro==="computo"?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>📐 Cómputos ({conteos.computo})</button>
+        <button onClick={()=>setTipoFiltro("anidado")} style={{...BTN(tipoFiltro==="anidado"?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>✂️ Anidados ({conteos.anidado})</button>
+        <button onClick={()=>setTipoFiltro("presupuesto")} style={{...BTN(tipoFiltro==="presupuesto"?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>💰 Presupuestos ({conteos.presupuesto})</button>
+        <button onClick={()=>setTipoFiltro("historial")} style={{...BTN(tipoFiltro==="historial"?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>📊 Historial ({conteos.historial})</button>
       </div>
 
       {!activo && (
