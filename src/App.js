@@ -60,12 +60,63 @@ function Login({ usuarios, setUsuarios, onLogin }) {
   const [err, setErr] = useState("");
   const [show, setShow] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [modoRecuperar, setModoRecuperar] = useState(false);
+  const [recEmail, setRecEmail] = useState("");
+  const [recMsg, setRecMsg] = useState("");
+  const [recErr, setRecErr] = useState("");
+  const [recCargando, setRecCargando] = useState(false);
 
   const inputStyle = {
     width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
     border: `1.5px solid ${err ? C.err : C.border}`,
     background: C.bg, color: C.text, outline: "none", boxSizing: "border-box",
   };
+
+  // Manda el mail de recuperación de Supabase — el link vuelve a esta misma
+  // URL con ?type=recovery en el hash, App() lo detecta y muestra
+  // SetPasswordScreen antes de mostrar cualquier otra cosa. Mismo mecanismo
+  // que steelCRM (mismo backend de Auth compartido).
+  const enviarRecuperacion = async (e) => {
+    e.preventDefault();
+    if (!supabase) { setRecErr("Backend no configurado (faltan variables de entorno)"); return; }
+    setRecCargando(true);
+    setRecErr("");
+    const { error: recError } = await supabase.auth.resetPasswordForEmail(recEmail, { redirectTo: window.location.origin });
+    setRecCargando(false);
+    if (recError) { setRecErr("No se pudo enviar el correo: " + recError.message); return; }
+    setRecMsg("Si el email existe, te llegó un correo con el link para elegir una contraseña nueva.");
+  };
+
+  if (modoRecuperar) {
+    return (
+      <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
+          <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>Recuperar contraseña</div>
+        </div>
+        <div style={{ width: "100%", maxWidth: 340 }}>
+          <div style={{ background: C.card, border: `2px solid ${C.accent}66`, borderRadius: 14, padding: "28px 28px 24px", boxShadow: `0 8px 28px ${C.accent}22` }}>
+            {recMsg ? (
+              <div style={{ color: C.text, fontSize: 13, lineHeight: 1.5 }}>{recMsg}</div>
+            ) : (
+              <form onSubmit={enviarRecuperacion}>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>Email</label>
+                  <input type="email" value={recEmail} onChange={e => { setRecEmail(e.target.value); setRecErr(""); }} placeholder="tu@email.com" autoComplete="username" style={inputStyle} required />
+                </div>
+                {recErr && <div style={{ color: C.err, fontSize: 12, marginBottom: 12, fontWeight: 600 }}>⚠ {recErr}</div>}
+                <button type="submit" disabled={recCargando} style={{ width: "100%", padding: "11px", borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 15, cursor: recCargando ? "default" : "pointer", opacity: recCargando ? 0.7 : 1 }}>
+                  {recCargando ? "Enviando…" : "Enviar link"}
+                </button>
+              </form>
+            )}
+            <div onClick={() => { setModoRecuperar(false); setRecMsg(""); setRecErr(""); }} style={{ marginTop: 14, textAlign: "center", fontSize: 12, color: C.accent, cursor: "pointer" }}>← Volver al login</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const entrar = async (e) => {
     e.preventDefault();
@@ -80,16 +131,31 @@ function Login({ usuarios, setUsuarios, onLogin }) {
       return;
     }
     const authUser = data.user;
-    let local = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
-    if (!local) {
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
-      if (profileError || !profile) {
+    const existente = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
+    if (profileError || !profile) {
+      if (!existente) {
         setErr("Tu cuenta no tiene un perfil asignado todavía — avisale al administrador.");
         setCargando(false);
         return;
       }
+      setCargando(false);
+      onLogin(existente);
+      return;
+    }
+    let local;
+    if (existente) {
+      // Refresca rol/nombre/profileId desde el perfil real en cada login —
+      // mismo criterio que steelCRM (mismo backend compartido): un cambio de
+      // rol tiene que tomar efecto acá también, no quedar pisado por la
+      // copia local vieja.
+      local = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol };
+      if (local.nombre !== existente.nombre || local.rol !== existente.rol || existente.profileId !== authUser.id) {
+        setUsuarios(prev => prev.map(u => u.id === existente.id ? local : u));
+      }
+    } else {
       local = {
-        id: Date.now(), nombre: profile.nombre, rol: profile.rol,
+        id: Date.now(), profileId: authUser.id, nombre: profile.nombre, rol: profile.rol,
         emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
         email: authUser.email,
       };
@@ -142,8 +208,75 @@ function Login({ usuarios, setUsuarios, onLogin }) {
           <button type="submit" disabled={cargando} style={{ width: "100%", padding: "11px", borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 15, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.7 : 1 }}>
             {cargando ? "Ingresando…" : "Ingresar →"}
           </button>
+          <div onClick={() => setModoRecuperar(true)} style={{ marginTop: 14, textAlign: "center", fontSize: 12, color: C.muted, cursor: "pointer" }}>¿Olvidaste tu contraseña?</div>
         </div>
       </form>
+    </div>
+  );
+}
+
+// Pantalla de "elegir contraseña" — atiende tanto el link de invitación
+// (primera contraseña) como el de "olvidé mi contraseña"
+// (?type=invite / ?type=recovery en el hash de la URL). Mismo componente
+// que steelCRM (mismo backend de Auth compartido, mismo mecanismo).
+function SetPasswordScreen({ modo, onDone }) {
+  const [pass1, setPass1] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [err, setErr] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const [ok, setOk] = useState(false);
+
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
+    border: `1.5px solid ${err ? C.err : C.border}`,
+    background: C.bg, color: C.text, outline: "none", boxSizing: "border-box",
+  };
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    if (pass1.length < 6) { setErr("La contraseña tiene que tener al menos 6 caracteres"); return; }
+    if (pass1 !== pass2) { setErr("Las contraseñas no coinciden"); return; }
+    if (!supabase) { setErr("Backend no configurado (faltan variables de entorno)"); return; }
+    setCargando(true);
+    setErr("");
+    const { error: updError } = await supabase.auth.updateUser({ password: pass1 });
+    setCargando(false);
+    if (updError) { setErr("No se pudo guardar: " + updError.message); return; }
+    setOk(true);
+  };
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ textAlign: "center", marginBottom: 36 }}>
+        <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
+        <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
+        <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{modo === "invite" ? "Elegí tu contraseña" : "Elegí una contraseña nueva"}</div>
+      </div>
+      <div style={{ width: "100%", maxWidth: 340 }}>
+        <div style={{ background: C.card, border: `2px solid ${C.accent}66`, borderRadius: 14, padding: "28px 28px 24px", boxShadow: `0 8px 28px ${C.accent}22` }}>
+          {ok ? (
+            <>
+              <div style={{ color: C.text, fontSize: 14, marginBottom: 16 }}>✅ Contraseña guardada.</div>
+              <button onClick={onDone} style={{ width: "100%", padding: "11px", borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Ingresar</button>
+            </>
+          ) : (
+            <form onSubmit={guardar}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>Nueva contraseña</label>
+                <input type="password" value={pass1} onChange={e => { setPass1(e.target.value); setErr(""); }} autoComplete="new-password" style={inputStyle} required minLength={6} />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: .5 }}>Repetir contraseña</label>
+                <input type="password" value={pass2} onChange={e => { setPass2(e.target.value); setErr(""); }} autoComplete="new-password" style={inputStyle} required minLength={6} />
+              </div>
+              {err && <div style={{ color: C.err, fontSize: 12, marginBottom: 12, fontWeight: 600 }}>⚠ {err}</div>}
+              <button type="submit" disabled={cargando} style={{ width: "100%", padding: "11px", borderRadius: 8, background: C.accent, color: "#fff", border: "none", fontWeight: 700, fontSize: 15, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.7 : 1 }}>
+                {cargando ? "Guardando…" : "Guardar contraseña"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -169,6 +302,16 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
+  // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con
+  // ?type=invite o ?type=recovery en el hash de la URL. Se lee una sola vez
+  // al montar (antes de que el cliente de Supabase procese y limpie el hash)
+  // para decidir si hay que mostrar SetPasswordScreen en vez del login normal.
+  const [modoPassword, setModoPassword] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const type = params.get("type");
+    return (type === "invite" || type === "recovery") ? type : null;
+  });
 
   // Responsive: en pantallas angostas (celular, ventana chica) la barra
   // colapsa sola al cruzar el umbral — el usuario todavía puede expandirla
@@ -207,6 +350,8 @@ export default function App() {
 
   const grupoObj = GRUPOS.find(g => g.id === grupo);
   const SW = collapsed ? 56 : 180;
+
+  if (modoPassword) return <SetPasswordScreen modo={modoPassword} onDone={() => setModoPassword(null)} />;
 
   if (!usuario) return <Login usuarios={usuarios} setUsuarios={setUsuarios} onLogin={setUsuario} />;
 
