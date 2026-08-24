@@ -969,7 +969,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuarios = [], tcGlobal }) {
+export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuarios = [], tcGlobal, logear }) {
   const [computos,      setComputos]      = useState(() => loadLS("smeas_computos", []));
   useMergeComputosNube(setComputos);
   const [selId,         setSelId]         = useState(null);
@@ -1056,6 +1056,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     setSelId(c.id); setCreando(false);
     setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
     dualWriteComputo(c);
+    logear?.("Cómputo creado", c.nro + " — " + c.nombre);
   };
 
   const clonarComputo = (c) => {
@@ -1082,8 +1083,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 
   const eliminarComputo = id => {
+    const c = computos.find(x=>x.id===id);
     setComputos(prev=>prev.filter(c=>c.id!==id));
     if (selId===id) setSelId(null);
+    if (c) logear?.("Cómputo eliminado", (c.nro||"") + " — " + (c.nombre||""));
   };
   const computoAEliminar = confirmarDelId ? computos.find(c=>c.id===confirmarDelId) : null;
 

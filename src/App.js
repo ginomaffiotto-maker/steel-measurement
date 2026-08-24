@@ -287,6 +287,15 @@ const SESION_TAB_KEY = "smeas_sesion_tab";
 
 export default function App() {
   const [usuarios, setUsuarios] = useState(iUsuarios);
+  // Registro de actividad (2026-08-24, mismo patrón que steelCRM: no es
+  // exhaustivo, cubre creación/eliminación de las entidades principales).
+  const [auditLog, setAuditLog] = useState(() => loadLS("smeas_audit", []));
+  useEffect(() => { saveLS("smeas_audit", auditLog); }, [auditLog]);
+  const logear = (accion, detalle, usuarioNombre) => {
+    const entry = { id: Date.now() + Math.random(), fecha: new Date().toISOString(),
+      usuario: usuarioNombre || usuario?.nombre || "—", accion, detalle };
+    setAuditLog(prev => [entry, ...prev].slice(0, 100));
+  };
   const [usuario,  setUsuario]  = useState(() => {
     const savedId = sessionStorage.getItem(SESION_USUARIO_KEY);
     if (savedId == null) return null;
@@ -499,12 +508,12 @@ export default function App() {
         <div style={{ padding: 24, flex: 1 }}>
           {tab === "Buscador"    && <Buscador onIrA={irATab} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
-          {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} />}
-          {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} />}
-          {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} />}
+          {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} />}
+          {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} logear={logear} />}
+          {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} logear={logear} />}
           {tab === "Historial"   && <Historial usuario={usuario} />}
           {tab === "Dashboard"   && <Dashboard />}
-          {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} />}
+          {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} auditLog={auditLog} />}
         </div>
       </div>
     </div>

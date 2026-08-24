@@ -850,7 +850,7 @@ function exportarListaCorte(anidado) {
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Anidado({ usuario, usuarios = [] }) {
+export default function Anidado({ usuario, usuarios = [], logear }) {
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(setAnidados);
   const [selId,      setSelId]      = useState(null);
@@ -951,6 +951,7 @@ export default function Anidado({ usuario, usuarios = [] }) {
       grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
+    logear?.("Anidado creado", a.nombre);
   };
 
   const anidadosFiltradosBase = anidados.filter(a => {
@@ -964,7 +965,9 @@ export default function Anidado({ usuario, usuarios = [] }) {
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
 
   const delAnidado=id=>{
+    const a = anidados.find(x=>x.id===id);
     save(anidados.filter(a=>a.id!==id)); if(selId===id)setSelId(null);
+    if (a) logear?.("Anidado eliminado", a.nombre||"");
   };
   const anidadoAEliminar = confirmarDelId ? anidados.find(a=>a.id===confirmarDelId) : null;
 

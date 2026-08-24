@@ -391,7 +391,7 @@ function BackupYDatos({ usuario }) {
 // El tarifario (MO, materiales generales, terceriz., traslados, tratamiento de
 // superficie, pantógrafo) vive en el módulo "Insumos y Precios" junto a la
 // Biblioteca de materiales — acá solo queda lo que es admin-only del sistema.
-export default function Config({ usuario, usuarios, setUsuarios }) {
+export default function Config({ usuario, usuarios, setUsuarios, auditLog = [] }) {
   // Si por error nadie quedó con rol Administrador, la pantalla se
   // desbloquea igual — si no, quedaría un candado circular: sin admin no
   // se puede editar usuarios, pero sin editar usuarios no se puede volver
@@ -413,6 +413,8 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
     r.readAsDataURL(f);
   };
   const [seccion, setSeccion] = useState("empresa");
+  const [auFiltU, setAuFiltU] = useState("");
+  const [auFiltA, setAuFiltA] = useState("");
 
   const TAB_BTN = (key, icon, lbl) => (
     <button key={key} onClick={() => setSeccion(key)}
@@ -447,6 +449,7 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
         {TAB_BTN("sistema","⚙️","Sistema")}
         {TAB_BTN("usuarios","👤","Usuarios")}
         {TAB_BTN("backup","💾","Backup y Datos")}
+        {TAB_BTN("actividad","📋","Actividad")}
       </div>
 
       <div style={{ maxWidth:680 }}>
@@ -529,6 +532,59 @@ export default function Config({ usuario, usuarios, setUsuarios }) {
         )}
 
         {seccion === "backup" && <BackupYDatos usuario={usuario} />}
+
+        {/* ── ACTIVIDAD (2026-08-24, mismo patrón que steelCRM) ── */}
+        {seccion === "actividad" && (() => {
+          const usuariosLog = [...new Set(auditLog.map(e => e.usuario).filter(Boolean))];
+          const accionColor = a => {
+            if (!a) return C.muted;
+            if (a.includes("eliminado")) return "#ef4444";
+            if (a.includes("creado")) return "#22c55e";
+            return C.info;
+          };
+          const CATS = ["Todos", ...new Set(auditLog.map(e => e.accion).filter(Boolean))];
+          const logFilt = auditLog.filter(e =>
+            (!auFiltU || e.usuario === auFiltU) &&
+            (!auFiltA || auFiltA === "Todos" || e.accion === auFiltA)
+          );
+          return (
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:C.steel }}>📋 Registro de Actividad</div>
+              </div>
+              {auditLog.length > 0 && (
+                <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+                  <select value={auFiltU} onChange={e=>setAuFiltU(e.target.value)}
+                    style={{ ...INP, width:"auto", fontSize:11, padding:"4px 8px" }}>
+                    <option value="">Todos los usuarios</option>
+                    {usuariosLog.map(u => <option key={u}>{u}</option>)}
+                  </select>
+                  <select value={auFiltA} onChange={e=>setAuFiltA(e.target.value)}
+                    style={{ ...INP, width:"auto", fontSize:11, padding:"4px 8px" }}>
+                    {CATS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <span style={{ fontSize:11, color:C.muted, alignSelf:"center" }}>{logFilt.length} registro{logFilt.length!==1?"s":""}</span>
+                </div>
+              )}
+              {logFilt.length === 0
+                ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>Sin actividad registrada aún</div>
+                : logFilt.map(e => {
+                  const fecha = new Date(e.fecha).toLocaleString("es-UY", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
+                  const col = accionColor(e.accion);
+                  return (
+                    <div key={e.id} style={{ display:"flex", gap:12, padding:"7px 0", borderBottom:`1px solid ${C.border}22`, fontSize:12, alignItems:"flex-start" }}>
+                      <span style={{ color:C.muted, whiteSpace:"nowrap", minWidth:105 }}>{fecha}</span>
+                      <span style={{ color:C.accent, fontWeight:600, minWidth:80, flexShrink:0 }}>{e.usuario}</span>
+                      <div>
+                        <span style={{ color:col, fontWeight:700, fontSize:11, padding:"1px 6px", background:col+"18", borderRadius:3, marginRight:6 }}>{e.accion}</span>
+                        {e.detalle && <span style={{ color:C.muted }}>{e.detalle}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

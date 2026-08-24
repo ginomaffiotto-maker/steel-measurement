@@ -1705,7 +1705,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
 }
 
 // ─── PRESUPUESTO (EXPORT DEFAULT) ────────────────────────────────
-export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
+export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(setPres);
   const [vista,  setVista]  = useState("lista");
@@ -1817,6 +1817,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
     setVista("detalle");
     setNuevoOpen(false);
     dualWritePresupuesto(nuevo);
+    logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
   };
 
   const updPres = (p) => {
@@ -1847,7 +1848,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
     try { await deleteDBComentario("comentarios_presupuesto_sm", comentario.id); }
     catch (e) { console.warn(`[Fase 3] No se pudo borrar el comentario del backend:`, e.message || e); }
   };
-  const delPres = (id) => setPres(prev => prev.filter(x => x.id!==id));
+  const delPres = (id) => {
+    const p = presupuestos.find(x=>x.id===id);
+    setPres(prev => prev.filter(x => x.id!==id));
+    if (p) logear?.("Presupuesto eliminado", (p.nro||"") + " — " + (p.nombre||""));
+  };
 
   const clonarPres = (p) => {
     const nuevo = {
