@@ -11,6 +11,10 @@ import { puedeEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 export default function ComentariosPanel({ comentarios, usuario, onAgregar, onEliminar }) {
   const [texto, setTexto] = useState("");
   const [aBorrar, setABorrar] = useState(null);
+  // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
+  // pantalla para lo importante (ítems/piezas), el hilo sigue a un clic.
+  const [abierto, setAbierto] = useState(false);
+  const n = (comentarios || []).length;
 
   const enviar = () => {
     const t = texto.trim();
@@ -31,8 +35,14 @@ export default function ComentariosPanel({ comentarios, usuario, onAgregar, onEl
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginTop: 14 }}>
-      <div style={{ fontWeight: 700, color: C.accent, fontSize: 12, marginBottom: 10 }}>💬 Comentarios internos</div>
-      {(comentarios || []).length === 0 && (
+      <div onClick={() => setAbierto(a => !a)}
+        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none",
+          fontWeight: 700, color: C.accent, fontSize: 12, marginBottom: abierto ? 10 : 0 }}>
+        <span>{abierto ? "▾" : "▸"}</span> 💬 Comentarios internos{n > 0 ? ` (${n})` : ""}
+      </div>
+      {abierto && (
+      <>
+      {n === 0 && (
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>Sin comentarios todavía.</div>
       )}
       {(comentarios || []).map((c) => (
@@ -60,6 +70,8 @@ export default function ComentariosPanel({ comentarios, usuario, onAgregar, onEl
         style={{ ...INP, width: "100%", resize: "vertical", marginTop: 4, boxSizing: "border-box" }}
       />
       <button onClick={enviar} style={{ ...BTN("ghost"), marginTop: 6, fontSize: 11 }}>💬 Comentar</button>
+      </>
+      )}
       {aBorrar && (
         <ModalConfirmarBorrado
           titulo="comentario"

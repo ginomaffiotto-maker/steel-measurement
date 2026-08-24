@@ -1171,9 +1171,9 @@ function EditorRubros({ item, onChange, onClose }) {
 
   return (
     <div style={{ position:"fixed", inset:0, zIndex:1000, background:"#000d",
-      display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
-      <div style={{ background:C.bg, border:`1.5px solid ${C.accent}44`, borderRadius:14,
-        width:"100%", maxWidth:1280, maxHeight:"96vh", display:"flex", flexDirection:"column",
+      display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.bg, border:`1.5px solid ${C.accent}44`, borderRadius:0,
+        width:"100%", height:"100%", maxWidth:"none", maxHeight:"none", display:"flex", flexDirection:"column",
         boxShadow:"0 24px 60px #0008" }}>
 
         {/* Header */}
@@ -1413,6 +1413,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   const delItem = (id) => set("items", pres.items.filter(x => x.id !== id));
   const addItem = ()   => set("items", [...(pres.items||[]), iItem()]);
   const [confirmarSyncPrecios, setConfirmarSyncPrecios] = useState(null); // {cambios} | null
+  // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
+  // pantalla para los ítems, que es lo que se edita más seguido.
+  const [datosAbiertos, setDatosAbiertos] = useState(false);
 
   const cambiarEstado = (k) => {
     if (k === "aprobado" && pres.estado !== "aprobado") {
@@ -1478,9 +1481,17 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         <div>
           {/* Datos generales */}
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
-            <div style={{ fontWeight:700, color:C.steel, fontSize:11, marginBottom:14, textTransform:"uppercase", letterSpacing:.5 }}>
-              Datos generales
+            <div onClick={() => setDatosAbiertos(a => !a)}
+              style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", userSelect:"none",
+                fontWeight:700, color:C.steel, fontSize:11, marginBottom:datosAbiertos?14:0, textTransform:"uppercase", letterSpacing:.5 }}>
+              <span>{datosAbiertos ? "▾" : "▸"}</span> Datos generales
+              {!datosAbiertos && (pres.cliente || pres.obra) && (
+                <span style={{ textTransform:"none", fontWeight:400, color:C.muted, letterSpacing:0 }}>
+                  — {pres.cliente || "sin cliente"}{pres.obra ? ` · ${pres.obra}` : ""}
+                </span>
+              )}
             </div>
+            {datosAbiertos && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label style={LBL}>Cliente (empresa)</label>
                 <AutocompleteEmpresa style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
@@ -1514,6 +1525,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Notas / Cláusulas</label>
                 <input style={INP} value={pres.notas||""} placeholder="Observaciones, condiciones, cláusulas..." onChange={e=>set("notas",e.target.value)}/></div>
             </div>
+            )}
           </div>
 
           <ComentariosPanel comentarios={pres.comentarios} usuario={usuario} onAgregar={onAgregarComentario} onEliminar={onEliminarComentario} />
@@ -1766,7 +1778,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
     .filter(p => !filtroVendedor || String(p.vendedor) === filtroVendedor)
     .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
     .filter(p => !filtHasta || (p.fecha||"") <= filtHasta)
-    .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length }));
+    .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length,
+      _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" }));
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
@@ -1936,7 +1949,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
           {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         {usuarios.length > 0 && (
-          <select style={{ ...INP, width:150 }} value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}>
+          <select style={{ ...INP, width:190 }} value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}>
             <option value="">Todos los vendedores</option>
             {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
           </select>
@@ -1968,9 +1981,9 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
             <thead><tr>
               {[
                 { h:"N°", campo:"nro" }, { h:"Nombre", campo:"nombre" }, { h:"Cliente", campo:"cliente" },
-                { h:"Obra", campo:"obra" }, { h:"Tipo", campo:"tipo_trabajo" }, { h:"Fecha", campo:"fecha" },
-                { h:"Ítems", campo:"_n_items" }, { h:"Total USD", campo:"_total_usd" }, { h:"Estado", campo:"estado" },
-                { h:"", campo:null },
+                { h:"Obra", campo:"obra" }, { h:"Tipo", campo:"tipo_trabajo" }, { h:"Vendedor", campo:"_vendedor_nombre" },
+                { h:"Fecha", campo:"fecha" }, { h:"Ítems", campo:"_n_items" }, { h:"Total USD", campo:"_total_usd" },
+                { h:"Estado", campo:"estado" }, { h:"", campo:null },
               ].map(({h,campo}) => (
                 <th key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
                   onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
@@ -1991,6 +2004,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
                     <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{p.cliente||"—"}</span></td>
                     <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{p.obra||"—"}</span></td>
                     <td style={TD}><span style={BDG(C.steel,true)}>{p.tipo_trabajo||"Fab"}</span></td>
+                    <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
                     <td style={TD}><span style={{ fontSize:11, color:C.muted }}>{p.fecha}</span></td>
                     <td style={{ ...TD, textAlign:"center" }}>{(p.items||[]).length}</td>
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
