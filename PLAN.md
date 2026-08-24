@@ -1,6 +1,6 @@
 # STEEL MEASUREMENT — PLAN MAESTRO Y CONTEXTO
 *Documento de referencia para continuar el desarrollo en nuevas sesiones*
-*Última actualización: 2026-08-22*
+*Última actualización: 2026-08-23*
 
 ---
 
@@ -2549,6 +2549,83 @@ usuario, pero se construyó igual).
   esto de verdad el día que haya un segundo dispositivo o usuario.
 
 Con esto, **Fase 5 queda completa en las 9 entidades de Steel Measurement**.
+
+## §9.27 — Bugs reales en el launcher de escritorio, encontrados dando de alta a Tiao (2026-08-23)
+
+Gino quiere compartir acceso con un compañero (Tiao) desde su propia PC —
+ya tiene su email para crear la cuenta (mismo backend/tenant compartido
+con steelCRM, confirmado con `c9` — un solo login sirve para los dos
+sistemas, sin nada extra de perfil/rol del lado de Steel Measurement).
+Antes de escribirle el instructivo, probé el launcher real de punta a
+punta (no solo leí el código) y encontré 2 bugs reales que le iban a
+fallar a Tiao en silencio:
+
+- **`IniciarOculto.vbs` tenía la ruta hardcodeada** a
+  `C:\Users\Gino\Documents\steel-measurement\...` — no iba a andar en
+  ninguna PC que no fuera exactamente la de Gino con ese usuario de
+  Windows. Corregido para autodetectar su propia carpeta
+  (`Scripting.FileSystemObject.GetParentFolderName(WScript.ScriptFullName)`),
+  igual que ya hacían el `.bat` y el `.ps1`.
+- **`IniciarSteelMeasurement.ps1` fallaba en silencio siempre** (no solo
+  para Tiao — esto ya le pasaba a Gino, aunque nunca lo notó porque
+  probablemente lo tenía andando de una sesión vieja): invocaba
+  `cmd.exe /c "Iniciar Steel Measurement.bat"` vía
+  `[System.Diagnostics.Process]::Start()` — el nombre del `.bat` tiene
+  espacios, y esa combinación puntual dispara un bug de parseo clásico
+  de `cmd.exe` (toma "Iniciar" como el comando y el resto como
+  argumentos) que hace que todo falle sin generar ni su propio log.
+  Reproducido y confirmado en la práctica (no en teoría): probé 4
+  variantes distintas de invocación antes de encontrar la que
+  realmente funciona. Fix: `Start-Process -FilePath "Iniciar Steel
+  Measurement.bat" -WorkingDirectory $dir -WindowStyle Hidden` — lanzar
+  el `.bat` directo como `FileName`, sin envolverlo a mano en
+  `cmd.exe /c`. Mismo patrón de fondo que ya usa `IniciarSteelCRM.ps1`
+  (que evita el problema de raíz llamando a `npm start` directo, sin
+  ningún archivo con espacios en el medio).
+- Verificado de punta a punta 2 veces: primero el `.ps1` solo, después
+  la cadena completa real (`IniciarOculto.vbs` → `.ps1` → `.bat` →
+  `npm start` → servidor respondiendo en `localhost:3002`, log con
+  "webpack compiled successfully") — como lo dispararía el ícono de
+  escritorio real con un doble clic.
+- **Sigue pendiente**: no existe instalador (.exe) todavía — el camino
+  actual para que Tiao tenga la app en su PC es Node.js + copia de la
+  carpeta (git clone o .zip) + `npm install` una vez + el launcher ya
+  corregido. Se lo planteé a Gino como decisión aparte (instalador
+  liviano tipo Inno Setup vs. Electron) — sin definir todavía cuál.
+
+## §9.40 — Desplegado en Vercel (reemplaza el plan de instalador de escritorio) (2026-08-24)
+
+Gino planteó un instalador de escritorio (Tauri/Electron) para que el equipo
+pueda tener la app en su PC — se le señaló que eso no acerca el objetivo real
+(vender esto como SaaS: un cliente pagando espera un link, no instalar un
+.exe). Decidió alojar las dos apps en hosting real en su lugar.
+
+- **URL real**: https://steel-measurement.vercel.app (proyecto Vercel
+  `ginomaffiotto/steel-measurement`, cuenta personal de Gino, plan Hobby
+  gratuito).
+- Desplegado vía Vercel CLI con un Access Token de la cuenta de Gino (mismo
+  criterio que Supabase — token, nunca contraseña). `REACT_APP_SUPABASE_URL`
+  y `REACT_APP_SUPABASE_ANON_KEY` cargadas como variables de entorno del
+  proyecto en Vercel (`--no-sensitive`, ya que son valores pensados para ser
+  públicos — la anon key nunca protegió nada por sí sola, RLS es la
+  protección real).
+- **Verificado en el sitio público real** (no una vista previa local): login
+  con la cuenta de prueba compartida (`test-claude@steelplatform.local`)
+  funciona de punta a punta, sin errores de consola. El botón de seed de
+  datos de prueba no aparece (correctamente oculto en build de producción).
+- **Nota de seguridad para quien retome esto**: la URL es pública (cualquiera
+  con el link llega al login), pero sin cuenta real no se puede entrar —
+  la protección de datos real es Supabase Auth + RLS por tenant, no algo del
+  lado de Vercel. Si en el futuro hace falta una capa extra (contraseña a
+  nivel Vercel antes de llegar al login), es una función paga (plan Pro),
+  evaluar si vale la pena cuando haya clientes reales.
+- steelCRM se despliega en paralelo del mismo modo, por la otra sesión de
+  coordinación — mismo hosting (Vercel), mismo criterio.
+- **Pendiente**: dominio propio (hoy es el gratuito `.vercel.app`) — a
+  definir cuando haga falta. Redeploy no es automático todavía (no hay
+  integración con git push, se corre `vercel deploy --prod` a mano) — a
+  evaluar si conviene conectar el repo a GitHub para que se despliegue solo
+  en cada commit, más adelante.
 
 ---
 
