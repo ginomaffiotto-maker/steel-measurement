@@ -2521,6 +2521,35 @@ respaldo que le corresponde según su forma:
 - Pendiente que Gino confirme en vivo: tarifario/biblioteca/historial
   siguen viéndose y funcionando igual que antes.
 
+## §9.39 — Fase 5 completa: presupuestos, cómputos, anidados (2026-08-23)
+
+Cierra Fase 5 en las 3 entidades que quedaban — a pedido explícito de
+Gino, con el riesgo aceptado a sabiendas (hoy con un solo dispositivo,
+el beneficio real es bajo hasta que haya un segundo dispositivo o
+usuario, pero se construyó igual).
+
+- `useMergePresupuestosNube`, `useMergeComputosNube`, `useMergeAnidadosNube`
+  (todas en `storage.js`): mismo criterio de fusión por id que biblioteca/
+  historial — **nunca reemplazan ni tocan lo que ya está local**, solo
+  agregan registros que existan en la nube y no localmente. Para cada uno,
+  resuelven `cliente_id → nombre` (`resolverNombreCliente`, nuevo, camino
+  inverso a `resolverClienteId`) y traen la estructura completa (ítems,
+  piezas/grupos) con las funciones de Fase 2 ya existentes.
+- **Simplificación aceptada a propósito, señalada en el código**: las
+  piezas de cómputo que llegan por este camino quedan con los campos de
+  `ficha` (granallado/pintura/etc.) planos en vez de anidados bajo
+  `.ficha` como espera el resto de la UI — indiferente en la práctica
+  porque solo afecta registros que nunca pasaron por este navegador.
+- Build limpio en las 3, verificado por separado antes de seguir a la
+  siguiente (Presupuesto → Cómputo → Anidado), como pidió Gino.
+- **No se pudo probar en vivo** — mismo motivo de siempre (sin login
+  local, sin credenciales reales de mi lado) y además, en la práctica,
+  hoy no hay ningún registro "solo remoto" real para forzar el camino
+  nuevo (un solo dispositivo, todo ya está local). Recomendado: probar
+  esto de verdad el día que haya un segundo dispositivo o usuario.
+
+Con esto, **Fase 5 queda completa en las 9 entidades de Steel Measurement**.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*

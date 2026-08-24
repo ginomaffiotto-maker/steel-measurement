@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -1687,6 +1687,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
 // ─── PRESUPUESTO (EXPORT DEFAULT) ────────────────────────────────
 export default function Presupuesto({ usuario, tcGlobal }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
+  useMergePresupuestosNube(setPres);
   const [vista,  setVista]  = useState("lista");
   const [selId,  setSelId]  = useState(null);
   const [nuevoOpen, setNuevoOpen] = useState(false);

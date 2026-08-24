@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -942,6 +942,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 // ═══════════════════════════════════════════════════════════════
 export default function Computo({ onNidar, onExportarPresupuesto, usuario, tcGlobal }) {
   const [computos,      setComputos]      = useState(() => loadLS("smeas_computos", []));
+  useMergeComputosNube(setComputos);
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);

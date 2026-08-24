@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -849,6 +849,7 @@ function exportarListaCorte(anidado) {
 // ═══════════════════════════════════════════════════════════════
 export default function Anidado({ usuario }) {
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
+  useMergeAnidadosNube(setAnidados);
   const [selId,      setSelId]      = useState(null);
   const [creando,    setCreando]    = useState(false);
   const [nombre,     setNombre]     = useState("");

@@ -143,6 +143,19 @@ export const resolverClienteId = async (nombre, empresa) => {
   return id;
 };
 
+// Camino inverso: dado un cliente_id (uuid), devuelve el nombre — usado para
+// reconstruir un registro que viene de la nube y no existía local todavía
+// (Fase 5, 2026-08-23). Cachea por id.
+const _cacheNombrePorId = new Map();
+export const resolverNombreCliente = async (id) => {
+  if (!id || !supabase) return "";
+  if (_cacheNombrePorId.has(id)) return _cacheNombrePorId.get(id);
+  const { data, error } = await supabase.from("clientes").select("nombre").eq("id", id).maybeSingle();
+  if (error || !data) return "";
+  _cacheNombrePorId.set(id, data.nombre || "");
+  return data.nombre || "";
+};
+
 // Lista de empresas conocidas (para autocompletar el campo Empresa, 2026-08-23)
 // — deriva de las mismas filas de `clientes`, cacheada en módulo aparte.
 let _cacheListaEmpresas = null;
@@ -182,6 +195,52 @@ export const saveDBPresupuestoSM = async (presupuesto) => {
   const { data, error } = await supabase.from("presupuestos_sm").upsert(row).select().single();
   if (error) throw error;
   return data;
+};
+
+// Fase 5 (piloto, 2026-08-23): fusiona por id — nunca reemplaza lo local,
+// solo agrega presupuestos que existan remoto y no local (ej. sincronizados
+// desde otro dispositivo). Reconstruye la forma completa: resuelve
+// cliente_id → nombre y trae los ítems con loadDBItems — una llamada extra
+// por presupuesto, pero solo corre para lo que todavía no está local.
+export const useMergePresupuestosNube = (setPresupuestos) => {
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const remotos = await loadDBPresupuestosSM();
+        let faltantes = [];
+        setPresupuestos((local) => {
+          const idsLocales = new Set(local.map((p) => p.id));
+          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
+          return local;
+        });
+        for (const r of faltantes) {
+          if (!vivo) return;
+          try {
+            const [cliente, items] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBItems(r.id)]);
+            const nuevo = {
+              id: r.id, nro: r.nro || "", codigo_calculo: r.codigo_calculo || "", nombre: r.nombre || "",
+              cliente, contacto: r.contacto || "", obra: r.obra || "", detalle: r.detalle || "",
+              tipo_trabajo: r.tipo_trabajo || "Fabricación", categoria: r.categoria || "",
+              estado: r.estado || "borrador", clonado_de: r.clonado_de_id || null,
+              negociacion_pct: r.negociacion_pct || 0, negociacion_usd: r.negociacion_usd || 0,
+              neg_modo: r.neg_modo || "pct", interes_pct: r.interes_pct || 0, interes_dias: r.interes_dias || 30,
+              items: items || [], notas: r.notas || "", fecha: r.fecha,
+              created_at: r.created_at, updated_at: r.updated_at,
+            };
+            if (vivo) setPresupuestos((prev) => (prev.some((p) => p.id === nuevo.id) ? prev : [...prev, nuevo]));
+          } catch (e) {
+            console.warn(`[Fase 5] No se pudo traer el presupuesto ${r.nro || r.id} de la nube:`, e.message || e);
+          }
+        }
+      } catch (e) {
+        console.warn("[Fase 5] No se pudo leer presupuestos de la nube:", e.message || e);
+      }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 };
 
 // ─── ÍTEMS DE PRESUPUESTO — 9 rubros de costo (Fase 2, sin cablear a la UI).
@@ -311,6 +370,45 @@ export const loadDBComputoCompleto = async (computoId) => {
   return { ...computo, items: itemsConPiezas };
 };
 
+// Fase 5 (piloto, 2026-08-23): fusiona por id, mismo criterio que
+// presupuestos — solo trae de la nube lo que no exista local todavía.
+// Simplificación aceptada a propósito: las piezas que llegan así quedan con
+// los campos de ficha (granallado/pintura/etc.) planos en vez de anidados
+// bajo `.ficha` como espera la UI — indiferente en la práctica porque este
+// camino solo corre para cómputos que nunca pasaron por este navegador.
+export const useMergeComputosNube = (setComputos) => {
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const remotos = await loadDBComputos();
+        let faltantes = [];
+        setComputos((local) => {
+          const idsLocales = new Set(local.map((c) => c.id));
+          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
+          return local;
+        });
+        for (const r of faltantes) {
+          if (!vivo) return;
+          try {
+            const [cliente, completo] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBComputoCompleto(r.id)]);
+            const { cliente_id, ...resto } = completo;
+            const nuevo = { ...resto, cliente };
+            if (vivo) setComputos((prev) => (prev.some((c) => c.id === nuevo.id) ? prev : [...prev, nuevo]));
+          } catch (e) {
+            console.warn(`[Fase 5] No se pudo traer el cómputo ${r.nro || r.id} de la nube:`, e.message || e);
+          }
+        }
+      } catch (e) {
+        console.warn("[Fase 5] No se pudo leer cómputos de la nube:", e.message || e);
+      }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+};
+
 // NOTA: la app local guarda cada pieza con { ...campos, ficha: {...} } (objeto
 // anidado); la tabla computo_piezas tiene esos campos de ficha aplanados
 // directo en la fila. Acá se aplanan al guardar. `largo_mm_input` (string de
@@ -392,6 +490,41 @@ export const saveDBAnidado = async (anidado) => {
     }
   }
   return anidadoId;
+};
+
+// Fase 5 (piloto, 2026-08-23): fusiona por id, mismo criterio que
+// presupuestos/cómputos — solo trae de la nube lo que no exista local.
+export const useMergeAnidadosNube = (setAnidados) => {
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const remotos = await loadDBAnidados();
+        let faltantes = [];
+        setAnidados((local) => {
+          const idsLocales = new Set(local.map((a) => a.id));
+          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
+          return local;
+        });
+        for (const r of faltantes) {
+          if (!vivo) return;
+          try {
+            const [cliente, completo] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBAnidadoCompleto(r.id)]);
+            const { cliente_id, ...resto } = completo;
+            const nuevo = { ...resto, cliente };
+            if (vivo) setAnidados((prev) => (prev.some((a) => a.id === nuevo.id) ? prev : [...prev, nuevo]));
+          } catch (e) {
+            console.warn(`[Fase 5] No se pudo traer el anidado ${r.nombre || r.id} de la nube:`, e.message || e);
+          }
+        }
+      } catch (e) {
+        console.warn("[Fase 5] No se pudo leer anidados de la nube:", e.message || e);
+      }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 };
 
 // ─── HISTORIAL DE TRABAJOS (benchmark) (Fase 2, sin cablear a la UI) ─
