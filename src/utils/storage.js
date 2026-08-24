@@ -9,6 +9,36 @@ import { supabase } from "./supabaseClient";
 // que se inserte una fila nueva dejando que la base genere el id.
 const sinId = (obj) => { const { id, ...resto } = obj; return resto; };
 
+// UUID válido, no cualquier string en el campo id — encontrado en Fase 4
+// con datos reales (2026-08-24): registros viejos (de antes de que uid()
+// usara crypto.randomUUID(), o de seeds de prueba tipo "seed_anid_001")
+// tienen ids como "mry49eatlzth", que Postgres rechaza en una columna
+// uuid. computos/anidados/presupuestos_sm usan id como identidad real
+// (upsert por id) así que hace falta un uuid válido — a diferencia de la
+// biblioteca de materiales, que usa códigos de catálogo a propósito (ver
+// saveDBMaterial) y por eso esa columna es texto, no uuid.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const conIdValido = (r) => (r.id && UUID_RE.test(String(r.id)) ? r : { ...r, id: uid() });
+
+// Listas blancas en vez de negras (mismo criterio que
+// COLUMNAS_HISTORIAL_TRABAJO más abajo): el objeto local fue creciendo
+// campos sueltos con el tiempo (categoria_id viejo sin uso, cantidad en
+// vez de cantidad_total, etc. — encontrados recién al migrar datos reales
+// en Fase 4) que no tienen columna en la tabla. Elegir explícitamente
+// evita que un campo nuevo local rompa el insert.
+const COLUMNAS_PRESUPUESTO_SM = [
+  "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "detalle",
+  "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
+  "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc",
+];
+const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro"];
+const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra"];
+const soloColumnas = (obj, columnas) => {
+  const row = {};
+  for (const k of columnas) if (obj[k] !== undefined) row[k] = obj[k];
+  return row;
+};
+
 // Barrera de arranque para Fase 5 (2026-08-23, tras el bug de origen vacío en
 // Vercel): un `useEffect(..., [])` corre al MONTAR, pero supabase-js recién
 // termina de restaurar la sesión persistida (localStorage del cliente auth)
@@ -213,7 +243,7 @@ export const loadDBPresupuestosSM = async () => {
 };
 export const saveDBPresupuestoSM = async (presupuesto) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { items, ...row } = presupuesto;
+  const row = soloColumnas(conIdValido(presupuesto), COLUMNAS_PRESUPUESTO_SM);
   const { data, error } = await supabase.from("presupuestos_sm").upsert(row).select().single();
   if (error) throw error;
   return data;
@@ -453,7 +483,8 @@ export const useMergeComputosNube = (setComputos) => {
 // propia — es un detalle de edición local, no un dato a persistir.
 export const saveDBComputo = async (computo) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { items, ...row } = computo;
+  const { items } = computo;
+  const row = soloColumnas(conIdValido(computo), COLUMNAS_COMPUTO);
   const { data: savedComputo, error: eC } = await supabase.from("computos").upsert(row).select().single();
   if (eC) throw eC;
   const computoId = savedComputo.id;
@@ -504,7 +535,8 @@ export const loadDBAnidadoCompleto = async (anidadoId) => {
 
 export const saveDBAnidado = async (anidado) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { grupos, ...row } = anidado;
+  const { grupos } = anidado;
+  const row = soloColumnas(conIdValido(anidado), COLUMNAS_ANIDADO);
   const { data: savedAnidado, error: eA } = await supabase.from("anidados").upsert(row).select().single();
   if (eA) throw eA;
   const anidadoId = savedAnidado.id;
@@ -796,6 +828,23 @@ export const useTarifarioConNube = () => {
 // nunca se ejecuta sola, la dispara un botón admin-only en Config. Corre
 // todo secuencial (no en paralelo) para no saturar la base y poder llevar
 // un conteo de errores entidad por entidad sin que uno tumbe a los demás.
+// Corrige en el propio localStorage (antes de subir) cualquier id que no
+// sea un uuid válido — registros viejos, de antes de que uid() generara
+// uuid real, o de seeds de prueba. Se persiste ya corregido para que
+// saveDBItem(p.id,...) más abajo use el mismo id que terminó subiendo el
+// presupuesto/cómputo/anidado dueño, y para que ediciones futuras (Fase 3)
+// ya encuentren el id bueno en vez de volver a fallar cada vez.
+const normalizarIds = (key) => {
+  const arr = loadLS(key, []);
+  let cambio = false;
+  const normalizado = arr.map((r) => {
+    if (r.id && !UUID_RE.test(String(r.id))) { cambio = true; return { ...r, id: uid() }; }
+    return r;
+  });
+  if (cambio) saveLS(key, normalizado);
+  return normalizado;
+};
+
 export const migrarTodoALaNube = async (onProgress) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const log = (msg) => { if (onProgress) onProgress(msg); };
@@ -814,7 +863,7 @@ export const migrarTodoALaNube = async (onProgress) => {
   }
   log(`Clientes: ${resumen.clientes.ok}/${resumen.clientes.total}`);
 
-  const presupuestos = loadLS("smeas_presupuestos", []);
+  const presupuestos = normalizarIds("smeas_presupuestos");
   resumen.presupuestos.total = presupuestos.length;
   for (const p of presupuestos) {
     try {
@@ -827,7 +876,7 @@ export const migrarTodoALaNube = async (onProgress) => {
   }
   log(`Presupuestos: ${resumen.presupuestos.ok}/${resumen.presupuestos.total}`);
 
-  const computos = loadLS("smeas_computos", []);
+  const computos = normalizarIds("smeas_computos");
   resumen.computos.total = computos.length;
   for (const c of computos) {
     try {
@@ -839,7 +888,7 @@ export const migrarTodoALaNube = async (onProgress) => {
   }
   log(`Cómputos: ${resumen.computos.ok}/${resumen.computos.total}`);
 
-  const anidados = loadLS("smeas_anidados", []);
+  const anidados = normalizarIds("smeas_anidados");
   resumen.anidados.total = anidados.length;
   for (const a of anidados) {
     try {

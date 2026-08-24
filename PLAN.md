@@ -2783,6 +2783,62 @@ esté bien referenciado.
   `manifest.json`/`logo512.png` responden bien en el sitio real y no hay
   errores de consola.
 
+## §9.46 — Fix real: esquema roto para presupuestos/cómputos/anidados/biblioteca en la migración con datos reales (2026-08-24)
+
+Gino corrió "Migrar todo a la nube" con sus datos reales (no de prueba) y
+tiró 732 errores. Server-side, no de timing — el frontend nunca podía
+haber andado bien acá, más allá de cualquier fix de sesión.
+
+- **`presupuestos_sm` le faltaba la columna `tc`** (tipo de cambio
+  histórico del presupuesto — campo real, ya usado en la UI, nunca
+  agregado a la tabla al diseñar el esquema) y **`codigo_calculo` era
+  NOT NULL** aunque hay presupuestos reales más viejos que esa
+  funcionalidad, sin código asignado. Migración nueva en steel-backend
+  (`20260824090000_fix_steel_measurement_schema.sql`): agrega `tc`,
+  saca el NOT NULL.
+- **Biblioteca de materiales (722 ítems) usa códigos de catálogo legibles
+  como id** ("HEB100", "GM_ANGULO_1_X_3_16_...") a propósito — permite
+  matchear el catálogo semilla en cualquier instalación. El esquema había
+  asumido `uuid` para todo `id` sin contemplar este caso — las 4 tablas
+  de biblioteca + `material_historial_precios.material_id` pasan a `text`.
+- **Cómputos/anidados/presupuestos con `id` viejo** (de antes de que
+  `uid()` usara `crypto.randomUUID()`, tipo `"mry49eatlzth"`, o de seeds
+  de prueba tipo `"seed_anid_001"`) rompían el `upsert` contra una columna
+  `uuid`. Nuevo helper `conIdValido()` en `storage.js`: si el `id` local
+  no matchea el formato uuid, genera uno nuevo. Se aplica DENTRO de
+  `saveDBComputo`/`saveDBAnidado`/`saveDBPresupuestoSM` (cubre también
+  Fase 3 en vivo, no solo la migración) y además, específicamente en
+  `migrarTodoALaNube`, se corrige y persiste en localStorage ANTES de
+  subir (`normalizarIds()`) — necesario para que `saveDBItem(p.id,...)`
+  use el mismo id ya corregido que terminó subiendo el presupuesto dueño,
+  y para que Fase 3 encuentre el id bueno la próxima vez.
+- **Columnas sueltas rompiendo el insert** (`categoria_id` — campo
+  muerto, ya no existe en ningún componente actual, quedó de una versión
+  vieja; `cantidad` en vez de `cantidad_total` en cómputos viejos): mismo
+  patrón que ya tenía `COLUMNAS_HISTORIAL_TRABAJO` para historial, ahora
+  también `COLUMNAS_PRESUPUESTO_SM`/`COLUMNAS_COMPUTO`/`COLUMNAS_ANIDADO`
+  — lista blanca explícita en vez de mandar el objeto completo.
+- **Riesgo conocido, aceptado por tiempo**: si se edita un
+  cómputo/anidado con id viejo en la MISMA pestaña, sin recargar,
+  inmediatamente después de migrar, el guardado en vivo generaría OTRO id
+  nuevo distinto al que `normalizarIds` ya dejó en localStorage (la
+  migración corrige el storage pero no el estado de React ya montado) —
+  crearía una fila duplicada en vez de actualizar la ya subida. Se avisó a
+  Gino: recargar la página después de migrar, antes de editar cualquier
+  cómputo/anidado viejo. Bajo impacto (solo afecta a los ~6-10 registros
+  con id legado, una sola vez hasta el próximo reload) — no se abordó el
+  patrón completo de reconciliación de `dbId` que sí tiene steelCRM,
+  quedaría para una pasada futura si hace falta.
+- **Sin resolver todavía**: "Tarifario: error" en el resumen de la
+  migración, sin texto de error específico visible en la captura que
+  mandó Gino — pendiente que confirme el mensaje exacto tras volver a
+  correr con el resto de los fixes ya aplicados.
+- Pedido de Gino de paso: el `short_name` del manifest (lo que aparece
+  bajo el ícono del escritorio al instalar) pasa de "Steel Measurement" a
+  **"SteelMeasurement"**, sin espacio.
+- Build limpio, desplegado a producción. **Falta que Gino corra el SQL en
+  Supabase y vuelva a migrar** — sin eso, nada de este fix tiene efecto.
+
 ---
 
 *Steel Measurement — construido desde las planillas que ya funcionan*
