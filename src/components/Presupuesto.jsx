@@ -142,6 +142,7 @@ export const iPresupuesto = () => ({
   id: uid(), nro: "", codigo_calculo: "", nombre: "", cliente: "", contacto: "", comentarios: [],
   obra: "", detalle: "", tipo_trabajo: "Fabricación", categoria: "",
   estado: "borrador", clonado_de: null,
+  vendedor: "",
   negociacion_pct: 0, negociacion_usd: 0, neg_modo: "pct",
   interes_pct: 0, interes_dias: 30,
   items: [], notas: "",
@@ -1690,7 +1691,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
 }
 
 // ─── PRESUPUESTO (EXPORT DEFAULT) ────────────────────────────────
-export default function Presupuesto({ usuario, tcGlobal }) {
+export default function Presupuesto({ usuario, tcGlobal, usuarios = [] }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(setPres);
   const [vista,  setVista]  = useState("lista");
@@ -1700,6 +1701,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroObra, setFiltroObra] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
+  const [filtroVendedor, setFiltroVendedor] = useState("");
   const [filtDesde, setFiltDesde] = useState("");
   const [filtHasta, setFiltHasta] = useState("");
   const [filtEst, setFiltEst] = useState("");
@@ -1758,6 +1760,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     .filter(p => !filtroCliente || (p.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
     .filter(p => !filtroObra    || (p.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
     .filter(p => !filtroTipo    || p.tipo === filtroTipo)
+    .filter(p => !filtroVendedor || String(p.vendedor) === filtroVendedor)
     .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
     .filter(p => !filtHasta || (p.fecha||"") <= filtHasta)
     .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length }));
@@ -1793,6 +1796,7 @@ export default function Presupuesto({ usuario, tcGlobal }) {
     const nuevo = { ...iPresupuesto(), ...form };
     nuevo.nro = newNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
+    if (!nuevo.vendedor) nuevo.vendedor = usuario?.id || "";
     setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
@@ -1928,6 +1932,12 @@ export default function Presupuesto({ usuario, tcGlobal }) {
           <option value="">Todos los tipos</option>
           {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        {usuarios.length > 0 && (
+          <select style={{ ...INP, width:150 }} value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}>
+            <option value="">Todos los vendedores</option>
+            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+          </select>
+        )}
         <input type="date" style={{ ...INP, width:140 }} value={filtDesde} title="Desde"
           onChange={e => setFiltDesde(e.target.value)} />
         <input type="date" style={{ ...INP, width:140 }} value={filtHasta} title="Hasta"

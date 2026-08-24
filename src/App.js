@@ -497,7 +497,7 @@ export default function App() {
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
           {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} tcGlobal={tcGlobal} />}
           {tab === "Anidado"     && <Anidado usuario={usuario} />}
-          {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} />}
+          {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} />}
           {tab === "Historial"   && <Historial usuario={usuario} />}
           {tab === "Dashboard"   && <Dashboard />}
           {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} />}
