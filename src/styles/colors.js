@@ -7,20 +7,27 @@ const THEMES = {
     bg: "#0d0f12", card: "#13161c", iron: "#1e2330", border: "#252a36",
     steel: "#8fa3b8", steelDk: "#4a5568", accent: "#e85d04", text: "#d4dde8",
     muted: "#6b7a90", mutedL: "#8fa3b8", ok: "#2ea043", err: "#d73a49",
-    warn: "#f0a500", info: "#1f6feb", pur: "#8b5cf6", gold: "#c9a84c",
+    warn: "#d97706", info: "#1f6feb", pur: "#8b5cf6", gold: "#c9a84c",
     teal: "#0d9488", pink: "#ec4899",
     radiusSm: 6, radiusLg: 10,
-    fontSans: "'Inter', sans-serif",
-    fontMono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    // Sistema "Acero" (2026-08-24, mismo cambio en steelCRM): IBM Plex en
+    // vez de Inter (uno de los defaults más asociados a UI "genérica de
+    // IA"), la fuente ya está cargada en index.html. warn separado del
+    // accent (antes #f0a500, muy cerca del naranja de marca).
+    fontSans: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontMono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
   },
   // Basado en la referencia visual de Gino (Lovable, paleta zinc + IBM Plex).
   // Colores convertidos de OKLCH a hex 1:1 desde la escala zinc de Tailwind.
-  // accent/info/pur/gold/teal/pink: la referencia solo define ok/warn/danger
-  // (monocromo puro) — el resto son criterio propio para no perder las
-  // distinciones de color que ya usa la app (ej. azul = perfiles lineales).
+  // info/pur/gold/teal/pink: la referencia solo define ok/warn/danger — el
+  // resto son criterio propio para no perder las distinciones de color que
+  // ya usa la app (ej. azul = perfiles lineales). accent (2026-08-24,
+  // sistema "Acero", mismo cambio en steelCRM): la referencia era monocromo
+  // puro (accent = text, negro) — se reemplazó por el naranja de marca para
+  // que el tema claro tenga el mismo color de marca que el oscuro.
   metalsales_light: {
     bg: "#f4f4f5", card: "#fafafa", iron: "#ffffff", border: "#e4e4e7",
-    steel: "#71717a", steelDk: "#52525b", accent: "#18181b", text: "#18181b",
+    steel: "#71717a", steelDk: "#52525b", accent: "#c2410c", text: "#18181b",
     muted: "#71717a", mutedL: "#a1a1aa", ok: "#059669", err: "#dc2626",
     warn: "#d97706", info: "#2563eb", pur: "#8b5cf6", gold: "#b45309",
     teal: "#0d9488", pink: "#ec4899",
