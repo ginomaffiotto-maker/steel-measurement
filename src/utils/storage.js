@@ -42,6 +42,7 @@ const COLUMNAS_PRESUPUESTO_SM = [
   "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
   "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor",
+  "eliminado", "eliminado_por", "eliminado_fecha",
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
@@ -681,7 +682,8 @@ export const loadDBHistorialTrabajos = async () => {
 // un campo nuevo mañana y rompa el insert otra vez.
 const COLUMNAS_HISTORIAL_TRABAJO = [
   "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "obra", "categoria",
-  "tipo_trabajo", "vendedor", "kg_total", "metros_total", "usd_total",
+  "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha",
+  "kg_total", "metros_total", "usd_total",
   "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
   "pct_t_fab", "pct_t_mon", "pct_trat", "pct_trasl", "pct_panto",
 ];

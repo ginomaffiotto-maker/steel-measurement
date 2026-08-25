@@ -8,6 +8,8 @@ import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { useSortable } from "../utils/useSortable";
+import { useUndoToast } from "./Toast";
+import FiltrosBar from "./FiltrosBar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -25,6 +27,24 @@ const TH_TOOLTIPS = {
 };
 
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
+
+const HIST_FILT_DEFAULTS = { cliente: "", obra: "", ot: "", categoria: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "", usdKgMin: "", usdKgMax: "" };
+function histCampos(usuarios, categorias) {
+  const campos = [
+    { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 160 },
+    { key: "obra", label: "Obra", type: "text", placeholder: "Buscar…", minWidth: 150 },
+    { key: "ot", label: "N° OT", type: "text", placeholder: "Buscar…", minWidth: 120 },
+    { key: "categoria", label: "Categoría", type: "select", options: categorias, placeholder: "Todas las categorías", minWidth: 180 },
+    { key: "tipo", label: "Tipo", type: "select", options: TIPOS, minWidth: 150 },
+    { key: "familia", label: "Familia", type: "select", options: Object.keys(FAMILIAS), minWidth: 170 },
+  ];
+  if (usuarios.length > 0) campos.push({ key: "vendedor", label: "Vendedor", type: "select", options: usuarios.map(u => ({ value: u.id, label: u.nombre })), minWidth: 170 });
+  campos.push({ key: "desde", label: "Desde", type: "date", minWidth: 140 });
+  campos.push({ key: "hasta", label: "Hasta", type: "date", minWidth: 140 });
+  campos.push({ key: "usdKgMin", label: "USD/kg mín", type: "number", minWidth: 110 });
+  campos.push({ key: "usdKgMax", label: "USD/kg máx", type: "number", minWidth: 110 });
+  return campos;
+}
 
 // Mismos 9 rubros que calcPresupuesto() en Presupuesto.jsx — así el benchmark
 // M5↔M4 y la conversión auto_m4 son 1:1, sin mapeos.
@@ -55,6 +75,7 @@ function genNro(lista) {
 export const iTrabajo = () => ({
   id: uid(), nro_ot: "", fecha: new Date().toISOString().slice(0, 10),
   cliente: "", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación", vendedor: "",
+  eliminado: false, eliminadoPor: null, eliminadoFecha: null,
   kg_total: 0, metros_total: 0, usd_total: 0,
   desglose_pct: { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 },
   horas_fab_est: 0, horas_fab_real: 0, horas_mon_est: 0, horas_mon_real: 0,
@@ -442,24 +463,16 @@ function Benchmark({ trabajos }) {
 }
 
 // ─── HISTORIAL (EXPORT DEFAULT) ───────────────────────────────────
-export default function Historial({ usuario, usuarios = [] }) {
+export default function Historial({ usuario, usuarios = [], logear }) {
   const [trabajos, setTrabajos] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
   useMergeHistorialNube(setTrabajos);
+  const { show: showUndo, Toast } = useUndoToast();
   const [vista, setVista] = useState("lista"); // lista | detalle | benchmark
   const [selId, setSelId] = useState(null);
   const [nuevoOpen, setNuevoOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [filtroCliente, setFiltroCliente] = useState("");
-  const [filtroObra, setFiltroObra] = useState("");
-  const [filtroOT, setFiltroOT] = useState("");
-  const [filtCat, setFiltCat] = useState("");
-  const [filtTipo, setFiltTipo] = useState("");
-  const [filtFamilia, setFiltFamilia] = useState("");
-  const [filtVendedor, setFiltVendedor] = useState("");
-  const [filtDesde, setFiltDesde] = useState("");
-  const [filtHasta, setFiltHasta] = useState("");
-  const [usdKgMin, setUsdKgMin] = useState("");
-  const [usdKgMax, setUsdKgMax] = useState("");
+  const [filt, setFilt] = useState(HIST_FILT_DEFAULTS);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
 
   useEffect(() => { saveLS("smeas_historial", trabajos); }, [trabajos]);
@@ -474,22 +487,23 @@ export default function Historial({ usuario, usuarios = [] }) {
   }, []); // eslint-disable-line
 
   const selTrab = trabajos.find(t => t.id === selId) || null;
-  const categorias = [...new Set(trabajos.map(t => t.categoria).filter(Boolean))].sort();
+  const trabajosActivos = trabajos.filter(t => !t.eliminado);
+  const categorias = [...new Set(trabajosActivos.map(t => t.categoria).filter(Boolean))].sort();
 
   const usdKgDe = (t) => (+t.kg_total > 0) ? (+t.usd_total || 0) / (+t.kg_total) : 0;
 
-  const listaFiltrada = trabajos
-    .filter(t => !filtCat || t.categoria === filtCat)
-    .filter(t => !filtTipo || t.tipo_trabajo === filtTipo)
-    .filter(t => !filtFamilia || familiaDe(t.categoria) === filtFamilia)
-    .filter(t => !filtVendedor || String(t.vendedor) === filtVendedor)
-    .filter(t => !usdKgMin || (usdKgDe(t) >= +usdKgMin))
-    .filter(t => !usdKgMax || (usdKgDe(t) <= +usdKgMax))
-    .filter(t => !filtroCliente || (t.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
-    .filter(t => !filtroObra    || (t.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
-    .filter(t => !filtroOT      || (t.nro_ot||"").toLowerCase().includes(filtroOT.toLowerCase()))
-    .filter(t => !filtDesde || (t.fecha||"") >= filtDesde)
-    .filter(t => !filtHasta || (t.fecha||"") <= filtHasta)
+  const listaFiltrada = trabajosActivos
+    .filter(t => !filt.categoria || t.categoria === filt.categoria)
+    .filter(t => !filt.tipo || t.tipo_trabajo === filt.tipo)
+    .filter(t => !filt.familia || familiaDe(t.categoria) === filt.familia)
+    .filter(t => !filt.vendedor || String(t.vendedor) === filt.vendedor)
+    .filter(t => !filt.usdKgMin || (usdKgDe(t) >= +filt.usdKgMin))
+    .filter(t => !filt.usdKgMax || (usdKgDe(t) <= +filt.usdKgMax))
+    .filter(t => !filt.cliente || (t.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase()))
+    .filter(t => !filt.obra    || (t.obra||"").toLowerCase().includes(filt.obra.toLowerCase()))
+    .filter(t => !filt.ot      || (t.nro_ot||"").toLowerCase().includes(filt.ot.toLowerCase()))
+    .filter(t => !filt.desde || (t.fecha||"") >= filt.desde)
+    .filter(t => !filt.hasta || (t.fecha||"") <= filt.hasta)
     .map(t => ({ ...t, _usd_kg: usdKgDe(t) }));
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
@@ -504,6 +518,7 @@ export default function Historial({ usuario, usuarios = [] }) {
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({
         ...resto, cliente_id, vendedor,
+        eliminado_por: t.eliminadoPor ?? null, eliminado_fecha: t.eliminadoFecha ?? null,
         pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
         pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,
         pct_trasl: pct.trasl, pct_panto: pct.panto,
@@ -537,7 +552,21 @@ export default function Historial({ usuario, usuarios = [] }) {
     setTrabajos(prev => prev.map(x => x.id===t.id ? actualizado : x));
     dualWriteTrabajo(actualizado);
   };
-  const del = (id) => setTrabajos(prev => prev.filter(x => x.id!==id));
+  const del = (id) => {
+    const t = trabajos.find(x=>x.id===id);
+    if (!t) return;
+    const marcado = { ...t, eliminado:true, eliminadoPor:usuario?.nombre||"", eliminadoFecha:new Date().toISOString() };
+    setTrabajos(prev => prev.map(x => x.id===id ? marcado : x));
+    if (selId===id) { setSelId(null); setVista("lista"); }
+    dualWriteTrabajo(marcado);
+    logear?.("Trabajo eliminado", (t.nro_ot||"") + " — " + (t.cliente||""));
+    showUndo(`Trabajo "${t.nro_ot||t.cliente||""}" eliminado.`, () => {
+      const restaurado = { ...marcado, eliminado:false, eliminadoPor:null, eliminadoFecha:null };
+      setTrabajos(prev => prev.map(x => x.id===id ? restaurado : x));
+      dualWriteTrabajo(restaurado);
+      logear?.("Trabajo restaurado", (t.nro_ot||"") + " — " + (t.cliente||""));
+    });
+  };
   const trabajoAEliminar = confirmarDelId ? trabajos.find(t=>t.id===confirmarDelId) : null;
 
   if (vista === "detalle" && selTrab) {
@@ -546,6 +575,7 @@ export default function Historial({ usuario, usuarios = [] }) {
 
   return (
     <div>
+      {Toast}
       {trabajoAEliminar && (
         <ModalConfirmarEliminar
           titulo={`trabajo "${trabajoAEliminar.nro_ot||"Sin OT"}" — ${trabajoAEliminar.cliente||"sin cliente"}`}
@@ -556,7 +586,7 @@ export default function Historial({ usuario, usuarios = [] }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <div style={{ fontWeight:800, fontSize:20, color:C.accent }}>📊 Historial de Trabajos</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{trabajos.length} trabajo{trabajos.length!==1?"s":""} registrado{trabajos.length!==1?"s":""}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{trabajosActivos.length} trabajo{trabajosActivos.length!==1?"s":""} registrado{trabajosActivos.length!==1?"s":""}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           <button style={BTN("ok")} onClick={() => setImportOpen(true)}>✅ Desde presupuesto</button>
@@ -570,44 +600,16 @@ export default function Historial({ usuario, usuarios = [] }) {
         <button onClick={() => setVista("benchmark")} style={{ ...BTN(vista==="benchmark"?"ok":"ghost"), padding:"5px 14px" }}>📈 Benchmark</button>
       </div>
 
-      {vista === "benchmark" && <Benchmark trabajos={trabajos} />}
+      {vista === "benchmark" && <Benchmark trabajos={trabajosActivos} />}
 
       {vista === "lista" && (
         <>
-          <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-            <AutocompleteCliente style={{ ...INP, maxWidth:160 }} value={filtroCliente} placeholder="🔍 Cliente…"
-              onChange={setFiltroCliente} />
-            <input style={{ ...INP, maxWidth:150 }} value={filtroObra} placeholder="🔍 Obra…"
-              onChange={e => setFiltroObra(e.target.value)} />
-            <input style={{ ...INP, maxWidth:120 }} value={filtroOT} placeholder="🔍 N° OT…"
-              onChange={e => setFiltroOT(e.target.value)} />
-            <select style={{ ...INP, maxWidth:180 }} value={filtCat} onChange={e=>setFiltCat(e.target.value)}>
-              <option value="">Todas las categorías</option>
-              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select style={{ ...INP, maxWidth:150 }} value={filtTipo} onChange={e=>setFiltTipo(e.target.value)}>
-              <option value="">Todos los tipos</option>
-              {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <select style={{ ...INP, maxWidth:170 }} value={filtFamilia} onChange={e=>setFiltFamilia(e.target.value)}>
-              <option value="">Todas las familias</option>
-              {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-            {usuarios.length > 0 && (
-              <select style={{ ...INP, maxWidth:170 }} value={filtVendedor} onChange={e=>setFiltVendedor(e.target.value)}>
-                <option value="">Todos los vendedores</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-              </select>
-            )}
-            <input type="date" style={{ ...INP, maxWidth:140 }} value={filtDesde} title="Desde" onChange={e=>setFiltDesde(e.target.value)} />
-            <input type="date" style={{ ...INP, maxWidth:140 }} value={filtHasta} title="Hasta" onChange={e=>setFiltHasta(e.target.value)} />
-            <input type="number" step="0.01" style={{ ...INP, maxWidth:110 }} placeholder="USD/kg mín" value={usdKgMin} onChange={e=>setUsdKgMin(e.target.value)} />
-            <input type="number" step="0.01" style={{ ...INP, maxWidth:110 }} placeholder="USD/kg máx" value={usdKgMax} onChange={e=>setUsdKgMax(e.target.value)} />
-          </div>
+          <FiltrosBar campos={histCampos(usuarios, categorias)} valores={filt} setValores={setFilt} defaults={HIST_FILT_DEFAULTS}
+            abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
 
           {lista.length === 0 && (
             <div style={{ textAlign:"center", padding:60, color:C.muted }}>
-              {trabajos.length === 0 ? (
+              {trabajosActivos.length === 0 ? (
                 <>
                   <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
                   <div style={{ fontSize:15, fontWeight:700, marginBottom:6, color:C.steel }}>Sin trabajos todavía</div>

@@ -9,6 +9,21 @@ import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
+import FiltrosBar from "./FiltrosBar";
+
+const COMPUTO_FILT_DEFAULTS = { nombre: "", cliente: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
+function computoCampos(usuarios) {
+  const campos = [
+    { key: "nombre", label: "Nombre / N°", type: "text", placeholder: "Buscar…", minWidth: 170 },
+    { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 150 },
+    { key: "desde", label: "Desde", type: "date", minWidth: 140 },
+    { key: "hasta", label: "Hasta", type: "date", minWidth: 140 },
+    { key: "tipo", label: "Tipo", type: "select", options: TIPOS_TRABAJO, minWidth: 140 },
+    { key: "familia", label: "Familia", type: "select", options: Object.keys(FAMILIAS), minWidth: 170 },
+  ];
+  if (usuarios.length > 0) campos.push({ key: "vendedor", label: "Vendedor", type: "select", options: usuarios.map(u => ({ value: u.id, label: u.nombre })), minWidth: 150 });
+  return campos;
+}
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const TH_R  = { ...TH, textAlign: "right" };
@@ -980,13 +995,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
-  const [busqNombre,    setBusqNombre]    = useState("");
-  const [busqCliente,   setBusqCliente]   = useState("");
-  const [fDesde,        setFDesde]        = useState("");
-  const [fHasta,        setFHasta]        = useState("");
-  const [filtVendedor,  setFiltVendedor]  = useState("");
-  const [filtTipo,      setFiltTipo]      = useState("");
-  const [filtFamilia,   setFiltFamilia]   = useState("");
+  const [filt, setFilt] = useState(COMPUTO_FILT_DEFAULTS);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
   const bib = useBiblioteca();
 
   useEffect(() => { saveLS("smeas_computos", computos); }, [computos]);
@@ -1020,7 +1030,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       // completa profileId (mismo patrón que meta_usuarios en steelCRM).
       const vendedor = usuarios.find(u => u.id === c.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = c;
-      await saveDBComputo({ ...resto, cliente_id, vendedor });
+      await saveDBComputo({ ...resto, cliente_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
     }
@@ -1083,13 +1093,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   };
 
   const computosFiltradosBase = computos.filter(c => !c.eliminado).filter(c => {
-    const enNombre   = !busqNombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(busqNombre.toLowerCase());
-    const enCliente  = !busqCliente || (c.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
-    const enDesde    = !fDesde || (c.fecha||"") >= fDesde;
-    const enHasta    = !fHasta || (c.fecha||"") <= fHasta;
-    const enVendedor = !filtVendedor || String(c.vendedor) === filtVendedor;
-    const enTipo     = !filtTipo || c.tipo_trabajo === filtTipo;
-    const enFamilia  = !filtFamilia || familiaDe(c.categoria) === filtFamilia;
+    const enNombre   = !filt.nombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(filt.nombre.toLowerCase());
+    const enCliente  = !filt.cliente || (c.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase());
+    const enDesde    = !filt.desde || (c.fecha||"") >= filt.desde;
+    const enHasta    = !filt.hasta || (c.fecha||"") <= filt.hasta;
+    const enVendedor = !filt.vendedor || String(c.vendedor) === filt.vendedor;
+    const enTipo     = !filt.tipo || c.tipo_trabajo === filt.tipo;
+    const enFamilia  = !filt.familia || familiaDe(c.categoria) === filt.familia;
     return enNombre && enCliente && enDesde && enHasta && enVendedor && enTipo && enFamilia;
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
@@ -1243,33 +1253,15 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         )}
 
         {computos.length > 0 && (
-          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-            <input type="text" placeholder="🔍 Nombre / N°…" value={busqNombre} onChange={e=>setBusqNombre(e.target.value)}
-              style={{ ...INP, width:170, padding:"6px 10px" }}/>
-            <AutocompleteCliente placeholder="🔍 Cliente…" value={busqCliente} onChange={setBusqCliente}
-              style={{ ...INP, width:150, padding:"6px 10px" }}/>
-            <input type="date" value={fDesde} onChange={e=>setFDesde(e.target.value)} title="Desde"
-              style={{ ...INP, width:140, padding:"6px 8px" }}/>
-            <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
-              style={{ ...INP, width:140, padding:"6px 8px" }}/>
-            {usuarios.length > 0 && (
-              <select value={filtVendedor} onChange={e=>setFiltVendedor(e.target.value)} style={{ ...INP, width:150, padding:"6px 8px" }}>
-                <option value="">Todos los vendedores</option>
-                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-              </select>
-            )}
-            <select value={filtTipo} onChange={e=>setFiltTipo(e.target.value)} style={{ ...INP, width:140, padding:"6px 8px" }}>
-              <option value="">Todos los tipos</option>
-              {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <select value={filtFamilia} onChange={e=>setFiltFamilia(e.target.value)} style={{ ...INP, width:170, padding:"6px 8px" }}>
-              <option value="">Todas las familias</option>
-              {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-            <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
-              opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
-            <span style={{ fontSize:11, color:C.muted }}>{computosFiltrados.length} de {computos.length}</span>
-          </div>
+          <>
+            <FiltrosBar campos={computoCampos(usuarios)} valores={filt} setValores={setFilt} defaults={COMPUTO_FILT_DEFAULTS}
+              abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
+            <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
+              <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
+                opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
+              <span style={{ fontSize:11, color:C.muted }}>{computosFiltrados.length} de {computos.length}</span>
+            </div>
+          </>
         )}
 
         {computos.length > 0 && computosFiltrados.length === 0 && (

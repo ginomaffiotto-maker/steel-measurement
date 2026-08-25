@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
@@ -603,6 +603,8 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
 function PapeleraPanel({ usuarios, logear }) {
   const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
   const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
+  const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
+  const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
 
   const restaurarComputo = async (c) => {
     const restaurado = { ...c, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
@@ -611,7 +613,7 @@ function PapeleraPanel({ usuarios, logear }) {
     saveLS("smeas_computos", next);
     const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
     const { cliente, comentarios, ...resto } = restaurado;
-    try { await saveDBComputo({ ...resto, vendedor }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    try { await saveDBComputo({ ...resto, vendedor, eliminado_por: null, eliminado_fecha: null }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
     logear?.("Cómputo restaurado", (c.nro || "") + " — " + (c.nombre || ""));
   };
 
@@ -622,17 +624,56 @@ function PapeleraPanel({ usuarios, logear }) {
     saveLS("smeas_anidados", next);
     const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
     const { cliente, comentarios, ...resto } = restaurado;
-    try { await saveDBAnidado({ ...resto, vendedor }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    try { await saveDBAnidado({ ...resto, vendedor, eliminado_por: null, eliminado_fecha: null }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
     logear?.("Anidado restaurado", a.nombre || "");
+  };
+
+  const restaurarPresupuesto = async (p) => {
+    const restaurado = { ...p, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
+    const next = presupuestos.map(x => x.id === p.id ? restaurado : x);
+    setPresupuestos(next);
+    saveLS("smeas_presupuestos", next);
+    try {
+      const nombreParaClientes = (restaurado.contacto || restaurado.cliente || "").trim();
+      const empresaParaClientes = restaurado.contacto ? restaurado.cliente : null;
+      const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
+      const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+      const { cliente, clonado_de, items, comentarios, ...resto } = restaurado;
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor, eliminado_por: null, eliminado_fecha: null });
+      for (const item of items || []) await saveDBItem(restaurado.id, item);
+    } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    logear?.("Presupuesto restaurado", (p.nro || "") + " — " + (p.nombre || ""));
+  };
+
+  const restaurarTrabajo = async (t) => {
+    const restaurado = { ...t, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
+    const next = historial.map(x => x.id === t.id ? restaurado : x);
+    setHistorial(next);
+    saveLS("smeas_historial", next);
+    try {
+      const cliente_id = restaurado.cliente ? await resolverClienteId(restaurado.cliente, restaurado.empresa) : null;
+      const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+      const { cliente, desglose_pct, ...resto } = restaurado;
+      const pct = desglose_pct || {};
+      await saveDBTrabajoHistorico({
+        ...resto, cliente_id, vendedor, eliminado_por: null, eliminado_fecha: null,
+        pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
+        pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,
+        pct_trasl: pct.trasl, pct_panto: pct.panto,
+      });
+    } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    logear?.("Trabajo restaurado", (t.nro_ot || "") + " — " + (t.cliente || ""));
   };
 
   const eliminadosComputo = computos.filter(c => c.eliminado);
   const eliminadosAnidado = anidados.filter(a => a.eliminado);
-  const fila = (item, tipo, onRestaurar) => (
+  const eliminadosPresupuesto = presupuestos.filter(p => p.eliminado);
+  const eliminadosTrabajo = historial.filter(t => t.eliminado);
+  const fila = (item, tipo, onRestaurar, titulo) => (
     <div key={tipo + item.id} style={{ display:"flex", gap:12, padding:"9px 0", borderBottom:`1px solid ${C.border}22`, fontSize:12, alignItems:"center" }}>
       <span style={{ fontSize:11, fontWeight:700, color:C.muted, minWidth:70 }}>{tipo}</span>
       <div style={{ flex:1 }}>
-        <div style={{ color:C.text, fontWeight:600 }}>{item.nombre || item.nro || "Sin nombre"}</div>
+        <div style={{ color:C.text, fontWeight:600 }}>{titulo ? titulo(item) : (item.nombre || item.nro || "Sin nombre")}</div>
         <div style={{ color:C.muted, fontSize:11 }}>
           Eliminado por {item.eliminadoPor || "?"} · {item.eliminadoFecha ? new Date(item.eliminadoFecha).toLocaleString("es-UY", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}
         </div>
@@ -647,13 +688,15 @@ function PapeleraPanel({ usuarios, logear }) {
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
       <div style={{ fontWeight:700, fontSize:14, color:C.steel, marginBottom:4 }}>🗑️ Papelera</div>
       <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-        Cómputos y anidados eliminados. Restaurar los devuelve a su lista normal, sin límite de tiempo.
+        Cómputos, anidados, presupuestos y trabajos de historial eliminados. Restaurar los devuelve a su lista normal, sin límite de tiempo.
       </div>
-      {eliminadosComputo.length === 0 && eliminadosAnidado.length === 0
+      {eliminadosComputo.length === 0 && eliminadosAnidado.length === 0 && eliminadosPresupuesto.length === 0 && eliminadosTrabajo.length === 0
         ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>✅ Todo limpio — no hay nada en la papelera</div>
         : <>
             {eliminadosComputo.map(c => fila(c, "Cómputo", restaurarComputo))}
             {eliminadosAnidado.map(a => fila(a, "Anidado", restaurarAnidado))}
+            {eliminadosPresupuesto.map(p => fila(p, "Presupuesto", restaurarPresupuesto))}
+            {eliminadosTrabajo.map(t => fila(t, "Historial", restaurarTrabajo, x => (x.nro_ot||"") + (x.cliente?` — ${x.cliente}`:"") || "Sin OT"))}
           </>}
     </div>
   );

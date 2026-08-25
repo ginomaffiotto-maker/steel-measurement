@@ -10,6 +10,8 @@ import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSee
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
 import { useSortable } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
+import { useUndoToast } from "./Toast";
+import FiltrosBar from "./FiltrosBar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -114,6 +116,21 @@ const ESTADO_CFG = {
 };
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
+const PRES_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "" };
+function presCampos(usuarios) {
+  const campos = [
+    { key: "nombre", label: "Nombre / N°", type: "text", placeholder: "Buscar…", minWidth: 190 },
+    { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 170 },
+    { key: "obra", label: "Obra", type: "text", placeholder: "Buscar…", minWidth: 170 },
+    { key: "tipo", label: "Tipo", type: "select", options: TIPOS, minWidth: 150 },
+    { key: "familia", label: "Familia", type: "select", options: Object.keys(FAMILIAS), minWidth: 170 },
+  ];
+  if (usuarios.length > 0) campos.push({ key: "vendedor", label: "Vendedor", type: "select", options: usuarios.map(u => ({ value: u.id, label: u.nombre })), minWidth: 190 });
+  campos.push({ key: "desde", label: "Desde", type: "date", minWidth: 140 });
+  campos.push({ key: "hasta", label: "Hasta", type: "date", minWidth: 140 });
+  return campos;
+}
+
 const TIPO_HORA_OPCIONES = [
   { label: "Común",    pct: 0   },
   { label: "Nocturna", pct: 25  },
@@ -129,6 +146,7 @@ export const iPresupuesto = () => ({
   obra: "", detalle: "", tipo_trabajo: "Fabricación", categoria: "",
   estado: "borrador", clonado_de: null,
   vendedor: "",
+  eliminado: false, eliminadoPor: null, eliminadoFecha: null,
   negociacion_pct: 0, negociacion_usd: 0, neg_modo: "pct",
   interes_pct: 0, interes_dias: 30,
   items: [], notas: "",
@@ -1708,17 +1726,12 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
 export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(setPres);
+  const { show: showUndo, Toast } = useUndoToast();
   const [vista,  setVista]  = useState("lista");
   const [selId,  setSelId]  = useState(null);
   const [nuevoOpen, setNuevoOpen] = useState(false);
-  const [filtroNombre, setFiltroNombre] = useState("");
-  const [filtroCliente, setFiltroCliente] = useState("");
-  const [filtroObra, setFiltroObra] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroFamilia, setFiltroFamilia] = useState("");
-  const [filtroVendedor, setFiltroVendedor] = useState("");
-  const [filtDesde, setFiltDesde] = useState("");
-  const [filtHasta, setFiltHasta] = useState("");
+  const [filt, setFilt] = useState(PRES_FILT_DEFAULTS);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
   const [filtEst, setFiltEst] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
@@ -1767,18 +1780,19 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   };
 
   const selPres = presupuestos.find(p => p.id === selId) || null;
-  const cnt = Object.fromEntries(Object.keys(ESTADO_CFG).map(k => [k, presupuestos.filter(p => p.estado===k).length]));
+  const cnt = Object.fromEntries(Object.keys(ESTADO_CFG).map(k => [k, presupuestos.filter(p => !p.eliminado && p.estado===k).length]));
 
   const listaFiltrada = presupuestos
+    .filter(p => !p.eliminado)
     .filter(p => !filtEst || p.estado === filtEst)
-    .filter(p => !filtroNombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filtroNombre.toLowerCase()))
-    .filter(p => !filtroCliente || (p.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
-    .filter(p => !filtroObra    || (p.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
-    .filter(p => !filtroTipo    || p.tipo_trabajo === filtroTipo)
-    .filter(p => !filtroFamilia || familiaDe(p.categoria) === filtroFamilia)
-    .filter(p => !filtroVendedor || String(p.vendedor) === filtroVendedor)
-    .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
-    .filter(p => !filtHasta || (p.fecha||"") <= filtHasta)
+    .filter(p => !filt.nombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filt.nombre.toLowerCase()))
+    .filter(p => !filt.cliente || (p.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase()))
+    .filter(p => !filt.obra    || (p.obra||"").toLowerCase().includes(filt.obra.toLowerCase()))
+    .filter(p => !filt.tipo    || p.tipo_trabajo === filt.tipo)
+    .filter(p => !filt.familia || familiaDe(p.categoria) === filt.familia)
+    .filter(p => !filt.vendedor || String(p.vendedor) === filt.vendedor)
+    .filter(p => !filt.desde || (p.fecha||"") >= filt.desde)
+    .filter(p => !filt.hasta || (p.fecha||"") <= filt.hasta)
     .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length,
       _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" }));
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
@@ -1801,7 +1815,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
       const vendedor = usuarios.find(u => u.id === p.vendedor)?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = p;
-      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor });
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor,
+        eliminado_por: p.eliminadoPor ?? null, eliminado_fecha: p.eliminadoFecha ?? null });
       for (const item of items || []) {
         await saveDBItem(p.id, item);
       }
@@ -1853,8 +1868,18 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   };
   const delPres = (id) => {
     const p = presupuestos.find(x=>x.id===id);
-    setPres(prev => prev.filter(x => x.id!==id));
-    if (p) logear?.("Presupuesto eliminado", (p.nro||"") + " — " + (p.nombre||""));
+    if (!p) return;
+    const marcado = { ...p, eliminado:true, eliminadoPor:usuario?.nombre||"", eliminadoFecha:new Date().toISOString() };
+    setPres(prev => prev.map(x => x.id===id ? marcado : x));
+    if (selId===id) { setSelId(null); setVista("lista"); }
+    dualWritePresupuesto(marcado);
+    logear?.("Presupuesto eliminado", (p.nro||"") + " — " + (p.nombre||""));
+    showUndo(`Presupuesto "${p.nro||p.nombre||""}" eliminado.`, () => {
+      const restaurado = { ...marcado, eliminado:false, eliminadoPor:null, eliminadoFecha:null };
+      setPres(prev => prev.map(x => x.id===id ? restaurado : x));
+      dualWritePresupuesto(restaurado);
+      logear?.("Presupuesto restaurado", (p.nro||"") + " — " + (p.nombre||""));
+    });
   };
 
   const clonarPres = (p) => {
@@ -1895,6 +1920,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
 
   return (
     <div>
+      {Toast}
       {presAEliminar && (
         <ModalConfirmarEliminar
           titulo={`presupuesto "${presAEliminar.nombre||"Sin nombre"}" (${presAEliminar.nro})`}
@@ -1944,32 +1970,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         ))}
       </div>
 
-      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-        <input style={{ ...INP, width:190 }} value={filtroNombre} placeholder="🔍 Nombre / N°…"
-          onChange={e => setFiltroNombre(e.target.value)} />
-        <AutocompleteCliente style={{ ...INP, width:170 }} value={filtroCliente} placeholder="🔍 Cliente…"
-          onChange={setFiltroCliente} />
-        <input style={{ ...INP, width:170 }} value={filtroObra} placeholder="🔍 Obra…"
-          onChange={e => setFiltroObra(e.target.value)} />
-        <select style={{ ...INP, width:150 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
-          <option value="">Todos los tipos</option>
-          {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select style={{ ...INP, width:170 }} value={filtroFamilia} onChange={e => setFiltroFamilia(e.target.value)}>
-          <option value="">Todas las familias</option>
-          {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
-        </select>
-        {usuarios.length > 0 && (
-          <select style={{ ...INP, width:190 }} value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}>
-            <option value="">Todos los vendedores</option>
-            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        )}
-        <input type="date" style={{ ...INP, width:140 }} value={filtDesde} title="Desde"
-          onChange={e => setFiltDesde(e.target.value)} />
-        <input type="date" style={{ ...INP, width:140 }} value={filtHasta} title="Hasta"
-          onChange={e => setFiltHasta(e.target.value)} />
-      </div>
+      <FiltrosBar campos={presCampos(usuarios)} valores={filt} setValores={setFilt} defaults={PRES_FILT_DEFAULTS}
+        abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
 
       {lista.length === 0 && (
         <div style={{ textAlign:"center", padding:60, color:C.muted }}>

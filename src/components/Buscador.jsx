@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { C, INP, LBL, BDG, BTN } from "../styles/colors";
+import { C, BDG, BTN } from "../styles/colors";
 import { loadLS, saveLS } from "../utils/storage";
 import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
+import FiltrosBar from "./FiltrosBar";
 
 const n2 = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
 
@@ -13,25 +14,25 @@ function normalizar() {
   const historial   = loadLS("smeas_historial", []);
 
   const filas = [];
-  computos.forEach(c => filas.push({
+  computos.filter(c => !c.eliminado).forEach(c => filas.push({
     tipo: "computo", id: c.id, icon: "📐", label: "Cómputo",
     titulo: c.nombre || "Sin nombre", sub: c.nro || "", fecha: c.fecha || "",
     texto: [c.nombre, c.nro].join(" "),
     vendedor: c.vendedor || "", categoria: c.categoria || "", tipo_trabajo: c.tipo_trabajo || "",
   }));
-  anidados.forEach(a => filas.push({
+  anidados.filter(a => !a.eliminado).forEach(a => filas.push({
     tipo: "anidado", id: a.id, icon: "✂️", label: "Anidado",
     titulo: a.nombre || "Sin nombre", sub: `${(a.grupos||[]).length} grupos`, fecha: a.fecha || "",
     texto: [a.nombre].join(" "),
     vendedor: a.vendedor || "", categoria: a.categoria || "", tipo_trabajo: a.tipo_trabajo || "",
   }));
-  presupuestos.forEach(p => filas.push({
+  presupuestos.filter(p => !p.eliminado).forEach(p => filas.push({
     tipo: "presupuesto", id: p.id, icon: "💰", label: "Presupuesto",
     titulo: p.nombre || "Sin nombre", sub: `${p.nro || ""} · ${p.cliente || "sin cliente"}`, fecha: p.fecha || "",
     texto: [p.nombre, p.nro, p.cliente, p.obra, p.detalle].join(" "),
     vendedor: p.vendedor || "", categoria: p.categoria || "", tipo_trabajo: p.tipo_trabajo || "",
   }));
-  historial.forEach(h => filas.push({
+  historial.filter(h => !h.eliminado).forEach(h => filas.push({
     tipo: "historial", id: h.id, icon: "📊", label: "Historial",
     titulo: h.cliente || h.nro_ot || "Sin cliente", sub: `${h.nro_ot || ""} · ${h.categoria || "sin categoría"} · $${n2(h.usd_total)}`, fecha: h.fecha || "",
     texto: [h.nro_ot, h.cliente, h.obra, h.categoria].join(" "),
@@ -43,30 +44,39 @@ function normalizar() {
 const TAB_DESTINO = { computo: "Computo", anidado: "Anidado", presupuesto: "Presupuesto", historial: "Historial" };
 const PEND_KEY = { computo: "smeas_ir_a_computo", anidado: "smeas_ir_a_anidado", presupuesto: "smeas_ir_a_presupuesto", historial: "smeas_ir_a_historial" };
 
+const FILT_DEFAULTS = { texto: "", cliente: "", desde: "", hasta: "", familia: "", tipo: "", vendedor: "" };
+function buscadorCampos(usuarios) {
+  const campos = [
+    { key: "texto", label: "Texto (nombre, N°, obra...)", type: "text", placeholder: "Buscar...", flex: "2 1 280px", minWidth: 280 },
+    { key: "cliente", label: "Cliente", type: "text", placeholder: "Nombre del cliente", flex: "1 1 220px", minWidth: 220 },
+    { key: "desde", label: "Desde", type: "date", flex: "1 1 180px", minWidth: 180 },
+    { key: "hasta", label: "Hasta", type: "date", flex: "1 1 180px", minWidth: 180 },
+    { key: "familia", label: "Familia", type: "select", options: Object.keys(FAMILIAS), flex: "1 1 170px", minWidth: 170 },
+    { key: "tipo", label: "Tipo", type: "select", options: TIPOS_TRABAJO, flex: "1 1 140px", minWidth: 140 },
+  ];
+  if (usuarios.length > 0) campos.push({ key: "vendedor", label: "Vendedor", type: "select", options: usuarios.map(u => ({ value: u.id, label: u.nombre })), flex: "1 1 170px", minWidth: 170 });
+  return campos;
+}
+
 export default function Buscador({ onIrA, usuarios = [] }) {
-  const [texto, setTexto] = useState("");
-  const [cliente, setCliente] = useState("");
-  const [fechaDesde, setFechaDesde] = useState("");
-  const [fechaHasta, setFechaHasta] = useState("");
+  const [filt, setFilt] = useState(FILT_DEFAULTS);
+  const [abierto, setAbierto] = useState(true);
   const [tipoFiltro, setTipoFiltro] = useState("");
-  const [vendedorFiltro, setVendedorFiltro] = useState("");
-  const [tipoTrabajoFiltro, setTipoTrabajoFiltro] = useState("");
-  const [familiaFiltro, setFamiliaFiltro] = useState("");
 
   const todas = normalizar();
-  const activo = texto.trim() || cliente.trim() || fechaDesde || fechaHasta || tipoFiltro || vendedorFiltro || tipoTrabajoFiltro || familiaFiltro;
+  const activo = filt.texto.trim() || filt.cliente.trim() || filt.desde || filt.hasta || filt.familia || filt.tipo || filt.vendedor || tipoFiltro;
 
   // Sin el filtro de tipo — así los badges muestran cuántos hay de cada uno
   // para los filtros de texto/cliente/fecha actuales, no solo del tipo ya
   // elegido (que siempre daría 0 en los demás).
   const porTexto = todas
-    .filter(f => !texto.trim() || f.texto.toLowerCase().includes(texto.trim().toLowerCase()))
-    .filter(f => !cliente.trim() || f.texto.toLowerCase().includes(cliente.trim().toLowerCase()))
-    .filter(f => !fechaDesde || (f.fecha && f.fecha >= fechaDesde))
-    .filter(f => !fechaHasta || (f.fecha && f.fecha <= fechaHasta))
-    .filter(f => !vendedorFiltro || String(f.vendedor) === vendedorFiltro)
-    .filter(f => !tipoTrabajoFiltro || f.tipo_trabajo === tipoTrabajoFiltro)
-    .filter(f => !familiaFiltro || familiaDe(f.categoria) === familiaFiltro);
+    .filter(f => !filt.texto.trim() || f.texto.toLowerCase().includes(filt.texto.trim().toLowerCase()))
+    .filter(f => !filt.cliente.trim() || f.texto.toLowerCase().includes(filt.cliente.trim().toLowerCase()))
+    .filter(f => !filt.desde || (f.fecha && f.fecha >= filt.desde))
+    .filter(f => !filt.hasta || (f.fecha && f.fecha <= filt.hasta))
+    .filter(f => !filt.vendedor || String(f.vendedor) === filt.vendedor)
+    .filter(f => !filt.tipo || f.tipo_trabajo === filt.tipo)
+    .filter(f => !filt.familia || familiaDe(f.categoria) === filt.familia);
 
   const resultados = porTexto
     .filter(f => !tipoFiltro || f.tipo === tipoFiltro)
@@ -93,47 +103,8 @@ export default function Buscador({ onIrA, usuarios = [] }) {
         fecha. Hacé clic en un resultado para ir directo a él.
       </div>
 
-      <div style={{ display:"flex", gap:16, marginBottom:16, flexWrap:"wrap" }}>
-        <div style={{ flex:"2 1 280px" }}>
-          <label style={LBL}>Texto (nombre, N°, obra...)</label>
-          <input style={{...INP, width:"100%"}} value={texto} placeholder="Buscar..." onChange={e=>setTexto(e.target.value)} />
-        </div>
-        <div style={{ flex:"1 1 220px" }}>
-          <label style={LBL}>Cliente</label>
-          <input style={{...INP, width:"100%"}} value={cliente} placeholder="Nombre del cliente" onChange={e=>setCliente(e.target.value)} />
-        </div>
-        <div style={{ flex:"1 1 180px" }}>
-          <label style={LBL}>Desde</label>
-          <input type="date" style={{...INP, width:"100%"}} value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)} />
-        </div>
-        <div style={{ flex:"1 1 180px" }}>
-          <label style={LBL}>Hasta</label>
-          <input type="date" style={{...INP, width:"100%"}} value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)} />
-        </div>
-        <div style={{ flex:"1 1 170px" }}>
-          <label style={LBL}>Familia</label>
-          <select style={{...INP, width:"100%"}} value={familiaFiltro} onChange={e=>setFamiliaFiltro(e.target.value)}>
-            <option value="">Todas</option>
-            {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-        </div>
-        <div style={{ flex:"1 1 140px" }}>
-          <label style={LBL}>Tipo</label>
-          <select style={{...INP, width:"100%"}} value={tipoTrabajoFiltro} onChange={e=>setTipoTrabajoFiltro(e.target.value)}>
-            <option value="">Todos</option>
-            {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        {usuarios.length > 0 && (
-          <div style={{ flex:"1 1 170px" }}>
-            <label style={LBL}>Vendedor</label>
-            <select style={{...INP, width:"100%"}} value={vendedorFiltro} onChange={e=>setVendedorFiltro(e.target.value)}>
-              <option value="">Todos</option>
-              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </select>
-          </div>
-        )}
-      </div>
+      <FiltrosBar campos={buscadorCampos(usuarios)} valores={filt} setValores={setFilt} defaults={FILT_DEFAULTS}
+        abierto={abierto} setAbierto={setAbierto} />
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
         <button onClick={()=>setTipoFiltro("")} style={{...BTN(tipoFiltro===""?"ok":"ghost"), padding:"7px 18px", fontSize:12}}>Todos ({todas.length})</button>

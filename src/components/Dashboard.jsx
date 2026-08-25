@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { C, INP, LBL, CARD, BTN } from "../styles/colors";
+import { C, CARD } from "../styles/colors";
 import { loadLS } from "../utils/storage";
-import AutocompleteCliente from "./AutocompleteCliente";
+import FiltrosBar from "./FiltrosBar";
 import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 import { calcPresupuesto } from "./Presupuesto";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
@@ -102,87 +102,24 @@ function normalizarTrabajo(t) {
 }
 
 // ─── FILTROS ───────────────────────────────────────────────────────
-// Colapsable — la barra completa ocupa espacio fijo en las 4 sub-pestañas
-// aunque el usuario ya haya elegido su filtro y quiera ver más resultado.
-function FiltrosBar({ filt, setFilt, abierto, setAbierto, usuarios = [] }) {
-  const set = (k, v) => setFilt(f => ({ ...f, [k]: v }));
-  return (
-    <div style={{ ...CARD(), background: C.iron, marginBottom: 16 }}>
-      <div onClick={() => setAbierto(a => !a)}
-        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none",
-          fontSize: 12, fontWeight: 700, color: C.muted, ...(abierto ? { marginBottom: 10 } : {}) }}>
-        <span>{abierto ? "▾" : "▸"}</span> 🔍 Filtros
-      </div>
-      {abierto && (
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-      <div style={{ minWidth: 130 }}>
-        <label style={LBL}>Fuente</label>
-        <select style={INP} value={filt.fuente} onChange={e => set("fuente", e.target.value)}>
-          <option value="ambos">Ambos</option>
-          <option value="presupuesto">Presupuesto</option>
-          <option value="historial">Historial</option>
-        </select>
-      </div>
-      <div style={{ minWidth: 130 }}>
-        <label style={LBL}>Período</label>
-        <select style={INP} value={filt.periodo} onChange={e => set("periodo", e.target.value)}>
-          {PERIODOS.map(p => <option key={p.key} value={p.key}>{p.lbl}</option>)}
-        </select>
-      </div>
-      <div style={{ minWidth: 150 }}>
-        <label style={LBL}>Desde</label>
-        <input type="date" style={INP} value={filt.desde} onChange={e => set("desde", e.target.value)} />
-      </div>
-      <div style={{ minWidth: 150 }}>
-        <label style={LBL}>Hasta</label>
-        <input type="date" style={INP} value={filt.hasta} onChange={e => set("hasta", e.target.value)} />
-      </div>
-      <div style={{ minWidth: 170 }}>
-        <label style={LBL}>Categoría</label>
-        <select style={INP} value={filt.categoria} onChange={e => set("categoria", e.target.value)}>
-          <option value="">Todas</option>
-          {Object.entries(FAMILIAS).map(([familia, cats]) => (
-            <optgroup key={familia} label={familia}>
-              {cats.map(c => <option key={c} value={c}>{c}</option>)}
-            </optgroup>
-          ))}
-        </select>
-      </div>
-      <div style={{ minWidth: 170 }}>
-        <label style={LBL}>Familia</label>
-        <select style={INP} value={filt.familia} onChange={e => set("familia", e.target.value)}>
-          <option value="">Todas</option>
-          {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
-        </select>
-      </div>
-      <div style={{ minWidth: 140 }}>
-        <label style={LBL}>Tipo</label>
-        <select style={INP} value={filt.tipo} onChange={e => set("tipo", e.target.value)}>
-          <option value="">Todos</option>
-          {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
-      {usuarios.length > 0 && (
-        <div style={{ minWidth: 170 }}>
-          <label style={LBL}>Vendedor</label>
-          <select style={INP} value={filt.vendedor} onChange={e => set("vendedor", e.target.value)}>
-            <option value="">Todos</option>
-            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </div>
-      )}
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <label style={LBL}>Cliente / Empresa</label>
-        <AutocompleteCliente style={INP} value={filt.cliente} placeholder="Buscar…" onChange={v => set("cliente", v)} />
-      </div>
-      <button style={{ ...BTN("ghost"), padding: "9px 14px" }}
-        onClick={() => setFilt({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", familia: "", tipo: "", vendedor: "", cliente: "" })}>
-        ✕ Todo
-      </button>
-      </div>
-      )}
-    </div>
-  );
+// Barra compartida (FiltrosBar.jsx, 2026-08-25) — este era el original del
+// que se copió el patrón para el resto de las pantallas; ahora usa el mismo
+// componente para no mantener dos implementaciones del mismo look.
+const FILT_DEFAULTS = { fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", familia: "", tipo: "", vendedor: "", cliente: "" };
+function dashCampos(usuarios) {
+  const campos = [
+    { key: "fuente", label: "Fuente", type: "select", minWidth: 130,
+      options: [{ value: "ambos", label: "Ambos" }, { value: "presupuesto", label: "Presupuesto" }, { value: "historial", label: "Historial" }] },
+    { key: "periodo", label: "Período", type: "select", minWidth: 130, options: PERIODOS.map(p => ({ value: p.key, label: p.lbl })) },
+    { key: "desde", label: "Desde", type: "date", minWidth: 150 },
+    { key: "hasta", label: "Hasta", type: "date", minWidth: 150 },
+    { key: "categoria", label: "Categoría", type: "groupedSelect", minWidth: 170, options: FAMILIAS },
+    { key: "familia", label: "Familia", type: "select", minWidth: 170, options: Object.keys(FAMILIAS) },
+    { key: "tipo", label: "Tipo", type: "select", minWidth: 140, options: TIPOS_TRABAJO },
+  ];
+  if (usuarios.length > 0) campos.push({ key: "vendedor", label: "Vendedor", type: "select", minWidth: 170, options: usuarios.map(u => ({ value: u.id, label: u.nombre })) });
+  campos.push({ key: "cliente", label: "Cliente / Empresa", type: "clienteAuto", flex: 1, minWidth: 160, placeholder: "Buscar…" });
+  return campos;
 }
 
 // ─── PESTAÑA RESUMEN ───────────────────────────────────────────────
@@ -306,7 +243,7 @@ const TABS = [
 
 export default function Dashboard({ usuarios = [] }) {
   const [tab, setTab] = useState("resumen");
-  const [filt, setFilt] = useState({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", familia: "", tipo: "", vendedor: "", cliente: "" });
+  const [filt, setFilt] = useState(FILT_DEFAULTS);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
 
   const presupuestos = loadLS("smeas_presupuestos", []);
@@ -343,7 +280,8 @@ export default function Dashboard({ usuarios = [] }) {
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Dashboard</h2>
       </div>
 
-      <FiltrosBar filt={filt} setFilt={setFilt} abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} usuarios={usuarios} />
+      <FiltrosBar campos={dashCampos(usuarios)} valores={filt} setValores={setFilt} defaults={FILT_DEFAULTS}
+        abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
 
       <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid " + C.border + "44", flexWrap: "wrap" }}>
         {TABS.map(t => (
