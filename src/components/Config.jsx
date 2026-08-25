@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
@@ -683,9 +683,24 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
   };
   const LS_KEY = { Cómputo: "smeas_computos", Anidado: "smeas_anidados", Presupuesto: "smeas_presupuestos", Historial: "smeas_historial" };
 
+  // Combo "razonablemente único" por entidad, para el respaldo por match
+  // cuando el id local no es uuid real (ver deleteFilaPorMatchDB) — solo
+  // columnas que existen tal cual en la tabla remota (no alias locales
+  // como "cliente", que en la nube es cliente_id).
+  const matchDe = (tipo, item) => {
+    if (tipo === "Cómputo")     return { nro: item.nro, nombre: item.nombre, fecha: item.fecha };
+    if (tipo === "Anidado")     return { nombre: item.nombre, fecha: item.fecha, obra: item.obra };
+    if (tipo === "Presupuesto") return { nro: item.nro, nombre: item.nombre, fecha: item.fecha };
+    if (tipo === "Historial")   return { nro_ot: item.nro_ot, fecha: item.fecha, obra: item.obra };
+    return {};
+  };
+
   // "Eliminar definitivamente" (2026-08-25, admin-only, mismo diseño que
   // steelCRM) — DELETE real contra Supabase + saca del estado local. A
-  // diferencia de Restaurar, esto no tiene deshacer.
+  // diferencia de Restaurar, esto no tiene deshacer. Si el id local no es
+  // uuid real (registro legacy de antes de crypto.randomUUID()), no es el
+  // mismo id que la fila remota — cae al respaldo por match en vez de
+  // arriesgarse a un DELETE que no borra nada.
   const purgar = async () => {
     if (!aPurgar) return;
     const { item, tipo } = aPurgar;
@@ -693,7 +708,10 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
     const next = lista.filter(x => x.id !== item.id);
     setLista(next);
     saveLS(LS_KEY[tipo], next);
-    try { await deleteDBFila(TABLA_DB[tipo], item.id); } catch (e) { console.warn("No se pudo borrar la fila real en Supabase:", e.message || e); }
+    try {
+      if (esUUID(item.id)) await deleteDBFila(TABLA_DB[tipo], item.id);
+      else await deleteFilaPorMatchDB(TABLA_DB[tipo], matchDe(tipo, item));
+    } catch (e) { console.warn("No se pudo borrar la fila real en Supabase:", e.message || e); }
     logear?.(`${tipo} eliminado definitivamente`, item.nro_ot || item.nro || item.nombre || item.cliente || "");
     setAPurgar(null);
   };

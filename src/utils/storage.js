@@ -31,6 +31,10 @@ const sinId = (obj) => { const { id, ...resto } = obj; return saneado(resto); };
 // saveDBMaterial) y por eso esa columna es texto, no uuid.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const conIdValido = (r) => (r.id && UUID_RE.test(String(r.id)) ? r : { ...r, id: uid() });
+// Exportado para el fallback de purga (2026-08-25): si el id local no es un
+// uuid real, no se puede confiar en que sea el mismo id de la fila remota
+// (conIdValido lo reemplazó por uno nuevo al sincronizar por primera vez).
+export const esUUID = (id) => !!id && UUID_RE.test(String(id));
 
 // Listas blancas en vez de negras (mismo criterio que
 // COLUMNAS_HISTORIAL_TRABAJO más abajo): el objeto local fue creciendo
@@ -404,6 +408,28 @@ export const deleteDBComentario = async (tabla, id) => {
 // nombre original), reusado para "eliminar definitivamente" desde la
 // Papelera (2026-08-25, mismo patrón que steelCRM) en vez de duplicar.
 export const deleteDBFila = deleteDBComentario;
+
+// Respaldo de deleteDBFila para el caso borde de ids legacy no-uuid (2026-08-25,
+// mismo diseño coordinado con steelCRM): si el id local no es el mismo que el
+// remoto (conIdValido le asignó uno nuevo al sincronizar por primera vez),
+// borrar por id no encuentra la fila real y la deja huérfana en silencio.
+// Acá se busca por un combo de campos "razonablemente único" en vez del id —
+// solo borra si el match da EXACTAMENTE una fila; si da 0 o más de una, no
+// toca nada (mejor una fila huérfana posible que arriesgarse a borrar la
+// equivocada por una coincidencia de nombre).
+export async function deleteFilaPorMatchDB(tabla, match) {
+  if (!supabase) return;
+  const filtro = Object.fromEntries(Object.entries(match).filter(([, v]) => v != null && v !== ""));
+  if (!Object.keys(filtro).length) return;
+  const { data, error } = await supabase.from(tabla).select("id").match(filtro);
+  if (error) { console.error(`deleteFilaPorMatchDB(${tabla}) select`, error); return; }
+  if (!data || data.length !== 1) {
+    if (data && data.length > 1) console.warn(`deleteFilaPorMatchDB(${tabla}): match ambiguo (${data.length} filas), no se borra nada por seguridad`);
+    return;
+  }
+  const { error: delError } = await supabase.from(tabla).delete().eq("id", data[0].id);
+  if (delError) console.error(`deleteFilaPorMatchDB(${tabla}) delete`, delError);
+}
 
 export const saveDBItem = async (presupuestoId, item) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
