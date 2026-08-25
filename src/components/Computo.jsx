@@ -8,7 +8,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
-import { SelectCategoria, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
+import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const TH_R  = { ...TH, textAlign: "right" };
@@ -984,6 +984,9 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [busqCliente,   setBusqCliente]   = useState("");
   const [fDesde,        setFDesde]        = useState("");
   const [fHasta,        setFHasta]        = useState("");
+  const [filtVendedor,  setFiltVendedor]  = useState("");
+  const [filtTipo,      setFiltTipo]      = useState("");
+  const [filtFamilia,   setFiltFamilia]   = useState("");
   const bib = useBiblioteca();
 
   useEffect(() => { saveLS("smeas_computos", computos); }, [computos]);
@@ -1080,11 +1083,14 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   };
 
   const computosFiltradosBase = computos.filter(c => !c.eliminado).filter(c => {
-    const enNombre  = !busqNombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(busqNombre.toLowerCase());
-    const enCliente = !busqCliente || (c.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
-    const enDesde   = !fDesde || (c.fecha||"") >= fDesde;
-    const enHasta   = !fHasta || (c.fecha||"") <= fHasta;
-    return enNombre && enCliente && enDesde && enHasta;
+    const enNombre   = !busqNombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(busqNombre.toLowerCase());
+    const enCliente  = !busqCliente || (c.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
+    const enDesde    = !fDesde || (c.fecha||"") >= fDesde;
+    const enHasta    = !fHasta || (c.fecha||"") <= fHasta;
+    const enVendedor = !filtVendedor || String(c.vendedor) === filtVendedor;
+    const enTipo     = !filtTipo || c.tipo_trabajo === filtTipo;
+    const enFamilia  = !filtFamilia || familiaDe(c.categoria) === filtFamilia;
+    return enNombre && enCliente && enDesde && enHasta && enVendedor && enTipo && enFamilia;
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 
@@ -1246,6 +1252,20 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
               style={{ ...INP, width:140, padding:"6px 8px" }}/>
             <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)} title="Hasta"
               style={{ ...INP, width:140, padding:"6px 8px" }}/>
+            {usuarios.length > 0 && (
+              <select value={filtVendedor} onChange={e=>setFiltVendedor(e.target.value)} style={{ ...INP, width:150, padding:"6px 8px" }}>
+                <option value="">Todos los vendedores</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            )}
+            <select value={filtTipo} onChange={e=>setFiltTipo(e.target.value)} style={{ ...INP, width:140, padding:"6px 8px" }}>
+              <option value="">Todos los tipos</option>
+              {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select value={filtFamilia} onChange={e=>setFiltFamilia(e.target.value)} style={{ ...INP, width:170, padding:"6px 8px" }}>
+              <option value="">Todas las familias</option>
+              {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
             <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
               opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
             <span style={{ fontSize:11, color:C.muted }}>{computosFiltrados.length} de {computos.length}</span>

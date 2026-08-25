@@ -9,7 +9,7 @@ import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
 import { useSortable } from "../utils/useSortable";
-import { familiaDe, SelectCategoria } from "../utils/taxonomia";
+import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
@@ -1715,6 +1715,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroObra, setFiltroObra] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
+  const [filtroFamilia, setFiltroFamilia] = useState("");
   const [filtroVendedor, setFiltroVendedor] = useState("");
   const [filtDesde, setFiltDesde] = useState("");
   const [filtHasta, setFiltHasta] = useState("");
@@ -1773,7 +1774,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     .filter(p => !filtroNombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filtroNombre.toLowerCase()))
     .filter(p => !filtroCliente || (p.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
     .filter(p => !filtroObra    || (p.obra||"").toLowerCase().includes(filtroObra.toLowerCase()))
-    .filter(p => !filtroTipo    || p.tipo === filtroTipo)
+    .filter(p => !filtroTipo    || p.tipo_trabajo === filtroTipo)
+    .filter(p => !filtroFamilia || familiaDe(p.categoria) === filtroFamilia)
     .filter(p => !filtroVendedor || String(p.vendedor) === filtroVendedor)
     .filter(p => !filtDesde || (p.fecha||"") >= filtDesde)
     .filter(p => !filtHasta || (p.fecha||"") <= filtHasta)
@@ -1952,6 +1954,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         <select style={{ ...INP, width:150 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
           <option value="">Todos los tipos</option>
           {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select style={{ ...INP, width:170 }} value={filtroFamilia} onChange={e => setFiltroFamilia(e.target.value)}>
+          <option value="">Todas las familias</option>
+          {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
         </select>
         {usuarios.length > 0 && (
           <select style={{ ...INP, width:190 }} value={filtroVendedor} onChange={e => setFiltroVendedor(e.target.value)}>
