@@ -137,7 +137,7 @@ por `tenant_id` vía RLS + Supabase Auth (`profiles`).
 
 | Integración | Cómo funciona | Local | Producción |
 |---|---|---|---|
-| **IA (Claude, `claude-haiku-4-5-20251001`)** | Proxy que agrega el header `x-api-key` server-side — la key nunca vive en el browser. | ✅ `server.js` expone `POST /api/claude` en `localhost:3001` (steelcrm). | ❌ **Ver §7 — roto hoy.** |
+| **IA (Claude, `claude-haiku-4-5-20251001`)** | Proxy que agrega el header `x-api-key` server-side — la key nunca vive en el browser. | ✅ `server.js` expone `POST /api/claude` en `localhost:3001` (steelcrm). | ✅ `api/claude.js` (función serverless, commit `2bfa1ef`) — ver §7 para el detalle y un bug distinto que sigue abierto en un módulo puntual. |
 | **Cotización BROU** | `server.js`/`api/cotizacion.js` hacen el mismo POST que la página pública del BROU a un portlet de Liferay (scraping, sin API oficial — riesgo conocido y documentado en el propio código: si el BROU rediseña la página, deja de funcionar). steelCRM la muestra como referencia; Steel Measurement la usa para autocompletar el tipo de cambio de cada presupuesto. | ✅ `localhost:3001` (steelcrm) / `localhost:3003` (Steel Measurement). | ✅ `api/cotizacion.js` (función serverless, mismo código de scraping) en los dos repos. |
 | **Backup automático** | `server.js` escribe `backups/backup_<fecha>.json` a disco y purga lo de más de 30 días. Por diseño, solo tiene sentido con un proceso local con disco propio. | ✅ `POST /api/backup`, `localhost:3001`. | — (no aplica; Config avisa si pasaron >3 días sin backup exitoso). |
 | **Google Drive (backup opcional)** | `src/utils/googleDrive.js` — OAuth (Google Identity Services) + `drive.file` scope, sube/baja `steelcrm_backup.json`. Solo steelCRM. | ✅ funciona igual en cualquier origen (no depende de `server.js`). | ✅ |
@@ -170,32 +170,43 @@ no alcanza). Confirmado visualmente por Gino en los dos.
 
 ---
 
-## 7. Hallazgo real: IA de steelCRM rota en producción
+## 7. IA de steelCRM en producción
 
-**Confirmado por código, no es un supuesto.** Las 6 funciones de IA de
-steelCRM (`Inicio.jsx`, `Calculadora.jsx`, `shared.jsx` ×2, `Historial.jsx`
-×2, `CerebroNegocio.jsx`, `Competencia.jsx`) llaman todas
+### ✅ Bug de URL — corregido (2026-08-25, commit `2bfa1ef`, sesión `-79_CRM`)
+
+Las 6 funciones de IA de steelCRM (`Inicio.jsx`, `Calculadora.jsx`,
+`shared.jsx` ×2, `Historial.jsx` ×2, `CerebroNegocio.jsx`,
+`Competencia.jsx` — 8 call-sites en total) llamaban todas
 `fetch("http://localhost:3001/api/claude", …)` **hardcodeado**, sin el
-mismo patrón de hostname que sí tiene `/api/cotizacion` (`App.js:481`,
-`if (window.location.hostname === "localhost") … else "/api/cotizacion"`).
+mismo patrón de hostname que ya tenía `/api/cotizacion`. No existía ningún
+`api/claude.js` en la carpeta `api/` de steelcrm — nadie había construido
+la versión serverless de este proxy, a diferencia de cotización.
+**Resultado hasta hoy: nadie podía usar IA en `steelcrm.vercel.app`.**
 
-No existe ningún `api/claude.js` (ni equivalente) en la carpeta `api/` de
-steelcrm — a diferencia de cotización, nadie construyó la versión
-serverless de este proxy. **Resultado: cualquier usuario entrando a
-`steelcrm.vercel.app` hoy no puede usar ninguna función de IA** — el fetch
-intenta conectar a un `localhost:3001` que no existe en su navegador y
-falla en silencio o con error de conexión, según el módulo.
+Corregido: `api/claude.js` nuevo (mismo patrón que `api/cotizacion.js`,
+agrega `x-api-key` server-side) + los 8 call-sites con
+`if (hostname === "localhost") … else "/api/claude"`. Verificado con
+`curl` contra producción — la función responde (400 "API key no
+configurada" en vez de 404, o sea que ya está viva y corriendo).
 
-Steel Measurement no tiene este problema — no llama a la API de Claude
-desde ningún componente.
+### ⚠️ Bug real, distinto y sin corregir: formato de request en `Inicio.jsx`
 
-**No se corrigió en esta sesión** (el alcance de este chat es
-documentación, no desarrollo) — queda registrado acá para que se decida
-como tarea aparte. El arreglo es mecánico: replicar el patrón que ya tiene
-`/api/cotizacion` — una función serverless `api/claude.js` que agregue el
-header `x-api-key` server-side (la key no puede ir al browser en ningún
-caso, ver tabla de §5), y el mismo `if (hostname === "localhost")` en los
-8 call-sites.
+Encontrado por `-79_CRM` de paso al aplicar el fix de arriba — **no
+relacionado con la URL**, ya estaba roto en local antes del fix. El
+asistente IA de `Inicio.jsx` (dashboard, resumen de acciones sugeridas)
+manda el body `{ prompt }` en lugar del formato real que espera
+`server.js`/`api/claude.js` y, por debajo, la API de Anthropic
+(`{ _apiKey, model, max_tokens, messages: [...] }`) — confirmado leyendo
+`server.js:97-99` (`parsed._apiKey` es obligatorio para no cortar con 400)
+y el propio `Inicio.jsx:98-104` (`body: JSON.stringify({ prompt })`, sin
+`_apiKey`). Encima lee `d.respuesta`/`d.response` de la respuesta, campos
+que no existen en la forma real de la API de Anthropic (`content[0].text`).
+Los otros 5 módulos de IA arman el body correcto — es un bug aislado a
+este único componente.
+
+**Sin corregir a propósito** — no lo pidió Gino ni forma parte del alcance
+de este documento. Queda anotado para que se tome como tarea aparte
+cuando corresponda.
 
 ---
 
