@@ -5,7 +5,7 @@ import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
-import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1189,6 +1189,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         {computoAEliminar && (
           <ModalConfirmarEliminar
             titulo={`cómputo "${computoAEliminar.nombre||"Sin nombre"}"`}
+            usuarioPropio={usuario}
             onConfirm={() => { eliminarComputo(computoAEliminar.id); setConfirmarDelId(null); }}
             onClose={() => setConfirmarDelId(null)}
           />
@@ -1320,12 +1321,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>
                     ✂️ Anidar
                   </button>
-                  {puedeEliminar(usuario) && (
-                    <button onClick={()=>setConfirmarDelId(c.id)}
-                      style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
-                      Eliminar
-                    </button>
-                  )}
+                  <button onClick={()=>setConfirmarDelId(c.id)}
+                    style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
+                    Eliminar
+                  </button>
                 </div>
               </div>
             );

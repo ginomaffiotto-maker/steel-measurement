@@ -5,7 +5,7 @@ import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
-import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
 import { useSortable } from "../utils/useSortable";
@@ -1924,6 +1924,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       {presAEliminar && (
         <ModalConfirmarEliminar
           titulo={`presupuesto "${presAEliminar.nombre||"Sin nombre"}" (${presAEliminar.nro})`}
+          usuarioPropio={usuario}
           onConfirm={() => { delPres(presAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
         />
@@ -2027,10 +2028,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     <td style={TD} onClick={e=>e.stopPropagation()}>
                       <button onClick={() => clonarPres(p)} title="Clonar presupuesto"
                         style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:13, marginRight:8 }}>📋</button>
-                      {puedeEliminar(usuario) && (
-                        <button onClick={() => setConfirmarDelId(p.id)}
-                          style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
-                      )}
+                      <button onClick={() => setConfirmarDelId(p.id)}
+                        style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
                     </td>
                   </tr>
                 );

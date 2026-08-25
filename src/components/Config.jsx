@@ -415,7 +415,10 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
   const [seccion, setSeccion] = useState("empresa");
   const [auFiltU, setAuFiltU] = useState("");
   const [auFiltA, setAuFiltA] = useState("");
-  const esAdminPapelera = usuario?.rol === "admin";
+  // Papelera visible a admin y supervisor (2026-08-25) — solo la purga
+  // definitiva ("Eliminar definitivamente" dentro de PapeleraPanel) sigue
+  // siendo admin-only, gateada aparte.
+  const puedeVerPapelera = usuario?.rol === "admin" || usuario?.rol === "supervisor";
 
   const TAB_BTN = (key, icon, lbl) => (
     <button key={key} onClick={() => setSeccion(key)}
@@ -451,7 +454,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
         {TAB_BTN("usuarios","👤","Usuarios")}
         {TAB_BTN("backup","💾","Backup y Datos")}
         {TAB_BTN("actividad","📋","Actividad")}
-        {esAdminPapelera && TAB_BTN("papelera","🗑️","Papelera")}
+        {puedeVerPapelera && TAB_BTN("papelera","🗑️","Papelera")}
       </div>
 
       <div style={{ maxWidth:680 }}>
@@ -592,7 +595,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
              eliminados (soft-delete) después de que el toast de "Deshacer" ya
              expiró. No tiene límite de tiempo — mismo espíritu que le pidió
              Gino ("deshacer temporal pero que un admin pueda recuperarlo"). ── */}
-        {seccion === "papelera" && esAdminPapelera && (
+        {seccion === "papelera" && puedeVerPapelera && (
           <PapeleraPanel usuario={usuario} usuarios={usuarios} logear={logear} />
         )}
       </div>

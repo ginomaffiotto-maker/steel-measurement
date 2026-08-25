@@ -5,7 +5,7 @@ import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
-import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1053,6 +1053,7 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
       {anidadoAEliminar && (
         <ModalConfirmarEliminar
           titulo={`anidado "${anidadoAEliminar.nombre||"Sin nombre"}"`}
+          usuarioPropio={usuario}
           onConfirm={() => { delAnidado(anidadoAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
         />
@@ -1192,9 +1193,7 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
                 </select>
               </div>
               <div style={{ marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
-                {puedeEliminar(usuario) && (
-                  <button onClick={()=>setConfirmarDelId(actual.id)} style={{ ...BTN("danger"),fontSize:12 }}>Eliminar</button>
-                )}
+                <button onClick={()=>setConfirmarDelId(actual.id)} style={{ ...BTN("danger"),fontSize:12 }}>Eliminar</button>
                 {actual.grupos.length>0&&(
                   <button onClick={calcularTodo} style={{ ...BTN("primary"),fontSize:12 }}>
                     ⚡ Calcular todo ({actual.grupos.length})

@@ -4,8 +4,15 @@ import { supabase } from "../utils/supabaseClient";
 import { verificarPassword } from "../utils/verificarPassword";
 
 // ─── PERMISOS ────────────────────────────────────────────────────
-// Quién puede eliminar cómputos / anidados / presupuestos / trabajos de historial.
-// Vendedor (operario) puede crear y editar, pero no eliminar.
+// Desde 2026-08-25, el botón "Eliminar" de cómputos/anidados/
+// presupuestos/trabajos de historial ya NO usa esta función — cualquier
+// rol logueado puede borrar (con su propia contraseña, ver
+// ModalConfirmarEliminar/usuarioPropio más abajo). Lo único admin-only
+// ahí es "Eliminar definitivamente" (purga real desde la Papelera),
+// gateado aparte en Config.jsx.
+// `puedeEliminar` sigue vigente para lo que no cambió: Config > Backup
+// (restaurar desde archivo, migrar a la nube) y borrar el comentario de
+// OTRA persona en ComentariosPanel (el autor siempre puede borrar el suyo).
 export function puedeEliminar(usuario) {
   return usuario?.rol === "admin" || usuario?.rol === "supervisor";
 }

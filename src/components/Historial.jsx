@@ -4,7 +4,7 @@ import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHist
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
-import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
+import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { useSortable } from "../utils/useSortable";
@@ -579,6 +579,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
       {trabajoAEliminar && (
         <ModalConfirmarEliminar
           titulo={`trabajo "${trabajoAEliminar.nro_ot||"Sin OT"}" — ${trabajoAEliminar.cliente||"sin cliente"}`}
+          usuarioPropio={usuario}
           onConfirm={() => { del(trabajoAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
         />
@@ -657,10 +658,8 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                         <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(t._usd_kg)}</td>
                         <td style={TD}><span style={BDG(origen.color,true)}>{origen.label}</span></td>
                         <td style={TD} onClick={e=>e.stopPropagation()}>
-                          {puedeEliminar(usuario) && (
-                            <button onClick={() => setConfirmarDelId(t.id)}
-                              style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
-                          )}
+                          <button onClick={() => setConfirmarDelId(t.id)}
+                            style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
                         </td>
                       </tr>
                     );
