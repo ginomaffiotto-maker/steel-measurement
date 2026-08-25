@@ -623,6 +623,8 @@ const n3 = v => (Math.round(v * 1000) / 1000).toFixed(3);
 2. Indicar qué módulo o feature construir
 3. Mencionar si hay cambios en los requisitos
 4. El código actual siempre está en `C:\Users\Gino\Documents\steel-measurement\src\`
+5. **Identificarse al arrancar la sesión.** Tomar el nombre de sesión que asigna el harness (visible vía `ListAgents`, ej. `f6`) y anteponerlo como identificador del chat con el formato `-{nombre_sesión}_{tema}`, ej. `-f6_Measurement`. Mismo criterio que ya rige en `steelCRM - BUILDIING/CLAUDE.md` (regla 7) — se aplica acá también porque este repo tuvo, repetidas veces en agosto 2026, varias sesiones activas en simultáneo (ver §9.31 en adelante).
+6. **Coordinar antes de tocar archivos que otra sesión pueda estar editando.** Antes de escribir sobre un archivo compartido entre repos o entre sesiones paralelas activas al mismo tiempo (`src/utils/storage.js` fue el caso repetido en agosto 2026), correr `ListAgents` y avisar por `SendMessage` a la sesión correspondiente. Ante un cambio sin commitear no reconocido, no asumir que es basura — puede ser trabajo real de otra sesión con contexto resumido; confirmar antes de tocarlo o descartarlo. Mismo criterio que la regla 8 de `steelCRM - BUILDIING/CLAUDE.md`.
 
 **Dato clave para el LLM:** Gino valida contra la planilla Excel / GestSoft con datos reales. No avanzar al siguiente módulo hasta que los cálculos numéricos coincidan exactamente.
 
