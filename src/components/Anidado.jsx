@@ -7,6 +7,7 @@ import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 
 const n2   = v => (Math.round(v * 100)  / 100).toFixed(2);
@@ -851,6 +852,7 @@ function exportarListaCorte(anidado) {
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
 export default function Anidado({ usuario, usuarios = [], logear }) {
+  const { show: showUndo, Toast } = useUndoToast();
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(setAnidados);
   const [selId,      setSelId]      = useState(null);
@@ -885,8 +887,9 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     if (!supabase) return;
     try {
       const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
+      const vendedor = usuarios.find(u => u.id === a.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = a;
-      await saveDBAnidado({ ...resto, cliente_id });
+      await saveDBAnidado({ ...resto, cliente_id, vendedor });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
     }
@@ -954,7 +957,7 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     logear?.("Anidado creado", a.nombre);
   };
 
-  const anidadosFiltradosBase = anidados.filter(a => {
+  const anidadosFiltradosBase = anidados.filter(a => !a.eliminado).filter(a => {
     const enNombre  = !busqNombre  || (a.nombre||"").toLowerCase().includes(busqNombre.toLowerCase());
     const enCliente = !busqCliente || (a.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
     const enObra    = !busqObra    || (a.obra||"").toLowerCase().includes(busqObra.toLowerCase());
@@ -966,8 +969,18 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
 
   const delAnidado=id=>{
     const a = anidados.find(x=>x.id===id);
-    save(anidados.filter(a=>a.id!==id)); if(selId===id)setSelId(null);
-    if (a) logear?.("Anidado eliminado", a.nombre||"");
+    if (!a) return;
+    const marcado = { ...a, eliminado:true, eliminadoPor:usuario?.nombre||"", eliminadoFecha:new Date().toISOString() };
+    setAnidados(prev=>{ const next=prev.map(x=>x.id===id?marcado:x); saveLS("smeas_anidados",next); return next; });
+    if (selId===id) setSelId(null);
+    dualWriteAnidado(marcado);
+    logear?.("Anidado eliminado", a.nombre||"");
+    showUndo(`Anidado "${a.nombre||""}" eliminado.`, () => {
+      const restaurado = { ...marcado, eliminado:false, eliminadoPor:null, eliminadoFecha:null };
+      setAnidados(prev=>{ const next=prev.map(x=>x.id===id?restaurado:x); saveLS("smeas_anidados",next); return next; });
+      dualWriteAnidado(restaurado);
+      logear?.("Anidado restaurado", a.nombre||"");
+    });
   };
   const anidadoAEliminar = confirmarDelId ? anidados.find(a=>a.id===confirmarDelId) : null;
 
@@ -1020,6 +1033,7 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
 
   return (
     <div>
+      {Toast}
       {anidadoAEliminar && (
         <ModalConfirmarEliminar
           titulo={`anidado "${anidadoAEliminar.nombre||"Sin nombre"}"`}

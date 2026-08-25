@@ -7,6 +7,7 @@ import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -972,6 +973,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuarios = [], tcGlobal, logear }) {
   const [computos,      setComputos]      = useState(() => loadLS("smeas_computos", []));
   useMergeComputosNube(setComputos);
+  const { show: showUndo, Toast } = useUndoToast();
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
@@ -1010,8 +1012,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     if (!supabase) return;
     try {
       const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
+      // vendedor es un id local (Date.now()) hasta que esa persona inicia
+      // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
+      // completa profileId (mismo patrón que meta_usuarios en steelCRM).
+      const vendedor = usuarios.find(u => u.id === c.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = c;
-      await saveDBComputo({ ...resto, cliente_id });
+      await saveDBComputo({ ...resto, cliente_id, vendedor });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
     }
@@ -1073,7 +1079,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     setSelId(nuevoC.id);
   };
 
-  const computosFiltradosBase = computos.filter(c => {
+  const computosFiltradosBase = computos.filter(c => !c.eliminado).filter(c => {
     const enNombre  = !busqNombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(busqNombre.toLowerCase());
     const enCliente = !busqCliente || (c.cliente||"").toLowerCase().includes(busqCliente.toLowerCase());
     const enDesde   = !fDesde || (c.fecha||"") >= fDesde;
@@ -1082,11 +1088,23 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 
+  // Soft-delete (2026-08-24) — nunca se borra de verdad, se marca y se filtra
+  // de la lista activa; un admin puede restaurarlo desde Sistema > Config >
+  // Papelera sin límite de tiempo, o con el toast "Deshacer" de acá al toque.
   const eliminarComputo = id => {
     const c = computos.find(x=>x.id===id);
-    setComputos(prev=>prev.filter(c=>c.id!==id));
+    if (!c) return;
+    const marcado = { ...c, eliminado:true, eliminadoPor:usuario?.nombre||"", eliminadoFecha:new Date().toISOString() };
+    setComputos(prev=>prev.map(x=>x.id===id?marcado:x));
+    dualWriteComputo(marcado);
     if (selId===id) setSelId(null);
-    if (c) logear?.("Cómputo eliminado", (c.nro||"") + " — " + (c.nombre||""));
+    logear?.("Cómputo eliminado", (c.nro||"") + " — " + (c.nombre||""));
+    showUndo(`Cómputo "${c.nombre||c.nro}" eliminado.`, () => {
+      const restaurado = { ...marcado, eliminado:false, eliminadoPor:null, eliminadoFecha:null };
+      setComputos(prev=>prev.map(x=>x.id===id?restaurado:x));
+      dualWriteComputo(restaurado);
+      logear?.("Cómputo restaurado", (c.nro||"") + " — " + (c.nombre||""));
+    });
   };
   const computoAEliminar = confirmarDelId ? computos.find(c=>c.id===confirmarDelId) : null;
 
@@ -1301,6 +1319,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             );
           })}
         </div>
+        {Toast}
       </div>
     );
   }

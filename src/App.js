@@ -513,7 +513,7 @@ export default function App() {
           {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} logear={logear} />}
           {tab === "Historial"   && <Historial usuario={usuario} />}
           {tab === "Dashboard"   && <Dashboard />}
-          {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} auditLog={auditLog} />}
+          {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} auditLog={auditLog} logear={logear} />}
         </div>
       </div>
     </div>

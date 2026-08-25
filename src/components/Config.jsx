@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
@@ -391,7 +391,7 @@ function BackupYDatos({ usuario }) {
 // El tarifario (MO, materiales generales, terceriz., traslados, tratamiento de
 // superficie, pantógrafo) vive en el módulo "Insumos y Precios" junto a la
 // Biblioteca de materiales — acá solo queda lo que es admin-only del sistema.
-export default function Config({ usuario, usuarios, setUsuarios, auditLog = [] }) {
+export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], logear }) {
   // Si por error nadie quedó con rol Administrador, la pantalla se
   // desbloquea igual — si no, quedaría un candado circular: sin admin no
   // se puede editar usuarios, pero sin editar usuarios no se puede volver
@@ -415,6 +415,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [] }
   const [seccion, setSeccion] = useState("empresa");
   const [auFiltU, setAuFiltU] = useState("");
   const [auFiltA, setAuFiltA] = useState("");
+  const esAdminPapelera = usuario?.rol === "admin";
 
   const TAB_BTN = (key, icon, lbl) => (
     <button key={key} onClick={() => setSeccion(key)}
@@ -450,6 +451,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [] }
         {TAB_BTN("usuarios","👤","Usuarios")}
         {TAB_BTN("backup","💾","Backup y Datos")}
         {TAB_BTN("actividad","📋","Actividad")}
+        {esAdminPapelera && TAB_BTN("papelera","🗑️","Papelera")}
       </div>
 
       <div style={{ maxWidth:680 }}>
@@ -585,7 +587,74 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [] }
             </div>
           );
         })()}
+
+        {/* ── PAPELERA (2026-08-24) — solo admin: acá quedan Cómputos y Anidados
+             eliminados (soft-delete) después de que el toast de "Deshacer" ya
+             expiró. No tiene límite de tiempo — mismo espíritu que le pidió
+             Gino ("deshacer temporal pero que un admin pueda recuperarlo"). ── */}
+        {seccion === "papelera" && esAdminPapelera && (
+          <PapeleraPanel usuarios={usuarios} logear={logear} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function PapeleraPanel({ usuarios, logear }) {
+  const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
+  const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
+
+  const restaurarComputo = async (c) => {
+    const restaurado = { ...c, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
+    const next = computos.map(x => x.id === c.id ? restaurado : x);
+    setComputos(next);
+    saveLS("smeas_computos", next);
+    const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+    const { cliente, comentarios, ...resto } = restaurado;
+    try { await saveDBComputo({ ...resto, vendedor }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    logear?.("Cómputo restaurado", (c.nro || "") + " — " + (c.nombre || ""));
+  };
+
+  const restaurarAnidado = async (a) => {
+    const restaurado = { ...a, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
+    const next = anidados.map(x => x.id === a.id ? restaurado : x);
+    setAnidados(next);
+    saveLS("smeas_anidados", next);
+    const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+    const { cliente, comentarios, ...resto } = restaurado;
+    try { await saveDBAnidado({ ...resto, vendedor }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
+    logear?.("Anidado restaurado", a.nombre || "");
+  };
+
+  const eliminadosComputo = computos.filter(c => c.eliminado);
+  const eliminadosAnidado = anidados.filter(a => a.eliminado);
+  const fila = (item, tipo, onRestaurar) => (
+    <div key={tipo + item.id} style={{ display:"flex", gap:12, padding:"9px 0", borderBottom:`1px solid ${C.border}22`, fontSize:12, alignItems:"center" }}>
+      <span style={{ fontSize:11, fontWeight:700, color:C.muted, minWidth:70 }}>{tipo}</span>
+      <div style={{ flex:1 }}>
+        <div style={{ color:C.text, fontWeight:600 }}>{item.nombre || item.nro || "Sin nombre"}</div>
+        <div style={{ color:C.muted, fontSize:11 }}>
+          Eliminado por {item.eliminadoPor || "?"} · {item.eliminadoFecha ? new Date(item.eliminadoFecha).toLocaleString("es-UY", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}
+        </div>
+      </div>
+      <button onClick={() => onRestaurar(item)} style={{ ...BTN("ghost"), padding:"5px 14px", fontSize:12, borderColor:C.accent+"66", color:C.accent, whiteSpace:"nowrap" }}>
+        ↩ Restaurar
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+      <div style={{ fontWeight:700, fontSize:14, color:C.steel, marginBottom:4 }}>🗑️ Papelera</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+        Cómputos y anidados eliminados. Restaurar los devuelve a su lista normal, sin límite de tiempo.
+      </div>
+      {eliminadosComputo.length === 0 && eliminadosAnidado.length === 0
+        ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>✅ Todo limpio — no hay nada en la papelera</div>
+        : <>
+            {eliminadosComputo.map(c => fila(c, "Cómputo", restaurarComputo))}
+            {eliminadosAnidado.map(a => fila(a, "Anidado", restaurarAnidado))}
+          </>}
     </div>
   );
 }

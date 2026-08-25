@@ -41,10 +41,12 @@ const conIdValido = (r) => (r.id && UUID_RE.test(String(r.id)) ? r : { ...r, id:
 const COLUMNAS_PRESUPUESTO_SM = [
   "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
-  "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc",
+  "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor",
 ];
-const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro"];
-const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra"];
+const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro",
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
+const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra",
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];
@@ -54,7 +56,7 @@ const COLUMNAS_ITEM_PRESUPUESTO = [
 // retroactivamente), es más seguro soltar la referencia que hacer
 // fallar todo el presupuesto por un vínculo que de todos modos ya no
 // apunta a nada real.
-const CAMPOS_REF_UUID = new Set(["cliente_id", "computo_id", "anidado_id", "clonado_de_id"]);
+const CAMPOS_REF_UUID = new Set(["cliente_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
 const soloColumnas = (obj, columnas) => {
   const row = {};
   for (const k of columnas) {

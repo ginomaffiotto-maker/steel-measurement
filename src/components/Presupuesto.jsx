@@ -1797,8 +1797,9 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       const nombreParaClientes = (p.contacto || p.cliente || "").trim();
       const empresaParaClientes = p.contacto ? p.cliente : null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
+      const vendedor = usuarios.find(u => u.id === p.vendedor)?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = p;
-      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null });
+      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor });
       for (const item of items || []) {
         await saveDBItem(p.id, item);
       }
