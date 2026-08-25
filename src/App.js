@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { C } from "./styles/colors";
 import { saveLS, loadLS, iUsuarios } from "./utils/storage";
 import { supabase } from "./utils/supabaseClient";
@@ -285,6 +285,11 @@ function SetPasswordScreen({ modo, onDone }) {
 // ─── APP ─────────────────────────────────────────────────────────
 const SESION_USUARIO_KEY = "smeas_sesion_usuario_id";
 const SESION_TAB_KEY = "smeas_sesion_tab";
+// Cierre de sesión por inactividad — 2h sin click/tecla/mouse cierra la
+// sesión real de Supabase (no solo el estado local), mismo mecanismo que
+// steelCRM (2026-08-25, a pedido de Gino).
+const INACTIVIDAD_MS = 2 * 60 * 60 * 1000;
+const ULTIMA_ACTIVIDAD_KEY = "smeas_ultima_actividad";
 
 export default function App() {
   const [usuarios, setUsuarios] = useState(iUsuarios);
@@ -308,18 +313,42 @@ export default function App() {
   // steelCRM (que restaura desde la sesión real de Supabase Auth, persistida
   // en localStorage). Mismo fix acá: si no hay nada en sessionStorage, se
   // chequea si Supabase todavía tiene una sesión válida antes de mostrar el
-  // login.
-  const [verificandoSesion, setVerificandoSesion] = useState(!!supabase && !usuario);
+  // login — salvo que haya pasado el límite de inactividad, chequeado acá
+  // siempre (incluso si sessionStorage ya tenía un usuario) para que un
+  // reload dentro de la misma pestaña tampoco lo salte.
+  const [verificandoSesion, setVerificandoSesion] = useState(!!supabase);
+  const cerrarSesion = useCallback(() => {
+    if (supabase) supabase.auth.signOut().catch(() => {});
+    setUsuario(null);
+  }, []);
   useEffect(() => {
-    if (!supabase || usuario) { setVerificandoSesion(false); return; }
-    supabase.auth.getSession().then(async ({ data }) => {
-      const authUser = data?.session?.user;
-      if (authUser) {
-        const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
-        if (local) setUsuario(local);
+    if (!supabase) { setVerificandoSesion(false); return; }
+    const marcarActividad = () => { try { localStorage.setItem(ULTIMA_ACTIVIDAD_KEY, String(Date.now())); } catch {} };
+    const inactivo = () => {
+      const t = Number(localStorage.getItem(ULTIMA_ACTIVIDAD_KEY) || 0);
+      return t > 0 && (Date.now() - t > INACTIVIDAD_MS);
+    };
+    (async () => {
+      if (inactivo()) {
+        cerrarSesion();
+      } else if (!usuario) {
+        const { data } = await supabase.auth.getSession();
+        const authUser = data?.session?.user;
+        if (authUser) {
+          const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
+          if (local) setUsuario(local);
+        }
       }
+      marcarActividad();
       setVerificandoSesion(false);
-    });
+    })();
+    const eventos = ["click", "keydown", "mousemove"];
+    eventos.forEach(e => window.addEventListener(e, marcarActividad));
+    const chequeo = setInterval(() => { if (inactivo()) cerrarSesion(); }, 60000);
+    return () => {
+      eventos.forEach(e => window.removeEventListener(e, marcarActividad));
+      clearInterval(chequeo);
+    };
   }, []); // eslint-disable-line
   // Recupera la última pestaña activa tras una recarga (ej. al cambiar el
   // tema en Config, que fuerza un reload) — antes siempre volvía a Cómputo.
@@ -488,7 +517,7 @@ export default function App() {
           <button onClick={() => setCollapsed(c => !c)} style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}44`, borderRadius: 6, padding: "5px 0", cursor: "pointer", color: C.muted, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {collapsed ? "▶" : "◀"}
           </button>
-          <div onClick={() => setUsuario(null)} title="Cambiar usuario" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 2px", justifyContent: collapsed ? "center" : "flex-start" }}>
+          <div onClick={cerrarSesion} title="Cambiar usuario" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 2px", justifyContent: collapsed ? "center" : "flex-start" }}>
             {usuario.foto
               ? <img src={usuario.foto} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
               : <span style={{ fontSize: 18, flexShrink: 0 }}>{usuario.emoji || "👤"}</span>}
