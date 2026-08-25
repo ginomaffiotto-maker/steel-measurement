@@ -189,24 +189,23 @@ agrega `x-api-key` server-side) + los 8 call-sites con
 `curl` contra producción — la función responde (400 "API key no
 configurada" en vez de 404, o sea que ya está viva y corriendo).
 
-### ⚠️ Bug real, distinto y sin corregir: formato de request en `Inicio.jsx`
+### ✅ Bug de formato en `Inicio.jsx` — corregido (2026-08-25, commit `5ae70bd`, sesión `-79_CRM`)
 
-Encontrado por `-79_CRM` de paso al aplicar el fix de arriba — **no
-relacionado con la URL**, ya estaba roto en local antes del fix. El
-asistente IA de `Inicio.jsx` (dashboard, resumen de acciones sugeridas)
-manda el body `{ prompt }` en lugar del formato real que espera
-`server.js`/`api/claude.js` y, por debajo, la API de Anthropic
-(`{ _apiKey, model, max_tokens, messages: [...] }`) — confirmado leyendo
-`server.js:97-99` (`parsed._apiKey` es obligatorio para no cortar con 400)
-y el propio `Inicio.jsx:98-104` (`body: JSON.stringify({ prompt })`, sin
-`_apiKey`). Encima lee `d.respuesta`/`d.response` de la respuesta, campos
-que no existen en la forma real de la API de Anthropic (`content[0].text`).
-Los otros 5 módulos de IA arman el body correcto — es un bug aislado a
-este único componente.
+Encontrado de paso al aplicar el fix de arriba — **no relacionado con la
+URL**, ya estaba roto en local antes de ese fix. El asistente IA de
+`Inicio.jsx` (dashboard, resumen de acciones sugeridas) mandaba el body
+`{ prompt }` en lugar del formato real que espera `server.js`/`api/claude.js`
+y, por debajo, la API de Anthropic (`{ _apiKey, model, max_tokens,
+messages: [...] }`), y leía `d.respuesta`/`d.response` — campos que no
+existen en la forma real de la respuesta (`content[0].text`). Los otros 5
+módulos de IA ya armaban el body correcto — era un bug aislado a este
+único componente.
 
-**Sin corregir a propósito** — no lo pidió Gino ni forma parte del alcance
-de este documento. Queda anotado para que se tome como tarea aparte
-cuando corresponda.
+Corregido a pedido de Gino: ahora manda `{ _apiKey, model, messages }` y
+lee `d.content?.[0]?.text`, mismo patrón que el resto. Build limpio; sin
+prueba en vivo todavía (necesita una API key real cargada en Config > IA)
+— pendiente de que alguien con esa key configurada lo confirme en el
+navegador.
 
 ---
 
