@@ -6,7 +6,7 @@ import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { puedeEliminar, ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
-import { familiaDe } from "../utils/taxonomia";
+import { familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { useSortable } from "../utils/useSortable";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ function genNro(lista) {
 
 export const iTrabajo = () => ({
   id: uid(), nro_ot: "", fecha: new Date().toISOString().slice(0, 10),
-  cliente: "", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación",
+  cliente: "", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación", vendedor: "",
   kg_total: 0, metros_total: 0, usd_total: 0,
   desglose_pct: { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 },
   horas_fab_est: 0, horas_fab_real: 0, horas_mon_est: 0, horas_mon_real: 0,
@@ -99,7 +99,7 @@ export function calcBenchmark(trabajos, agruparPor = "categoria") {
 }
 
 // ─── MODAL: NUEVO TRABAJO (manual) ───────────────────────────────
-function ModalNuevo({ onSave, onClose }) {
+function ModalNuevo({ onSave, onClose, usuarios = [] }) {
   const [f, setF] = useState(iTrabajo());
   const set  = (k, v) => setF(x => ({ ...x, [k]: v }));
   const setR = (k, v) => setF(x => ({ ...x, desglose_pct: { ...x.desglose_pct, [k]: v } }));
@@ -126,6 +126,15 @@ function ModalNuevo({ onSave, onClose }) {
               {TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          {usuarios.length > 0 && (
+            <div>
+              <label style={LBL}>Vendedor</label>
+              <select style={INP} value={f.vendedor} onChange={e=>set("vendedor",e.target.value)}>
+                <option value="">— Sin asignar —</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14 }}>
@@ -251,6 +260,7 @@ function presupuestoAHistorial(p) {
   return {
     ...iTrabajo(),
     cliente: p.cliente || "", obra: p.obra || "", tipo_trabajo: p.tipo_trabajo || "Fabricación",
+    categoria: p.categoria || "", vendedor: p.vendedor || "",
     fecha: new Date().toISOString().slice(0,10),
     kg_total: +n3(total_kg), usd_total: +n2(gran_total),
     desglose_pct,
@@ -262,7 +272,7 @@ function presupuestoAHistorial(p) {
 }
 
 // ─── VISTA DETALLE ────────────────────────────────────────────────
-function DetalleTrabajo({ t, onChange, onBack }) {
+function DetalleTrabajo({ t, onChange, onBack, usuarios = [] }) {
   const c = calcTrabajo(t);
   const origen = ORIGEN_CFG[t.origen] || ORIGEN_CFG.manual;
   const set  = (k, v) => onChange({ ...t, [k]: v });
@@ -294,6 +304,15 @@ function DetalleTrabajo({ t, onChange, onBack }) {
           <div><label style={lblMini}>Empresa</label><AutocompleteEmpresa style={inpMini} value={t.empresa} onChange={v=>set("empresa",v)}/></div>
           <div><label style={lblMini}>Obra</label><input style={inpMini} value={t.obra} onChange={e=>set("obra",e.target.value)}/></div>
           <div><label style={lblMini}>Categoría</label><input style={inpMini} value={t.categoria} onChange={e=>set("categoria",e.target.value)}/></div>
+          {usuarios.length > 0 && (
+            <div>
+              <label style={lblMini}>Vendedor</label>
+              <select style={inpMini} value={t.vendedor||""} onChange={e=>set("vendedor",e.target.value)}>
+                <option value="">— Sin asignar —</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -423,7 +442,7 @@ function Benchmark({ trabajos }) {
 }
 
 // ─── HISTORIAL (EXPORT DEFAULT) ───────────────────────────────────
-export default function Historial({ usuario }) {
+export default function Historial({ usuario, usuarios = [] }) {
   const [trabajos, setTrabajos] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
   useMergeHistorialNube(setTrabajos);
   const [vista, setVista] = useState("lista"); // lista | detalle | benchmark
@@ -435,6 +454,8 @@ export default function Historial({ usuario }) {
   const [filtroOT, setFiltroOT] = useState("");
   const [filtCat, setFiltCat] = useState("");
   const [filtTipo, setFiltTipo] = useState("");
+  const [filtFamilia, setFiltFamilia] = useState("");
+  const [filtVendedor, setFiltVendedor] = useState("");
   const [filtDesde, setFiltDesde] = useState("");
   const [filtHasta, setFiltHasta] = useState("");
   const [usdKgMin, setUsdKgMin] = useState("");
@@ -460,6 +481,8 @@ export default function Historial({ usuario }) {
   const listaFiltrada = trabajos
     .filter(t => !filtCat || t.categoria === filtCat)
     .filter(t => !filtTipo || t.tipo_trabajo === filtTipo)
+    .filter(t => !filtFamilia || familiaDe(t.categoria) === filtFamilia)
+    .filter(t => !filtVendedor || String(t.vendedor) === filtVendedor)
     .filter(t => !usdKgMin || (usdKgDe(t) >= +usdKgMin))
     .filter(t => !usdKgMax || (usdKgDe(t) <= +usdKgMax))
     .filter(t => !filtroCliente || (t.cliente||"").toLowerCase().includes(filtroCliente.toLowerCase()))
@@ -476,10 +499,11 @@ export default function Historial({ usuario }) {
     if (!supabase) return;
     try {
       const cliente_id = t.cliente ? await resolverClienteId(t.cliente, t.empresa) : null;
+      const vendedor = usuarios.find(u => u.id === t.vendedor)?.profileId || null;
       const { cliente, desglose_pct, ...resto } = t;
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({
-        ...resto, cliente_id,
+        ...resto, cliente_id, vendedor,
         pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
         pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,
         pct_trasl: pct.trasl, pct_panto: pct.panto,
@@ -517,7 +541,7 @@ export default function Historial({ usuario }) {
   const trabajoAEliminar = confirmarDelId ? trabajos.find(t=>t.id===confirmarDelId) : null;
 
   if (vista === "detalle" && selTrab) {
-    return <DetalleTrabajo t={selTrab} onChange={upd} onBack={() => { setVista("lista"); setSelId(null); }} />;
+    return <DetalleTrabajo t={selTrab} onChange={upd} onBack={() => { setVista("lista"); setSelId(null); }} usuarios={usuarios} />;
   }
 
   return (
@@ -565,6 +589,16 @@ export default function Historial({ usuario }) {
               <option value="">Todos los tipos</option>
               {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            <select style={{ ...INP, maxWidth:170 }} value={filtFamilia} onChange={e=>setFiltFamilia(e.target.value)}>
+              <option value="">Todas las familias</option>
+              {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+            {usuarios.length > 0 && (
+              <select style={{ ...INP, maxWidth:170 }} value={filtVendedor} onChange={e=>setFiltVendedor(e.target.value)}>
+                <option value="">Todos los vendedores</option>
+                {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            )}
             <input type="date" style={{ ...INP, maxWidth:140 }} value={filtDesde} title="Desde" onChange={e=>setFiltDesde(e.target.value)} />
             <input type="date" style={{ ...INP, maxWidth:140 }} value={filtHasta} title="Hasta" onChange={e=>setFiltHasta(e.target.value)} />
             <input type="number" step="0.01" style={{ ...INP, maxWidth:110 }} placeholder="USD/kg mín" value={usdKgMin} onChange={e=>setUsdKgMin(e.target.value)} />
@@ -591,7 +625,8 @@ export default function Historial({ usuario }) {
                 <thead><tr>
                   {[
                     { h:"OT", campo:"nro_ot" }, { h:"Fecha", campo:"fecha" }, { h:"Cliente", campo:"cliente" },
-                    { h:"Obra", campo:"obra" }, { h:"Categoría", campo:"categoria" }, { h:"Kg", campo:"kg_total" },
+                    { h:"Obra", campo:"obra" }, { h:"Categoría", campo:"categoria" }, { h:"Vendedor", campo:null },
+                    { h:"Kg", campo:"kg_total" },
                     { h:"USD", campo:"usd_total" }, { h:"USD/kg", campo:"_usd_kg" }, { h:"Origen", campo:"origen" },
                     { h:"", campo:null },
                   ].map(({h,campo}) => (
@@ -614,6 +649,7 @@ export default function Historial({ usuario }) {
                         <td style={TD}><span style={{ fontWeight:700 }}>{t.cliente||"—"}</span></td>
                         <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{t.obra||"—"}</span></td>
                         <td style={TD}><span style={BDG(C.steel,true)}>{t.categoria||"—"}</span></td>
+                        <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{usuarios.find(u=>u.id===t.vendedor)?.nombre||"—"}</span></td>
                         <td style={{ ...TD, textAlign:"right" }}>{n3(t.kg_total)}</td>
                         <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>${n2(t.usd_total)}</td>
                         <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(t._usd_kg)}</td>
@@ -634,7 +670,7 @@ export default function Historial({ usuario }) {
         </>
       )}
 
-      {nuevoOpen && <ModalNuevo onSave={crear} onClose={() => setNuevoOpen(false)} />}
+      {nuevoOpen && <ModalNuevo onSave={crear} onClose={() => setNuevoOpen(false)} usuarios={usuarios} />}
       {importOpen && <ModalImportarM4 onSave={importarDeM4} onClose={() => setImportOpen(false)} />}
     </div>
   );

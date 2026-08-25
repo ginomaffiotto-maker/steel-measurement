@@ -528,13 +528,13 @@ export default function App() {
 
         {/* Tab activo */}
         <div style={{ padding: 24, flex: 1 }}>
-          {tab === "Buscador"    && <Buscador onIrA={irATab} />}
+          {tab === "Buscador"    && <Buscador onIrA={irATab} usuarios={usuarios} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
           {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} />}
           {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} logear={logear} />}
           {tab === "Presupuesto" && <Presupuesto usuario={usuario} tcGlobal={tcGlobal} usuarios={usuarios} logear={logear} />}
-          {tab === "Historial"   && <Historial usuario={usuario} />}
-          {tab === "Dashboard"   && <Dashboard />}
+          {tab === "Historial"   && <Historial usuario={usuario} usuarios={usuarios} />}
+          {tab === "Dashboard"   && <Dashboard usuarios={usuarios} />}
           {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} auditLog={auditLog} logear={logear} />}
         </div>
       </div>

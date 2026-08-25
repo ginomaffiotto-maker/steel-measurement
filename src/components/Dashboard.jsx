@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C, INP, LBL, CARD, BTN } from "../styles/colors";
 import { loadLS } from "../utils/storage";
 import AutocompleteCliente from "./AutocompleteCliente";
-import { FAMILIAS } from "../utils/taxonomia";
+import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 import { calcPresupuesto } from "./Presupuesto";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 
@@ -89,20 +89,22 @@ function normalizarPresupuesto(p) {
   const materiales = p.origen_historico ? [] : (p.items || []).flatMap(it => it.hierros || []);
   return {
     fuente: "presupuesto", fecha: p.fecha || "", cliente: (p.cliente || "").trim(),
-    categoria: p.categoria || "", kg: c.total_kg, usd: c.gran_total, materiales,
+    categoria: p.categoria || "", tipo_trabajo: p.tipo_trabajo || "", vendedor: p.vendedor || "",
+    kg: c.total_kg, usd: c.gran_total, materiales,
   };
 }
 function normalizarTrabajo(t) {
   return {
     fuente: "historial", fecha: t.fecha || "", cliente: (t.cliente || "").trim(),
-    categoria: t.categoria || "", kg: +t.kg_total || 0, usd: +t.usd_total || 0, materiales: [],
+    categoria: t.categoria || "", tipo_trabajo: t.tipo_trabajo || "", vendedor: t.vendedor || "",
+    kg: +t.kg_total || 0, usd: +t.usd_total || 0, materiales: [],
   };
 }
 
 // ─── FILTROS ───────────────────────────────────────────────────────
 // Colapsable — la barra completa ocupa espacio fijo en las 4 sub-pestañas
 // aunque el usuario ya haya elegido su filtro y quiera ver más resultado.
-function FiltrosBar({ filt, setFilt, abierto, setAbierto }) {
+function FiltrosBar({ filt, setFilt, abierto, setAbierto, usuarios = [] }) {
   const set = (k, v) => setFilt(f => ({ ...f, [k]: v }));
   return (
     <div style={{ ...CARD(), background: C.iron, marginBottom: 16 }}>
@@ -146,12 +148,35 @@ function FiltrosBar({ filt, setFilt, abierto, setAbierto }) {
           ))}
         </select>
       </div>
+      <div style={{ minWidth: 170 }}>
+        <label style={LBL}>Familia</label>
+        <select style={INP} value={filt.familia} onChange={e => set("familia", e.target.value)}>
+          <option value="">Todas</option>
+          {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
+      <div style={{ minWidth: 140 }}>
+        <label style={LBL}>Tipo</label>
+        <select style={INP} value={filt.tipo} onChange={e => set("tipo", e.target.value)}>
+          <option value="">Todos</option>
+          {TIPOS_TRABAJO.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+      {usuarios.length > 0 && (
+        <div style={{ minWidth: 170 }}>
+          <label style={LBL}>Vendedor</label>
+          <select style={INP} value={filt.vendedor} onChange={e => set("vendedor", e.target.value)}>
+            <option value="">Todos</option>
+            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 160 }}>
         <label style={LBL}>Cliente / Empresa</label>
         <AutocompleteCliente style={INP} value={filt.cliente} placeholder="Buscar…" onChange={v => set("cliente", v)} />
       </div>
       <button style={{ ...BTN("ghost"), padding: "9px 14px" }}
-        onClick={() => setFilt({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", cliente: "" })}>
+        onClick={() => setFilt({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", familia: "", tipo: "", vendedor: "", cliente: "" })}>
         ✕ Todo
       </button>
       </div>
@@ -279,9 +304,9 @@ const TABS = [
   { key: "materiales", icon: "🔩", lbl: "Materiales" },
 ];
 
-export default function Dashboard() {
+export default function Dashboard({ usuarios = [] }) {
   const [tab, setTab] = useState("resumen");
-  const [filt, setFilt] = useState({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", cliente: "" });
+  const [filt, setFilt] = useState({ fuente: "ambos", periodo: "6m", desde: "", hasta: "", categoria: "", familia: "", tipo: "", vendedor: "", cliente: "" });
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
 
   const presupuestos = loadLS("smeas_presupuestos", []);
@@ -295,6 +320,9 @@ export default function Dashboard() {
   const hasta = filt.hasta || null;
   const aplicarFiltrosComunes = r => {
     if (filt.categoria && r.categoria !== filt.categoria) return false;
+    if (filt.familia && familiaDe(r.categoria) !== filt.familia) return false;
+    if (filt.tipo && r.tipo_trabajo !== filt.tipo) return false;
+    if (filt.vendedor && String(r.vendedor) !== filt.vendedor) return false;
     if (filt.cliente && !r.cliente.toLowerCase().includes(filt.cliente.toLowerCase())) return false;
     return true;
   };
@@ -315,7 +343,7 @@ export default function Dashboard() {
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Dashboard</h2>
       </div>
 
-      <FiltrosBar filt={filt} setFilt={setFilt} abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
+      <FiltrosBar filt={filt} setFilt={setFilt} abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} usuarios={usuarios} />
 
       <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "2px solid " + C.border + "44", flexWrap: "wrap" }}>
         {TABS.map(t => (

@@ -681,7 +681,7 @@ export const loadDBHistorialTrabajos = async () => {
 // un campo nuevo mañana y rompa el insert otra vez.
 const COLUMNAS_HISTORIAL_TRABAJO = [
   "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "obra", "categoria",
-  "tipo_trabajo", "kg_total", "metros_total", "usd_total",
+  "tipo_trabajo", "vendedor", "kg_total", "metros_total", "usd_total",
   "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
   "pct_t_fab", "pct_t_mon", "pct_trat", "pct_trasl", "pct_panto",
 ];
