@@ -18,8 +18,15 @@ export function puedeEliminar(usuario) {
 // cualquier cuenta creada vía Auth real — nunca funcionaba en la práctica,
 // encontrado el 2026-08-24 al armar esta versión). Mismo patrón que
 // ConfirmModalPassword de steelCRM, adaptado a los componentes de acá.
-export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, onConfirm, onClose }) {
-  const [email, setEmail] = useState("");
+// `usuarioPropio` (opcional): cuando quien confirma ya es admin conocido
+// (ej. el botón "Eliminar definitivamente" de la Papelera, visible solo
+// para admin) no hace falta pedir de nuevo el email ni re-chequear el rol
+// — alcanza con re-verificar su propia contraseña. Sin ese prop, se
+// comporta como antes: pide email + contraseña de CUALQUIER Administrador
+// y valida el rol server-side (mismo criterio que steelCRM,
+// ConfirmModalPassword modo="propia"/"admin").
+export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, onConfirm, onClose, usuarioPropio }) {
+  const [email, setEmail] = useState(usuarioPropio?.email || "");
   const [pass, setPass] = useState("");
   const [err,  setErr]  = useState("");
   const [cargando, setCargando] = useState(false);
@@ -30,9 +37,11 @@ export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, o
     setCargando(true); setErr("");
     const r = await verificarPassword(email.trim(), pass);
     if (!r.ok) { setCargando(false); setErr(r.error); setPass(""); return; }
-    const { data: profile, error: pErr } = await supabase.from("profiles").select("rol").eq("id", r.userId).single();
+    if (!usuarioPropio) {
+      const { data: profile, error: pErr } = await supabase.from("profiles").select("rol").eq("id", r.userId).single();
+      if (pErr || profile?.rol !== "admin") { setCargando(false); setErr("Esa cuenta no es Administrador."); setPass(""); return; }
+    }
     setCargando(false);
-    if (pErr || profile?.rol !== "admin") { setErr("Esa cuenta no es Administrador."); setPass(""); return; }
     onConfirm();
   };
 
@@ -42,15 +51,19 @@ export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, o
       <form onSubmit={confirmar} style={{ background:C.card, border:`1.5px solid ${C.err}55`, borderRadius:14, padding:26, width:"100%", maxWidth:380 }}>
         <div style={{ color:C.err, fontWeight:800, fontSize:15, marginBottom:6 }}>⚠ {verbo || "Eliminar"} {titulo}</div>
         <div style={{ color:C.muted, fontSize:12, marginBottom:18 }}>
-          {subtitulo || "Esta acción no se puede deshacer."} Requiere aprobación de un Administrador.
+          {subtitulo || "Esta acción no se puede deshacer."} {usuarioPropio ? "Confirmá tu contraseña para continuar." : "Requiere aprobación de un Administrador."}
         </div>
-        <label style={LBL}>Email del Administrador</label>
-        <input type="email" autoFocus value={email}
-          onChange={e => { setEmail(e.target.value); setErr(""); }}
-          required
-          style={{ ...INP, marginBottom:10 }} />
-        <label style={LBL}>Contraseña</label>
-        <input type="password" value={pass}
+        {!usuarioPropio && (
+          <>
+            <label style={LBL}>Email del Administrador</label>
+            <input type="email" autoFocus value={email}
+              onChange={e => { setEmail(e.target.value); setErr(""); }}
+              required
+              style={{ ...INP, marginBottom:10 }} />
+          </>
+        )}
+        <label style={LBL}>{usuarioPropio ? "Tu contraseña" : "Contraseña"}</label>
+        <input type="password" value={pass} autoFocus={!!usuarioPropio}
           onChange={e => { setPass(e.target.value); setErr(""); }}
           placeholder="••••••" required autoComplete="current-password"
           style={{ ...INP, marginBottom: err ? 6 : 16, border: `1.5px solid ${err ? C.err : C.border}` }} />

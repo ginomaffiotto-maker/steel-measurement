@@ -399,6 +399,12 @@ export const deleteDBComentario = async (tabla, id) => {
   if (error) throw error;
 };
 
+// Genérico: borra una fila cualquiera por tabla+id — mismo mecanismo que
+// deleteDBComentario de arriba (no específico de comentarios pese al
+// nombre original), reusado para "eliminar definitivamente" desde la
+// Papelera (2026-08-25, mismo patrón que steelCRM) en vez de duplicar.
+export const deleteDBFila = deleteDBComentario;
+
 export const saveDBItem = async (presupuestoId, item) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const {

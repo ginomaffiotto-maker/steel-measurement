@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
@@ -593,18 +593,23 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
              expiró. No tiene límite de tiempo — mismo espíritu que le pidió
              Gino ("deshacer temporal pero que un admin pueda recuperarlo"). ── */}
         {seccion === "papelera" && esAdminPapelera && (
-          <PapeleraPanel usuarios={usuarios} logear={logear} />
+          <PapeleraPanel usuario={usuario} usuarios={usuarios} logear={logear} />
         )}
       </div>
     </div>
   );
 }
 
-function PapeleraPanel({ usuarios, logear }) {
+// Tabla real en Supabase de cada entidad que pasa por la Papelera —
+// usada solo por "Eliminar definitivamente" (DELETE real).
+const TABLA_DB = { Cómputo: "computos", Anidado: "anidados", Presupuesto: "presupuestos_sm", Historial: "historial_trabajos" };
+
+function PapeleraPanel({ usuario, usuarios, logear }) {
   const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
   const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
+  const [aPurgar, setAPurgar] = useState(null); // { item, tipo, setLista, lista, nombre } | null
 
   const restaurarComputo = async (c) => {
     const restaurado = { ...c, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
@@ -669,6 +674,30 @@ function PapeleraPanel({ usuarios, logear }) {
   const eliminadosAnidado = anidados.filter(a => a.eliminado);
   const eliminadosPresupuesto = presupuestos.filter(p => p.eliminado);
   const eliminadosTrabajo = historial.filter(t => t.eliminado);
+
+  const LISTAS = {
+    Cómputo:     { lista: computos,     setLista: setComputos },
+    Anidado:     { lista: anidados,     setLista: setAnidados },
+    Presupuesto: { lista: presupuestos, setLista: setPresupuestos },
+    Historial:   { lista: historial,    setLista: setHistorial },
+  };
+  const LS_KEY = { Cómputo: "smeas_computos", Anidado: "smeas_anidados", Presupuesto: "smeas_presupuestos", Historial: "smeas_historial" };
+
+  // "Eliminar definitivamente" (2026-08-25, admin-only, mismo diseño que
+  // steelCRM) — DELETE real contra Supabase + saca del estado local. A
+  // diferencia de Restaurar, esto no tiene deshacer.
+  const purgar = async () => {
+    if (!aPurgar) return;
+    const { item, tipo } = aPurgar;
+    const { lista, setLista } = LISTAS[tipo];
+    const next = lista.filter(x => x.id !== item.id);
+    setLista(next);
+    saveLS(LS_KEY[tipo], next);
+    try { await deleteDBFila(TABLA_DB[tipo], item.id); } catch (e) { console.warn("No se pudo borrar la fila real en Supabase:", e.message || e); }
+    logear?.(`${tipo} eliminado definitivamente`, item.nro_ot || item.nro || item.nombre || item.cliente || "");
+    setAPurgar(null);
+  };
+
   const fila = (item, tipo, onRestaurar, titulo) => (
     <div key={tipo + item.id} style={{ display:"flex", gap:12, padding:"9px 0", borderBottom:`1px solid ${C.border}22`, fontSize:12, alignItems:"center" }}>
       <span style={{ fontSize:11, fontWeight:700, color:C.muted, minWidth:70 }}>{tipo}</span>
@@ -681,14 +710,32 @@ function PapeleraPanel({ usuarios, logear }) {
       <button onClick={() => onRestaurar(item)} style={{ ...BTN("ghost"), padding:"5px 14px", fontSize:12, borderColor:C.accent+"66", color:C.accent, whiteSpace:"nowrap" }}>
         ↩ Restaurar
       </button>
+      {usuario?.rol === "admin" && (
+        <button onClick={() => setAPurgar({ item, tipo, titulo: titulo ? titulo(item) : (item.nombre || item.nro || "Sin nombre") })}
+          style={{ ...BTN("ghost"), padding:"5px 14px", fontSize:12, borderColor:C.err+"66", color:C.err, whiteSpace:"nowrap" }}>
+          🗑️ Eliminar definitivamente
+        </button>
+      )}
     </div>
   );
 
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
+      {aPurgar && (
+        <ModalConfirmarEliminar
+          verbo="Eliminar definitivamente"
+          titulo={`"${aPurgar.titulo}"`}
+          subtitulo="Esto borra la fila real de la base de datos, no solo la marca eliminada. No queda en la Papelera después de esto — no hay vuelta atrás."
+          labelBoton="🗑️ Eliminar definitivamente"
+          usuarioPropio={usuario}
+          onConfirm={purgar}
+          onClose={() => setAPurgar(null)}
+        />
+      )}
       <div style={{ fontWeight:700, fontSize:14, color:C.steel, marginBottom:4 }}>🗑️ Papelera</div>
       <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
         Cómputos, anidados, presupuestos y trabajos de historial eliminados. Restaurar los devuelve a su lista normal, sin límite de tiempo.
+        Solo un admin puede eliminarlos definitivamente.
       </div>
       {eliminadosComputo.length === 0 && eliminadosAnidado.length === 0 && eliminadosPresupuesto.length === 0 && eliminadosTrabajo.length === 0
         ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>✅ Todo limpio — no hay nada en la papelera</div>
