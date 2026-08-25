@@ -46,6 +46,32 @@ const GRUPOS = [
   },
 ];
 
+// Busca o crea el registro local a partir de un usuario ya autenticado por
+// Supabase Auth — usado tanto por el login manual (entrar()) como por la
+// restauración silenciosa de sesión al montar App() (mismo patrón que
+// steelCRM, resolverUsuarioLocal en su App.js). Devuelve null si no hay
+// perfil ni registro local previo — ahí quien llama decide si eso es un
+// error (login manual) o simplemente "no hay sesión que restaurar".
+async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
+  const existente = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
+  if (profileError || !profile) return existente || null;
+  if (existente) {
+    const actualizado = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol };
+    if (actualizado.nombre !== existente.nombre || actualizado.rol !== existente.rol || existente.profileId !== authUser.id) {
+      setUsuarios(prev => prev.map(u => u.id === existente.id ? actualizado : u));
+    }
+    return actualizado;
+  }
+  const nuevo = {
+    id: Date.now(), profileId: authUser.id, nombre: profile.nombre, rol: profile.rol,
+    emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
+    email: authUser.email,
+  };
+  setUsuarios(prev => [...prev, nuevo]);
+  return nuevo;
+}
+
 // ─── PANTALLA LOGIN ──────────────────────────────────────────────
 // Login real vía Supabase Auth (reemplaza selección de usuario + password en
 // texto plano) — mismo mecanismo que steelCRM, mismo "hermano". El objeto que
@@ -131,37 +157,12 @@ function Login({ usuarios, setUsuarios, onLogin }) {
       return;
     }
     const authUser = data.user;
-    const existente = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
-    if (profileError || !profile) {
-      if (!existente) {
-        setErr("Tu cuenta no tiene un perfil asignado todavía — avisale al administrador.");
-        setCargando(false);
-        return;
-      }
-      setCargando(false);
-      onLogin(existente);
+    const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
+    setCargando(false);
+    if (!local) {
+      setErr("Tu cuenta no tiene un perfil asignado todavía — avisale al administrador.");
       return;
     }
-    let local;
-    if (existente) {
-      // Refresca rol/nombre/profileId desde el perfil real en cada login —
-      // mismo criterio que steelCRM (mismo backend compartido): un cambio de
-      // rol tiene que tomar efecto acá también, no quedar pisado por la
-      // copia local vieja.
-      local = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol };
-      if (local.nombre !== existente.nombre || local.rol !== existente.rol || existente.profileId !== authUser.id) {
-        setUsuarios(prev => prev.map(u => u.id === existente.id ? local : u));
-      }
-    } else {
-      local = {
-        id: Date.now(), profileId: authUser.id, nombre: profile.nombre, rol: profile.rol,
-        emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
-        email: authUser.email,
-      };
-      setUsuarios(prev => [...prev, local]);
-    }
-    setCargando(false);
     onLogin(local);
   };
 
@@ -301,6 +302,25 @@ export default function App() {
     if (savedId == null) return null;
     return iUsuarios.find(u => String(u.id) === savedId) || null;
   });
+  // sessionStorage (arriba) solo sobrevive un reload de la misma pestaña —
+  // se borra al cerrar la ventana/pestaña, así que abrir la app de nuevo
+  // desde el ícono de escritorio siempre pedía contraseña, a diferencia de
+  // steelCRM (que restaura desde la sesión real de Supabase Auth, persistida
+  // en localStorage). Mismo fix acá: si no hay nada en sessionStorage, se
+  // chequea si Supabase todavía tiene una sesión válida antes de mostrar el
+  // login.
+  const [verificandoSesion, setVerificandoSesion] = useState(!!supabase && !usuario);
+  useEffect(() => {
+    if (!supabase || usuario) { setVerificandoSesion(false); return; }
+    supabase.auth.getSession().then(async ({ data }) => {
+      const authUser = data?.session?.user;
+      if (authUser) {
+        const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
+        if (local) setUsuario(local);
+      }
+      setVerificandoSesion(false);
+    });
+  }, []); // eslint-disable-line
   // Recupera la última pestaña activa tras una recarga (ej. al cambiar el
   // tema en Config, que fuerza un reload) — antes siempre volvía a Cómputo.
   const tabGuardado = (() => {
@@ -378,6 +398,8 @@ export default function App() {
   const SW = collapsed ? 56 : 180;
 
   if (modoPassword) return <SetPasswordScreen modo={modoPassword} onDone={() => setModoPassword(null)} />;
+
+  if (verificandoSesion) return <div style={{ background: C.bg, minHeight: "100vh" }} />;
 
   if (!usuario) return <Login usuarios={usuarios} setUsuarios={setUsuarios} onLogin={setUsuario} />;
 
