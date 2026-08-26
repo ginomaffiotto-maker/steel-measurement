@@ -10,6 +10,7 @@ import Historial from "./components/Historial";
 import Dashboard from "./components/Dashboard";
 import Config from "./components/Config";
 import Buscador from "./components/Buscador";
+import SolicitudesAsignadas from "./components/SolicitudesAsignadas";
 import { seedTestData } from "./utils/seedTestData";
 
 // ─── MÓDULOS / NAVEGACIÓN ────────────────────────────────────────
@@ -17,6 +18,10 @@ const GRUPOS = [
   {
     id: "buscador", icon: "🔍", label: "Buscar",
     tabs: [{ icon: "🔍", label: "Buscar", tab: "Buscador" }],
+  },
+  {
+    id: "solicitudes", icon: "📥", label: "Solicitudes",
+    tabs: [{ icon: "📥", label: "Solicitudes", tab: "Solicitudes" }],
   },
   {
     id: "computo", icon: "📐", label: "Cómputo",
@@ -558,6 +563,7 @@ export default function App() {
         {/* Tab activo */}
         <div style={{ padding: 24, flex: 1 }}>
           {tab === "Buscador"    && <Buscador onIrA={irATab} usuarios={usuarios} />}
+          {tab === "Solicitudes" && <SolicitudesAsignadas usuario={usuario} irATab={irATab} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
           {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} />}
           {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} logear={logear} />}

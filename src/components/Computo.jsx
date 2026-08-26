@@ -993,6 +993,21 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
   const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
+  // Prefill desde "Crear cómputo" en Solicitudes (asignadas desde steelCRM)
+  // — mismo criterio liviano que el resto de la navegación cruzada de esta
+  // app (onNidar/onExportarPresupuesto solo cambian de tab): se deja un
+  // payload chico en sessionStorage y se consume acá una sola vez al montar.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("smeas_prefill_computo");
+      if (raw) {
+        const p = JSON.parse(raw);
+        setNuevo(v => ({ ...v, ...p }));
+        setCreando(true);
+        sessionStorage.removeItem("smeas_prefill_computo");
+      }
+    } catch {}
+  }, []);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [filt, setFilt] = useState(COMPUTO_FILT_DEFAULTS);
