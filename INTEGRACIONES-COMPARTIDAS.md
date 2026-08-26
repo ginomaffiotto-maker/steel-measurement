@@ -8,11 +8,11 @@ llamada a un servicio externo en steelCRM o Steel Measurement.
 `src/utils/verificarPassword.js`, `src/utils/supabaseClient.js`, y los
 componentes `Config.jsx` de cada sistema — leído directo, no de memoria.
 
-**Relación con los otros documentos**: `ARQUITECTURA-COMPARTIDA-MMN.md` §5
+**Relación con los otros documentos**: `ARQUITECTURA-COMPARTIDA.md` §5
 ya resume esto en una tabla — este documento es el nivel de detalle
 técnico debajo de esa tabla (endpoints exactos, forma del request,
 asimetrías reales entre los dos sistemas). Para el esquema de datos,
-`ENTIDADES-COMPARTIDO-MMN.md` y `DICCIONARIO-DATOS-MMN.md`.
+`ENTIDADES-COMPARTIDAS.md` y `DICCIONARIO-DATOS.md`.
 
 ---
 
@@ -53,7 +53,7 @@ Anthropic, no un campo propio.
 (hostname switch + función serverless) desde el arranque — un fetch
 hardcodeado a `localhost:3001` que se suba a producción sin su
 `api/claude.js` correspondiente queda roto en Vercel en silencio (pasó
-una vez, ver `ARQUITECTURA-COMPARTIDA-MMN.md` §7).
+una vez, ver `ARQUITECTURA-COMPARTIDA.md` §7).
 
 ---
 
@@ -133,8 +133,8 @@ recurrente (ver comentario en el propio código de Steel Measurement:
 ## 4. Supabase (Auth + base de datos)
 
 Es la integración central de la plataforma — cubierta en detalle en
-`ENTIDADES-COMPARTIDO-MMN.md` (esquema, RLS, multi-tenant) y
-`ARQUITECTURA-COMPARTIDA-MMN.md` (stack, variables de entorno). Acá solo
+`ENTIDADES-COMPARTIDAS.md` (esquema, RLS, multi-tenant) y
+`ARQUITECTURA-COMPARTIDA.md` (stack, variables de entorno). Acá solo
 el resumen de los dos puntos de entrada al SDK:
 
 - **`src/utils/supabaseClient.js`** — cliente principal, persiste sesión,

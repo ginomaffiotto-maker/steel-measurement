@@ -188,8 +188,8 @@ Pedidos de Gino, ordenados por tamaño y dependencias (no por importancia).
       (si en steelCRM se marca Aprobado/Rechazado/etc., debe reflejarse en Steel Measurement).
       **Actualizado 2026-08-15 — ya no es "recién a estudiar":** steelCRM
       (`C:\Users\Gino\Documents\steelcrm`) tiene código React funcionando, con 614 presupuestos +
-      183 contactos reales de MMN importados desde Gestsoft, y el esquema mínimo de IDs
-      compartido ya está acordado (ver `TAXONOMIA-COMPARTIDA-MMN.md` §7 — steelCRM genera `nro`,
+      183 contactos reales importados desde Gestsoft, y el esquema mínimo de IDs
+      compartido ya está acordado (ver `TAXONOMIA-COMPARTIDA.md` §7 — steelCRM genera `nro`,
       steel-measurement genera el código de cálculo, `idsCalc` como array en steelCRM soporta la
       relación muchos-a-muchos). Sigue pendiente la pregunta de transporte: ambos son client-only
       (localStorage, sin backend) — hace falta backend real o al menos un formato de export/import
@@ -285,7 +285,7 @@ nuevo.
 Recorrido completo de la app (Biblioteca → Cómputo → Anidado → Presupuesto →
 Historial → Config → Buscador) usando datos de prueba realistas (el cómputo
 "CCFC — Nave Industrial Sector A" del seed, 4755.57 kg / 3 ítems), como lo
-haría un usuario nuevo de MMN el primer día. Objetivo: encontrar faltas,
+haría un usuario nuevo el primer día. Objetivo: encontrar faltas,
 incongruencias y mejoras de experiencia — no bugs de cálculo (esos ya se
 verificaron caso por caso en cada tanda anterior).
 
@@ -302,7 +302,7 @@ Dos gaps estructurales, no bugs puntuales:
    alguien cargue precios a mano. Ya existe un botón "Precio en lote" en
    Biblioteca — es el punto de partida obligado antes de que estos flujos
    automáticos aporten valor real. Sugerencia: guiar a Gino a cargar como
-   mínimo los ~30-40 perfiles/planchas que realmente usa MMN (no los 462),
+   mínimo los ~30-40 perfiles/planchas que realmente se usan (no los 462),
    y considerar una alerta visible (no solo el badge "—") cuando un ítem
    importado a un presupuesto quedó en $0/kg por falta de precio en origen.
 2. **No hay pantalla para crear usuarios nuevos.** El login solo ofrece
@@ -428,9 +428,9 @@ Build limpio (`CI=true react-scripts build`, cero warnings) después de los 3 fi
 
 ---
 
-## 9.8 FIXES 2026-08-01 — Tarifario cargado con datos reales de Gestsoft (MMN)
+## 9.8 FIXES 2026-08-01 — Tarifario cargado con datos reales de Gestsoft
 
-Gino compartió capturas de pantalla del sistema viejo de Montajes Núñez
+Gino compartió capturas de pantalla del sistema viejo de la empresa
 (Gestsoft) con las tarifas reales: MO Fabricación/Montaje, Materiales
 Generales, Traslados/servicios, Pinturas, Galvanizado, Interés financiero.
 Se cargó todo como **default** del Tarifario (`TARIFARIO_DEFAULT` en
@@ -626,7 +626,7 @@ vendedor o supervisor sin editar `localStorage` a mano").
   el `useEffect` que ya existía), solo hacía falta pasarlo.
 - Sin hash de contraseña ni backend — coherente con cómo ya se manejan las
   claves en todo el resto del sistema (texto plano en `localStorage`,
-  aceptable para una PC compartida entre el equipo de MMN, no para un
+  aceptable para una PC compartida entre el equipo, no para un
   SaaS multi-tenant expuesto a internet; si el proyecto avanza a ese punto
   hay que revisar esto junto con el resto de la migración a backend).
 - Probado de punta a punta en navegador: alta de "Juan Vendedor" (rol
@@ -763,7 +763,7 @@ esta tanda.
 
 ### Históricos de Historial — el gap real
 Gino reportó dos veces "no cargaste los históricos" y "falta el USD/kg". Investigando:
-el archivo `steel-measurement-historial-real-MMN.json` (239 registros reales de
+el archivo `steel-measurement-historial-real.json` (239 registros reales de
 "Datos de fabricación.xlsx", generado el 2026-07-31) seguía en el scratchpad de
 la sesión — **nunca se había cargado a la app, solo se había entregado como
 descarga**. El USD/kg en realidad siempre existió en Historial (columna de la
@@ -1172,7 +1172,7 @@ distinto.
 
 ## §9.19 — Taxonomía compartida Familia/Categoría (2026-08-06)
 
-Ver `TAXONOMIA-COMPARTIDA-MMN.md` en la raíz del proyecto para el acuerdo
+Ver `TAXONOMIA-COMPARTIDA.md` en la raíz del proyecto para el acuerdo
 completo entre steel-measurement, Predictor Eq y steelCRM (documento
 compartido con las otras dos sesiones).
 
@@ -1190,7 +1190,7 @@ Build limpio.
 
 ## §9.20 — Esquema de IDs compartido Presupuesto ↔ Cálculo (2026-08-15)
 
-Acordado desde la sesión de steelCRM. Ver `TAXONOMIA-COMPARTIDA-MMN.md` §7
+Acordado desde la sesión de steelCRM. Ver `TAXONOMIA-COMPARTIDA.md` §7
 para el detalle completo. Resumen: steelCRM genera el código de presupuesto
 (`nro`), steel-measurement genera el código de cálculo — relación
 muchos-a-muchos en ambos sentidos (un cálculo puede derivar en varios
@@ -1203,7 +1203,7 @@ También corregida ahí una nota vieja: la entrada de "Integración Steel
 Measurement ↔ steelCRM" en la lista de pendientes (línea ~773) decía que
 steelCRM era "solo documentación, sin código construido" — ya no es así,
 tiene código React funcionando con 614 presupuestos + 183 contactos reales
-de MMN importados.
+importados.
 
 ## §9.21 — Otros tratamientos/cortes conectados al cálculo + carga de presupuestos históricos (2026-08-16)
 
@@ -1288,7 +1288,7 @@ Otros tratamientos, Pantógrafo, limpieza de datos) para los tres puntos.
 ## §9.22 — Tipo de ítem (Fab/Montaje/Fab+Mont) + rubros activos por ítem, corrección de estado del PDF (2026-08-17)
 
 Gino compartió `MN005_ProgramaCalculo.xlsx` (cálculo real hecho a mano para
-un rótulo JCDecaux, con el formato del programa de cálculo interno MMN) y
+un rótulo JCDecaux, con el formato del programa de cálculo interno) y
 preguntó si validaba la estructura de steel-measurement. Comparado rubro
 por rubro contra `Presupuesto.jsx`: los 9 rubros coinciden casi campo a
 campo (USD/KG, Subtotal KG, Subtotal USD, Porc.Item, filas de desperdicio
@@ -1397,7 +1397,7 @@ configurable por empresa — tiene que ser estable entre proyectos). Se
 asigna al crear o clonar un presupuesto; los presupuestos viejos/
 históricos sin el campo lo reciben por "backfill" la primera vez que se
 exportan (ver punto 4). Visible en el topbar del detalle: "🔗
-SM-2026-0001". `TAXONOMIA-COMPARTIDA-MMN.md` §7 actualizado — reemplaza
+SM-2026-0001". `TAXONOMIA-COMPARTIDA.md` §7 actualizado — reemplaza
 el "libre por ahora, sin acordar" anterior.
 
 **4. Transporte steel-measurement → steelCRM: lado steel-measurement
@@ -1408,7 +1408,7 @@ codigo_calculo, estado_sm) — deliberadamente SIN el desglose de los 9
 rubros de costo, mismo criterio de privacidad que ya usa el PDF.
 `exportPresupuestoParaSteelCRM()` en `storage.js`, mismo mecanismo de
 descarga que `exportBackup()`. Contrato completo (forma del JSON) documentado
-en `TAXONOMIA-COMPARTIDA-MMN.md` §8 nueva, para que la sesión de steelCRM
+en `TAXONOMIA-COMPARTIDA.md` §8 nueva, para que la sesión de steelCRM
 construya el importador cuando le toque — **no se tocó código de
 steelCRM en esta sesión**, respetando el límite ya establecido de "cada
 proyecto, su propia sesión". Gaps anotados ahí mismo para esa sesión:
@@ -1436,7 +1436,7 @@ Agregado tanto al modal de creación (`ModalNuevo`) como al detalle
 ("Datos generales"), con la Familia derivada (`familiaDe()`) mostrada
 debajo como texto de referencia. El export a steelCRM (`exportPresupuestoParaSteelCRM`
 en `storage.js`) ahora lleva `categoria` y `familia` — cierra el gap
-anotado en `TAXONOMIA-COMPARTIDA-MMN.md` §8 la sesión pasada. Presupuestos
+anotado en `TAXONOMIA-COMPARTIDA.md` §8 la sesión pasada. Presupuestos
 viejos quedan con `categoria:""` hasta que alguien los abra y la
 complete a mano (no hay forma de inferirla retroactivamente). Verificado
 en navegador de punta a punta: creado un presupuesto de prueba con
@@ -1565,7 +1565,7 @@ diseñar, no copiado de memoria. Aprobado el plan, implementado.
 
 ## §9.27 — Fase 2 del backend compartido: capa de acceso a datos (2026-08-22)
 
-Ver `steel-backend/CLAUDE.md` y `BACKEND-COMPARTIDO-MMN.md` (raíz de este
+Ver `steel-backend/CLAUDE.md` y `BACKEND-COMPARTIDO.md` (raíz de este
 repo) para el detalle completo de esquema y decisiones — acá sólo lo que
 tocó código de Steel Measurement.
 

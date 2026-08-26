@@ -135,7 +135,7 @@ export const registrarCliente = (nombre) => {
 
 // ─── CLIENTES — capa de acceso al backend (Fase 2, sin cablear a la UI
 // todavía). Reemplaza la lista de nombres de arriba: acá `clientes` es la
-// tabla unificada compartida con steelCRM (ver BACKEND-COMPARTIDO-MMN.md en
+// tabla unificada compartida con steelCRM (ver BACKEND-COMPARTIDO.md en
 // la raíz de este repo). Requiere sesión de Supabase Auth activa — sin eso,
 // RLS devuelve vacío en loadDBClientes y rechaza el insert en saveDBCliente.
 export const loadDBClientes = async () => {
@@ -336,7 +336,7 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
 // ese ítem (delete + insert) en vez de diffear — mismo patrón que el estado
 // de React hoy, que reemplaza el array completo en cada guardado. No incluye
 // horas_especiales: sin UI para agregar filas, siempre vacío en la práctica
-// (ver BACKEND-COMPARTIDO-MMN.md).
+// (ver BACKEND-COMPARTIDO.md).
 const RUBROS_ITEM = [
   ["hierros", "item_hierros"],
   ["mat_generales", "item_mat_generales"],
@@ -811,7 +811,7 @@ export const addDBHistorialPrecio = async (tipo, materialId, entry) => {
 // ─── TARIFARIO (Fase 2, sin cablear a la UI) ────────────────────────
 // terc_fabricacion/terc_montajes (legado) y trat_superficie_extra/
 // pantografo_extra (vacíos por defecto) no tienen tabla propia todavía —
-// ver BACKEND-COMPARTIDO-MMN.md. Se ignoran acá si vienen en el objeto.
+// ver BACKEND-COMPARTIDO.md. Se ignoran acá si vienen en el objeto.
 const TARIFARIO_TABLAS = [
   ["mo_fab", "tarifario_mo_fab"],
   ["mo_mon", "tarifario_mo_mon"],
@@ -1084,7 +1084,7 @@ export const restoreBackup = (payload) => {
 // importado allá (mismo mecanismo que Backup/Restaurar, mismo espíritu:
 // nunca automático, el usuario elige cuándo exportar cada presupuesto).
 //
-// Formato y campos documentados en TAXONOMIA-COMPARTIDA-MMN.md §7 — si se
+// Formato y campos documentados en TAXONOMIA-COMPARTIDA.md §7 — si se
 // toca esta forma, actualizar ese archivo para que la sesión de steelCRM
 // sepa qué esperar del lado del importador (todavía no construido).
 //
@@ -1427,7 +1427,7 @@ export const peekNroPresupuesto = () => {
 };
 // ─── CÓDIGO DE CÁLCULO (SM-AAAA-NNNN) ───────────────────────────────
 // Identificador propio de steel-measurement para vincular un cálculo con
-// presupuestos de steelCRM (campo idsCalc allá — ver TAXONOMIA-COMPARTIDA-MMN.md
+// presupuestos de steelCRM (campo idsCalc allá — ver TAXONOMIA-COMPARTIDA.md
 // §7, donde este formato reemplaza el "libre por ahora, sin acordar" anterior).
 // Formato FIJO (a diferencia de nro, que sí es configurable por empresa) porque
 // tiene que ser estable entre los dos proyectos. Contador anual propio.

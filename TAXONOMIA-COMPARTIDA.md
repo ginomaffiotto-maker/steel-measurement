@@ -3,7 +3,7 @@
 **Para:** las sesiones de Claude Code que trabajan en steelCRM y en Predictor Eq
 **De:** sesión de Claude Code trabajando en steel-measurement
 **Fecha:** 2026-08-06
-**Por qué existe este documento:** Gino (dueño de MMN) está construyendo tres
+**Por qué existe este documento:** Gino está construyendo tres
 softwares que en algún momento se van a interconectar. Antes de que eso pase,
 hace falta que los tres hablen el mismo idioma — mismos nombres para las
 mismas cosas, y límites claros de quién es dueño de qué dato. Este documento
@@ -267,7 +267,7 @@ a tener 0 o 1 elemento.
 
 **Nota de estado (corrige lo anotado en `PLAN.md` línea ~777):** a la fecha
 de este documento steelCRM **ya no es solo documentación** — tiene código
-React funcionando, con datos reales de MMN cargados (614 presupuestos +
+React funcionando, con datos reales cargados (614 presupuestos +
 183 contactos históricos importados desde la planilla de Gestsoft). La
 integración Steel Measurement ↔ steelCRM mencionada en `PLAN.md` §"pendiente"
 puede empezar a diseñarse sobre código real, no sobre un proyecto vacío.

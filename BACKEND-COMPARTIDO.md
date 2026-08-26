@@ -3,7 +3,7 @@
 **Estado: Fase 0 (diseño) — sin implementar todavía.** Este documento es la fuente
 de verdad del esquema Postgres/Supabase compartido entre steelCRM y Steel
 Measurement. Antes de tocar clasificación de datos o agregar una tabla nueva,
-leer esto primero — mismo criterio que `TAXONOMIA-COMPARTIDA-MMN.md` para la
+leer esto primero — mismo criterio que `TAXONOMIA-COMPARTIDA.md` para la
 taxonomía.
 
 Predictor Eq queda fuera de este backend por ahora (sigue siendo herramienta
@@ -238,7 +238,7 @@ presupuesto_calculo_link(id, tenant_id → tenants,
 
 Relación muchos a muchos real (un cálculo puede derivar en varios presupuestos;
 un presupuesto puede necesitar varios cálculos — mismo acuerdo de
-`TAXONOMIA-COMPARTIDA-MMN.md` §7). Con esto, el export/import manual de JSON
+`TAXONOMIA-COMPARTIDA.md` §7). Con esto, el export/import manual de JSON
 entre Steel Measurement y steelCRM (botón "⬇️ steelCRM", `Importar.jsx` →
 "Cargar desde Steel Measurement") deja de hacer falta una vez que los dos
 sistemas escriben contra el mismo backend — queda pendiente decidir en Fase 2/3
@@ -255,7 +255,7 @@ cuando Steel Measurement se usa offline).
   se resuelve al escribir las migraciones.
 - Índices (mínimo: `tenant_id` en toda tabla raíz, `nro`/`codigo_calculo`
   únicos por tenant, FKs).
-- Confirmar con Gino si los usuarios reales de MMN ya tienen emails
+- Confirmar con Gino si los usuarios reales del equipo ya tienen emails
   utilizables para Supabase Auth, o hay que asignar/crear algunos.
 
 ## 7. Arquitectura de migración (Fases, ver [[erp_modular_roadmap]])
@@ -267,5 +267,5 @@ cuando Steel Measurement se usa offline).
 3. Dual-write piloto en steelCRM (localStorage sigue siendo fuente de verdad,
    cada guardado también escribe a Supabase) — verificar paridad.
 4. Migración de datos históricos (619 presupuestos steelCRM + históricos de
-   Steel Measurement) a un solo tenant (Montajes Núñez).
+   Steel Measurement) a un solo tenant real.
 5. Corte de lectura a Supabase, una vez verificada la paridad.

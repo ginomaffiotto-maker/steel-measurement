@@ -7,9 +7,9 @@ columna por columna del esquema real.
 **Fecha:** 2026-08-25
 **Fuente:** las 24 migraciones de `steel-backend/supabase/migrations/`,
 leídas completas (no de memoria).
-**Relación con los otros dos documentos**: `ENTIDADES-COMPARTIDO-MMN.md`
+**Relación con los otros dos documentos**: `ENTIDADES-COMPARTIDAS.md`
 es el mapa de relaciones (qué tabla se conecta con cuál y por qué);
-`ARQUITECTURA-COMPARTIDA-MMN.md` es cómo está armado el software. Este
+`ARQUITECTURA-COMPARTIDA.md` es cómo está armado el software. Este
 documento es el nivel más fino: cada columna, su tipo, sus restricciones y
 su significado de negocio cuando no es obvio. No repite lo que ya explican
 los otros dos — para relaciones o para arquitectura, ir a esos.
@@ -38,7 +38,7 @@ rubros de costo, comentarios — estas solo tienen `created_at` o ninguna).
 todas las tablas — ver marca ✅ por tabla más abajo. Nunca se borra de
 verdad una fila marcada; se filtra de las vistas activas y es recuperable
 desde una Papelera admin-only. Detalle completo del patrón en
-`ENTIDADES-COMPARTIDO-MMN.md` §7.
+`ENTIDADES-COMPARTIDAS.md` §7.
 
 ---
 
@@ -90,7 +90,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 | `cliente_id` | uuid → `clientes` on delete set null | |
 | `cliente_nombre`, `empresa` | text | Copia desnormalizada (para no perder el nombre si el cliente se borra). |
 | `fecha` | date | |
-| `tipo` | text | Campo interno; la UI lo muestra como "Categoría" (32 valores canónicos de Predictor Eq, ver `TAXONOMIA-COMPARTIDA-MMN.md`). |
+| `tipo` | text | Campo interno; la UI lo muestra como "Categoría" (32 valores canónicos de Predictor Eq, ver `TAXONOMIA-COMPARTIDA.md`). |
 | `categoria`, `producto`, `descripcion`, `obra` | text | |
 | `kg_cotizados`, `precio_usd_kg`, `monto_usd`, `monto_final` | numeric | El monto digitado por el usuario (`monto_final`) siempre prevalece sobre el cálculo automático — nunca se sobreescribe sin acción explícita. |
 | `moneda` | text not null default `'USD'`, check in (`USD`,`UYU`) | |
@@ -102,7 +102,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 | `recotizacion_de_id` | uuid → `presupuestos_crm` (self) on delete set null | Cadena de recotización — una recotización es una fila nueva, no un cambio de estado del original. |
 | `estado_obra` | text, check in (`''`,`Adjudicada`,`Licitación`,`Directa`) | |
 | `plazo_pago`, `porcentaje_negociacion`, `acabado_superficial` | int / numeric / text | |
-| `ids_calc` | **text[]** | Códigos de cálculo de Steel Measurement vinculados — texto libre, sin FK. Ver §6 de `ENTIDADES-COMPARTIDO-MMN.md`. |
+| `ids_calc` | **text[]** | Códigos de cálculo de Steel Measurement vinculados — texto libre, sin FK. Ver §6 de `ENTIDADES-COMPARTIDAS.md`. |
 | `fecha_aceptado`, `fecha_facturado` | date | |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
 
@@ -148,7 +148,7 @@ Misma forma en las 3 (genéricas vía `comentarioToDB`/`FromDB` con `table` como
 `nombre`, `direccion`, `empresa`, `fecha_inicio`, `fecha_fin`, `estado` (check in `activa`/`finalizada`/`pausada`/`cancelada`), `notas`. ✅ soft-delete.
 
 ### `obra_presupuestos`
-Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade), `unique(obra_id, presupuesto_id)`. Tabla de vínculo pura — el esquema permite muchos-a-muchos pero la UI fuerza 1 obra por presupuesto (ver `ENTIDADES-COMPARTIDO-MMN.md` §4).
+Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade), `unique(obra_id, presupuesto_id)`. Tabla de vínculo pura — el esquema permite muchos-a-muchos pero la UI fuerza 1 obra por presupuesto (ver `ENTIDADES-COMPARTIDAS.md` §4).
 
 ### `solicitudes`
 | Columna | Tipo | Nota |
@@ -264,7 +264,7 @@ Misma forma que los comentarios de steelCRM (`computo_id`/`anidado_id`/`presupue
 
 ## 5. `presupuesto_calculo_link` — el vínculo real, sin usar
 
-`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Estado y motivo por el que no está wireada: `ENTIDADES-COMPARTIDO-MMN.md` §6.
+`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Estado y motivo por el que no está wireada: `ENTIDADES-COMPARTIDAS.md` §6.
 
 ---
 

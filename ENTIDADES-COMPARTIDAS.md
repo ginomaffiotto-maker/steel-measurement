@@ -48,7 +48,7 @@ local y a qué función de `storage.js` corresponde cada tabla.
 
 | Tabla | PK | FKs | Notas |
 |---|---|---|---|
-| `tenants` | `id` | — | Una fila por empresa cliente del SaaS. Hoy solo existe el tenant de MMN. |
+| `tenants` | `id` | — | Una fila por empresa cliente del SaaS. Hoy solo existe un tenant real. |
 | `profiles` | `id` (= `auth.users.id`) | `tenant_id → tenants` | El usuario real de Supabase Auth. `rol` en (`admin`,`supervisor`,`vendedor`). No tiene trigger de `tenant_id` automático (se crea explícito al alta, antes de que exista sesión). |
 | `tenant_settings` | (`tenant_id`,`key`) | `tenant_id → tenants` | Config libre por tenant, `value jsonb`. Uso actual: mínimo/sin uso confirmado en UI todavía. |
 
@@ -272,8 +272,8 @@ un cliente cargado desde cualquiera de los dos aparece en el otro.
 ## 8. Mantenimiento de este documento
 
 Este archivo es la fuente de verdad del modelo de datos compartido — junto
-con `TAXONOMIA-COMPARTIDA-MMN.md` (Familia/Categoría) y
-`BACKEND-COMPARTIDO-MMN.md` (diseño de fase 0 del backend, más narrativo,
+con `TAXONOMIA-COMPARTIDA.md` (Familia/Categoría) y
+`BACKEND-COMPARTIDO.md` (diseño de fase 0 del backend, más narrativo,
 este documento es el que queda al día con el esquema real).
 
 **Regla de sync** (steelCRM: `CLAUDE.md` regla 9 · Steel Measurement:

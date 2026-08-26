@@ -8,9 +8,9 @@
 
 ## 1. QUÉ ES ESTE PROYECTO
 
-**Steel Measurement** es el módulo de ingeniería de presupuestación de **Montajes Núñez (MMN)**, una metalúrgica en Uruguay. Reemplaza planillas Excel de cómputo de materiales, anidado/optimización de corte y presupuestación industrial.
+**Steel Measurement** es el módulo de ingeniería de presupuestación de una metalúrgica en Uruguay. Reemplaza planillas Excel de cómputo de materiales, anidado/optimización de corte y presupuestación industrial.
 
-Es parte de **Steel Platform** — cuando madure, se vende como módulo de SteelCRM a otras metalúrgicas de LATAM. Por eso debe ser configurable: no todo lo que usa MMN lo usan otras metalúrgicas.
+Es parte de **Steel Platform** — cuando madure, se vende como módulo de Steel CRM a otras metalúrgicas de LATAM. Por eso debe ser configurable: no todo lo que usa esta metalúrgica lo usan otras.
 
 **Repositorio:** `C:\Users\Gino\Documents\steel-measurement\`
 **Stack:** React 19 (CRA) + JavaScript puro, sin TypeScript
@@ -216,7 +216,7 @@ Planilla para cliente específico. Usa pesos en **UYU con conversión a USD via 
 Hoja DATOS: tarifario completo (materiales, MO, tratamientos, tercerizadas).
 
 ### GestSoft — "Registro Digital de Documentos V1.0"
-Sistema desktop actual (parece Delphi). **El core de presupuestación de MMN.** Hallazgos clave:
+Sistema desktop actual (parece Delphi). **El core de presupuestación real.** Hallazgos clave:
 
 **Arquitectura:** Solicitudes → Presupuestos → Ítems (multi-pestaña, multi-rubro)
 
@@ -440,7 +440,7 @@ de kg, `calcBenchmark()` (Min/Prom/Max por categoría) ya conectado y consumido
 desde el flujo de Presupuesto (comentario en el código: "Mismos 9 rubros que
 calcPresupuesto() en Presupuesto.jsx — así el benchmark...").
 
-**Pendiente de confirmar:** si los 33+ trabajos reales de MMN mencionados
+**Pendiente de confirmar:** si los 33+ trabajos reales mencionados
 abajo ya están cargados como seed, o si la tabla arranca vacía.
 
 **Propósito:** Base de datos de trabajos ejecutados. Alimenta el benchmark Min/Prom/Max del M4.
@@ -468,7 +468,7 @@ abajo ya están cargados como seed, o si la tabla arranca vacía.
 }
 ```
 
-33+ trabajos reales de MMN para cargar como datos seed.
+33+ trabajos reales para cargar como datos seed.
 
 **UX:**
 - Tabla filtrable por: categoría, cliente, período, rango de kg
@@ -479,7 +479,7 @@ abajo ya están cargados como seed, o si la tabla arranca vacía.
 
 ## 8. PRINCIPIOS DE DISEÑO PARA OTRAS METALÚRGICAS
 
-Steel Measurement no puede ser un fork de MMN. Para que sea vendible:
+Steel Measurement no puede ser un fork de un solo cliente. Para que sea vendible:
 
 1. **Rubros activables por empresa** — una metalúrgica sin obra desactiva MO Mon, Terc.Mon, Traslados
 2. **Tarifario propio** — cada empresa carga sus USD/hora, precios de superficie, tercerizadas
@@ -574,7 +574,7 @@ Lo que queda pendiente, por orden sugerido:
       (`Datos de fabricación.xlsx`, compartida por Gino) tiene **32
       categorías y ~314 filas de trabajos reales (2017-2024)**, de las
       cuales 239 tenían fecha+kg+USD completos y se parsearon a un archivo
-      de backup (`steel-measurement-historial-real-MMN.json`, entregado a
+      de backup (`steel-measurement-historial-real.json`, entregado a
       Gino) listo para cargar vía el botón "⬆️ Restaurar". Mapeo: `HC`
       (horas cotizadas)→`horas_*_est`, `HF`/`HM` (reales)→`horas_*_real`
       — la hoja "Montajes" mapea a campos `*_mon`, el resto a `*_fab`. Los
@@ -625,7 +625,7 @@ const n3 = v => (Math.round(v * 1000) / 1000).toFixed(3);
 4. El código actual siempre está en `C:\Users\Gino\Documents\steel-measurement\src\`
 5. **Identificarse al arrancar la sesión.** Tomar el nombre de sesión que asigna el harness (visible vía `ListAgents`, ej. `f6`) y anteponerlo como identificador del chat con el formato `-{nombre_sesión}_{tema}`, ej. `-f6_Measurement`. Mismo criterio que ya rige en `steelCRM - BUILDIING/CLAUDE.md` (regla 7) — se aplica acá también porque este repo tuvo, repetidas veces en agosto 2026, varias sesiones activas en simultáneo (ver §9.31 en adelante).
 6. **Coordinar antes de tocar archivos que otra sesión pueda estar editando.** Antes de escribir sobre un archivo compartido entre repos o entre sesiones paralelas activas al mismo tiempo (`src/utils/storage.js` fue el caso repetido en agosto 2026), correr `ListAgents` y avisar por `SendMessage` a la sesión correspondiente. Ante un cambio sin commitear no reconocido, no asumir que es basura — puede ser trabajo real de otra sesión con contexto resumido; confirmar antes de tocarlo o descartarlo. Mismo criterio que la regla 8 de `steelCRM - BUILDIING/CLAUDE.md`.
-7. **Sync de documentación técnica (2026-08-25).** 4 documentos técnicos compartidos en la raíz de este repo — `ENTIDADES-COMPARTIDO-MMN.md`, `ARQUITECTURA-COMPARTIDA-MMN.md`, `DICCIONARIO-DATOS-MMN.md`, `INTEGRACIONES-COMPARTIDO-MMN.md`. Toda sesión que agregue/borre/modifique una tabla/columna/relación en `steel-backend/supabase/migrations/`, cambie qué entidad local mapea a qué tabla en `storage.js`, o toque una integración externa, actualiza el documento correspondiente en el mismo commit. `CHANGELOG-TECNICO-MMN.md` (mismo lugar) solo se actualiza para cambios release-worthy, no en cada commit. Mismo criterio que la regla 9 de `steelCRM - BUILDIING/CLAUDE.md` y de `steel-backend/CLAUDE.md`.
+7. **Sync de documentación técnica (2026-08-25).** 4 documentos técnicos compartidos en la raíz de este repo — `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md`. Toda sesión que agregue/borre/modifique una tabla/columna/relación en `steel-backend/supabase/migrations/`, cambie qué entidad local mapea a qué tabla en `storage.js`, o toque una integración externa, actualiza el documento correspondiente en el mismo commit. `CHANGELOG-TECNICO.md` (mismo lugar) solo se actualiza para cambios release-worthy, no en cada commit. Mismo criterio que la regla 9 de `steelCRM - BUILDIING/CLAUDE.md` y de `steel-backend/CLAUDE.md`.
 
 **Dato clave para el LLM:** Gino valida contra la planilla Excel / GestSoft con datos reales. No avanzar al siguiente módulo hasta que los cálculos numéricos coincidan exactamente.
 

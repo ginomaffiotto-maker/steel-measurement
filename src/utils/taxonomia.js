@@ -3,7 +3,7 @@ import { INP } from "../styles/colors";
 // Taxonomía compartida MMN — Familia (nivel 1) → Categoría (nivel 2).
 //
 // Fuente canónica: Predictor Eq v25 (`DEFAULT_FAMILIES`). Ver
-// TAXONOMIA-COMPARTIDA-MMN.md en la raíz del proyecto para el acuerdo
+// TAXONOMIA-COMPARTIDA.md en la raíz del proyecto para el acuerdo
 // completo entre steel-measurement / Predictor Eq / steelCRM.
 //
 // No editar este mapeo acá sin actualizar primero Predictor Eq (dueño

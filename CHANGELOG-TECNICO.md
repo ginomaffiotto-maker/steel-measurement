@@ -38,7 +38,7 @@ verdad. Este documento resume, no sustituye.
 
 ## 2026-08-06 — Taxonomía compartida
 
-- Campo "Categoría" en Presupuestos (steelCRM), reemplaza el `tipo` genérico de 10 valores. Fuente canónica: las 32 Categorías de Predictor Eq v25 (`TAXONOMIA-COMPARTIDA-MMN.md`).
+- Campo "Categoría" en Presupuestos (steelCRM), reemplaza el `tipo` genérico de 10 valores. Fuente canónica: las 32 Categorías de Predictor Eq v25 (`TAXONOMIA-COMPARTIDA.md`).
 
 ## 2026-08-14 — steelCRM: preparación de carga histórica
 
@@ -60,7 +60,7 @@ verdad. Este documento resume, no sustituye.
 
 ## 2026-08-22 — Backend Fase 0-1, launchers, PDF por bloques
 
-- **Fase 0** (diseño de esquema): `BACKEND-COMPARTIDO-MMN.md`, ~48 tablas relevadas del código real.
+- **Fase 0** (diseño de esquema): `BACKEND-COMPARTIDO.md`, ~48 tablas relevadas del código real.
 - **Fase 1** (infraestructura): proyecto Supabase creado (`lnblgecgskjyulbqocet`, São Paulo), migraciones aplicadas, RLS por `tenant_id`.
 - Launchers reemplazados (`.vbs` → `.ps1` + `.bat` oculto) — Windows bloqueaba VBScript.
 - `pdfPresupuesto.js`: PDF con bloques configurables (`RENDER_BLOQUE`), compartido 1:1 entre steelCRM y Steel Measurement.
@@ -98,7 +98,7 @@ verdad. Este documento resume, no sustituye.
 
 - Soft-delete (`eliminado`/`eliminado_por`/`eliminado_fecha`) extendido a: Presupuestos, Clientes, Obras, Solicitudes, Fichas de Aceptados, Seguimientos, Historial de Interacciones, Comentarios (steelCRM) y Presupuestos/Historial de Trabajos (Steel Measurement) — cubre prácticamente todo el sistema.
 - **Reglas 7-9** formalizadas en los tres `CLAUDE.md`/`PLAN.md`: identificación de sesión, coordinación antes de tocar archivos compartidos, sync de documentación técnica con cada cambio de esquema.
-- Documentación completa: `ENTIDADES-COMPARTIDO-MMN.md`, `ARQUITECTURA-COMPARTIDA-MMN.md`, `DICCIONARIO-DATOS-MMN.md`, `INTEGRACIONES-COMPARTIDO-MMN.md` (técnicos, en los repos); manuales de uso (steelCRM, Steel Measurement), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
+- Documentación completa: `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md` (técnicos, en los repos); manuales de uso (steelCRM, Steel Measurement), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
 - Fix real: IA de steelCRM rota en producción — 8 call-sites con `localhost:3001` hardcodeado, sin función serverless equivalente a `api/cotizacion.js`. Corregido (`api/claude.js` nuevo + hostname switch). Segundo bug encontrado de paso en `Inicio.jsx` (formato de request incorrecto), también corregido.
 - Arranque de la estrategia comercial (Praxware): FODA de Praxware/steelCRM/Steel Measurement, identidad mínima, 4 segmentos de outreach en LinkedIn.
 

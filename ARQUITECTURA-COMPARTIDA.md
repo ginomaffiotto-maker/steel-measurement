@@ -7,7 +7,7 @@ que se están armando en el chat de documentación.
 **Fecha:** 2026-08-25
 **Fuente:** relevado contra el código real — `package.json`, `server.js`,
 `api/`, `public/`, launchers, y remotos git de los tres repos. No
-reconstruido de memoria/changelog. Complementa a `ENTIDADES-COMPARTIDO-MMN.md`
+reconstruido de memoria/changelog. Complementa a `ENTIDADES-COMPARTIDAS.md`
 (qué datos existen y cómo se relacionan) — este documento cubre **cómo está
 armado el software que los mueve**.
 
@@ -66,7 +66,7 @@ propio.
   esté logueado — usado por el flujo de borrado con confirmación).
 - **Sin TypeScript, sin CSS-in-JS de terceros** — estilos inline + un mapa
   de temas (`src/styles/colors.js`, `THEMES`: `industrial_dark`/
-  `metalsales_light`, ver §6 de `ENTIDADES-COMPARTIDO-MMN.md` para cómo se
+  `metalsales_light`, ver §6 de `ENTIDADES-COMPARTIDAS.md` para cómo se
   relaciona con RLS... no aplica, es solo UI, no dato).
 
 ---
@@ -125,7 +125,7 @@ AutocompleteCliente, AutocompleteEmpresa.
 
 ## 4. Persistencia, sync y autenticación
 
-Cubierto en detalle en `ENTIDADES-COMPARTIDO-MMN.md` §1, §2 y §7 — no se
+Cubierto en detalle en `ENTIDADES-COMPARTIDAS.md` §1, §2 y §7 — no se
 repite acá. Resumen de una línea: **localStorage es la fuente de verdad**,
 cada guardado dispara un dual-write a Supabase que nunca bloquea, Fase 5
 completa lo que falte desde la nube al montar la app, y todo está aislado
@@ -211,7 +211,7 @@ navegador.
 
 ## 8. Mantenimiento de este documento
 
-Misma Regla 9 que `ENTIDADES-COMPARTIDO-MMN.md` (ver esa sección §8): toda
+Misma Regla 9 que `ENTIDADES-COMPARTIDAS.md` (ver esa sección §8): toda
 sesión que cambie el stack, la estructura de carpetas, una integración
 externa o el mecanismo de despliegue de cualquiera de los tres repos
 actualiza este documento en el mismo commit.
