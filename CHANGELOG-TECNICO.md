@@ -108,7 +108,7 @@ verdad. Este documento resume, no sustituye.
 - **`solicitudes` gana `categoria` (text, lista canónica de 32, obligatoria) y `creado_por` (text, fijado una sola vez)** — Categoría viaja a Presupuestos al crear uno desde la solicitud.
 - **"Crear presupuesto desde esta solicitud"**: botón nuevo, crea el presupuesto precargado y lo vincula sin esperar a "ganar".
 - **Primer caso de un sistema leyendo una tabla que el otro es dueño**: Steel Measurement lee `solicitudes` (tabla de Steel CRM) directo de Supabase, filtrada por `asignado_a` — pantalla nueva "Mis solicitudes asignadas", sin export/import de archivo. Hasta ahora la única tabla verdaderamente compartida era `clientes`.
-- ⚠️ **Bug real sin corregir, migración duplicada**: `steel-backend` commit `976dd10` intenta `alter table solicitudes add column asignado_a` — esa columna **ya existe** desde el esquema original (2026-08-22). Va a fallar con "column already exists" si se corre contra Supabase. Las otras 2 migraciones del mismo lote (`categoria`, `creado_por`) son válidas y nuevas.
+- ✅ **Bug de migración duplicada — corregido**: `steel-backend` commit `976dd10` intentaba `alter table solicitudes add column asignado_a` — esa columna ya existía desde el esquema original (2026-08-22), el `ALTER TABLE` nunca pudo haber tenido éxito. Archivo eliminado (`steel-backend` commit `ae6431a`), confirmado con Gino antes de borrar. Las otras 2 migraciones del mismo lote (`categoria`, `creado_por`) eran válidas y no se tocaron.
 
 ---
 
