@@ -155,7 +155,9 @@ Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade),
 |---|---|---|
 | `cliente_id` | uuid → `clientes` on delete set null | |
 | `cliente_nombre`, `obra`, `direccion_obra`, `contacto`, `tel`, `email` | text | Copia desnormalizada — la solicitud puede llegar antes de cargar el cliente formalmente. |
-| `fecha_recepcion`, `fecha_limite`, `fecha_envio`, `fecha_resolucion` | date | |
+| `fecha_recepcion`, `fecha_limite`, `fecha_envio`, `fecha_resolucion` | date | `fecha_limite` obligatoria en la UI desde el 2026-08-26. |
+| `categoria` | text | Agregada 2026-08-26. Lista canónica de 32 (misma que `presupuestos_crm.categoria`), obligatoria en la UI al guardar. Distinta de `tipos_trabajo` (abajo), que es la lista vieja de 10 estilo Gestsoft — no hay traducción 1 a 1 entre ambas, conviven. |
+| `creado_por` | text | Agregada 2026-08-26. Nombre fijado una sola vez al crear la solicitud — a diferencia de `asignado_a` (reasignable), este no cambia, para no perder el rastro de quién la cargó originalmente. |
 | `tipos_trabajo` | text[] not null default `'{}'` | |
 | `link_archivos`, `notas` | text | |
 | `horas_estimadas`, `horas_reales` | numeric | |

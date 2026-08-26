@@ -102,6 +102,14 @@ verdad. Este documento resume, no sustituye.
 - Fix real: IA de Steel CRM rota en producción — 8 call-sites con `localhost:3001` hardcodeado, sin función serverless equivalente a `api/cotizacion.js`. Corregido (`api/claude.js` nuevo + hostname switch). Segundo bug encontrado de paso en `Inicio.jsx` (formato de request incorrecto), también corregido.
 - Arranque de la estrategia comercial (Praxware): FODA de Praxware/Steel CRM/Steel Measurement, identidad mínima, 4 segmentos de outreach en LinkedIn.
 
+## 2026-08-26 — Anonimización + Solicitudes: Categoría obligatoria, creado_por, y primer cruce directo Steel Measurement → Steel CRM
+
+- Renombre de los 7 documentos técnicos (sufijo `-MMN` sacado) y limpieza de menciones a la empresa real en ~11 documentos, código fuente (`Config.jsx` de los dos sistemas, comentarios) y datos seed reales (`historialSeed.js`/`presupuestosHistoricosSeed.js`) — ver el registro de sesión para el detalle completo, no se repite acá por no ser un cambio de esquema/capacidad.
+- **`solicitudes` gana `categoria` (text, lista canónica de 32, obligatoria) y `creado_por` (text, fijado una sola vez)** — Categoría viaja a Presupuestos al crear uno desde la solicitud.
+- **"Crear presupuesto desde esta solicitud"**: botón nuevo, crea el presupuesto precargado y lo vincula sin esperar a "ganar".
+- **Primer caso de un sistema leyendo una tabla que el otro es dueño**: Steel Measurement lee `solicitudes` (tabla de Steel CRM) directo de Supabase, filtrada por `asignado_a` — pantalla nueva "Mis solicitudes asignadas", sin export/import de archivo. Hasta ahora la única tabla verdaderamente compartida era `clientes`.
+- ⚠️ **Bug real sin corregir, migración duplicada**: `steel-backend` commit `976dd10` intenta `alter table solicitudes add column asignado_a` — esa columna **ya existe** desde el esquema original (2026-08-22). Va a fallar con "column already exists" si se corre contra Supabase. Las otras 2 migraciones del mismo lote (`categoria`, `creado_por`) son válidas y nuevas.
+
 ---
 
 ## Mantenimiento de este documento

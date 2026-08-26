@@ -179,7 +179,7 @@ Postgres.
 | `competencia` | `id` | `presupuesto_id→presupuestos_crm` | `competenciaToDB`/`FromDB` | — | Análisis de presupuestos perdidos. |
 | `obras` | `id` | — | `obraToDB`/`FromDB` | ✅ | |
 | `obra_presupuestos` | `id` | `obra_id→obras`, `presupuesto_id→presupuestos_crm` | `saveObraPresupuestosDB`/`syncObraPresupuestosDB` | — | Tabla de vínculo. El esquema permite muchos-a-muchos (`unique(obra_id, presupuesto_id)`) pero la UI actual (`BudgetModal`) solo deja un presupuesto vinculado a **una** obra a la vez — se desvincula de la anterior antes de vincular la nueva. |
-| `solicitudes` | `id` | `cliente_id→clientes`, `asignado_a→profiles`, `presupuesto_id→presupuestos_crm` | `solicitudToDB`/`FromDB` | ✅ | Solicitud entrante con scoring IA. Al "ganar" se referencia el presupuesto creado. |
+| `solicitudes` | `id` | `cliente_id→clientes`, `asignado_a→profiles`, `presupuesto_id→presupuestos_crm` | `solicitudToDB`/`FromDB` | ✅ | Solicitud entrante con scoring IA. `categoria` (2026-08-26, lista canónica de 32, obligatoria al guardar) y `creado_por` (texto, fijado una sola vez al crear — `asignado_a` es reasignable, este no) agregados. Al "ganar" se referencia el presupuesto creado; también se puede crear un presupuesto directo desde la solicitud antes de eso ("Crear presupuesto desde esta solicitud"). Leída directo por Steel Measurement — ver §6. |
 | `solicitud_versiones` | `id` | `solicitud_id→solicitudes` | `versionSolicitudToDB`/`FromDB` | — | |
 | `metas` | `id` | — | `metaToDB`/`FromDB` | — | Meta de equipo o individual. |
 | `meta_usuarios` | `id` | `meta_id→metas`, `profile_id→profiles` | `saveMetaUsuariosDB`/`loadMetaUsuariosDB` | — | Solo se llena cuando la meta es individual (`asignadoA` array, no `"todos"`); solo alcanza a usuarios que ya iniciaron sesión real al menos una vez. |
@@ -216,7 +216,7 @@ Postgres.
 
 ## 6. El vínculo cruzado Steel CRM ↔ Steel Measurement
 
-Hay **dos mecanismos** en el esquema, y solo uno está activo:
+Hay **tres mecanismos** en el esquema — dos activos, uno construido y sin usar:
 
 1. **`presupuestos_crm.ids_calc` (`text[]`) — el que se usa hoy.**
    Texto libre, sin foreign key. Se llena de dos formas: (a) a mano, campo
@@ -238,6 +238,24 @@ Hay **dos mecanismos** en el esquema, y solo uno está activo:
 
 **Si una sesión futura conecta esta tabla**, actualizar esta sección y la
 línea correspondiente del diagrama en §3.
+
+3. **Lectura directa de `solicitudes` desde Steel Measurement — nuevo, activo
+   (2026-08-26).** Steel Measurement lee la tabla `solicitudes` (propiedad de
+   Steel CRM) directo de Supabase, filtrada por `asignado_a = profileId` del
+   usuario logueado — pantalla nueva "📥 Mis solicitudes asignadas"
+   (`SolicitudesAsignadas.jsx`). Sin export/import de archivo — a diferencia
+   de `ids_calc` arriba, es lectura en vivo de una tabla que Steel Measurement
+   no posee ni escribe. El botón "📐 Crear cómputo" de esa pantalla deja un
+   payload chico (nombre/cliente/categoría) en `sessionStorage` y navega a
+   Cómputo, que lo consume una sola vez al montar para precargar el
+   formulario — mismo patrón liviano de traspaso entre pantallas que ya usa
+   el resto de la app, no un mecanismo nuevo de por sí. Requiere que
+   `solicitudes.asignado_a` esté sincronizado (ver `ids_calc`/`vendedor_id`:
+   mismo bloqueo — solo alcanza a usuarios con cuenta real de Supabase Auth).
+   **Es el primer caso de un sistema leyendo una tabla que el otro
+   sistema es dueño** (hasta ahora la única tabla verdaderamente compartida
+   era `clientes`) — si se repite el patrón, vale la pena revisar si
+   conviene un principio más general en vez de caso por caso.
 
 **El otro vínculo real, más simple**: `clientes` es una tabla **única**,
 compartida entre los dos sistemas (no hay `clientes_crm`/`clientes_sm`) —

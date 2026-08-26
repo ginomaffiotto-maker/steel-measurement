@@ -116,10 +116,12 @@ Solicitudes, Obras, Aceptados, Competencia, Forecast, Bonificaciones,
 CerebroNegocio, Calculadora, Config, Importar, `shared.jsx` (componentes
 compartidos entre módulos: `BudgetModal`, `ComentariosThread`, `ExportModal`, etc.).
 
-**Módulos de Steel Measurement** (`src/components/`, 14 archivos):
+**Módulos de Steel Measurement** (`src/components/`, 15 archivos):
 BibliotecaMateriales, Computo, Anidado, Presupuesto, Historial, Dashboard,
 Config, Buscador, FiltrosBar, ComentariosPanel, Toast, ConfirmarEliminar,
-AutocompleteCliente, AutocompleteEmpresa.
+AutocompleteCliente, AutocompleteEmpresa, SolicitudesAsignadas (nuevo,
+2026-08-26 — lee `solicitudes` directo de Steel CRM, ver
+`ENTIDADES-COMPARTIDAS.md` §6).
 
 ---
 
