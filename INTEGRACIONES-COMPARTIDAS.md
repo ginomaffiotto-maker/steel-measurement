@@ -1,7 +1,7 @@
 # Integraciones externas — Steel Platform
 
 **Para:** cualquier sesión que toque IA, cotización, backup o cualquier
-llamada a un servicio externo en steelCRM o Steel Measurement.
+llamada a un servicio externo en Steel CRM o Steel Measurement.
 **De:** sesión de documentación (`steelCRM - BUILDIING`)
 **Fecha:** 2026-08-25
 **Fuente:** `server.js` y `api/*.js` de los dos repos, `src/utils/googleDrive.js`,
@@ -16,7 +16,7 @@ asimetrías reales entre los dos sistemas). Para el esquema de datos,
 
 ---
 
-## 1. IA (Claude / Anthropic) — solo steelCRM
+## 1. IA (Claude / Anthropic) — solo Steel CRM
 
 Steel Measurement no tiene ninguna integración de IA — no hay `/api/claude`
 ni equivalente en ese repo.
@@ -78,7 +78,7 @@ para extraer compra/venta.
 
 | | Local | Producción |
 |---|---|---|
-| steelCRM | `GET http://localhost:3001/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`) |
+| Steel CRM | `GET http://localhost:3001/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`) |
 | Steel Measurement | `GET http://localhost:3003/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`, repo propio) |
 
 **Mismo scraping, mismo parser copiado en 4 archivos** (`server.js` ×2,
@@ -87,7 +87,7 @@ los 4, no solo uno.
 
 **Uso distinto según el sistema** — esto es a propósito, no un
 descuido:
-- **steelCRM**: solo informativo, se muestra en un topbar fijo, no
+- **Steel CRM**: solo informativo, se muestra en un topbar fijo, no
   alimenta ningún cálculo guardado.
 - **Steel Measurement**: autocompleta el campo `tc` (tipo de cambio
   histórico) de cada presupuesto al abrirlo — desde ahí sí alimenta el
@@ -97,7 +97,7 @@ descuido:
 
 ## 3. Backup — asimétrico entre los dos sistemas
 
-**steelCRM** tiene backup local automático real:
+**Steel CRM** tiene backup local automático real:
 - `server.js` dispara `POST /api/backup` **una vez por día**, al abrir
   la app (no manual, no programado con cron — condicionado a que alguien
   use el sistema ese día).
@@ -149,7 +149,7 @@ el resumen de los dos puntos de entrada al SDK:
 
 ## 5. Enlaces externos sin integración real
 
-Google Calendar y Zoom (steelCRM, sección Integraciones) **no son
+Google Calendar y Zoom (Steel CRM, sección Integraciones) **no son
 integraciones con API** — son atajos de conveniencia: un botón que abre
 `calendar.google.com`, y el link de Zoom que se pega a mano en un
 seguimiento queda accesible directo desde ahí. No hay OAuth, no hay

@@ -1,6 +1,6 @@
-# Árbol de entidades — Steel Platform (steelCRM · Steel Measurement · backend compartido)
+# Árbol de entidades — Steel Platform (Steel CRM · Steel Measurement · backend compartido)
 
-**Para:** cualquier sesión de Claude Code trabajando en steelCRM, Steel Measurement o
+**Para:** cualquier sesión de Claude Code trabajando en Steel CRM, Steel Measurement o
 steel-backend, y cualquier documento de manual/instalación/arquitectura que se
 construya a partir de este.
 **De:** sesión de documentación (`steelCRM - BUILDIING`)
@@ -11,7 +11,7 @@ construya a partir de este.
 changelog. Si algo de acá no coincide con el código actual, el código manda:
 este documento quedó desactualizado y hay que corregirlo (ver §8).
 
-**Por qué existe:** los dos sistemas (steelCRM, Steel Measurement) y el
+**Por qué existe:** los dos sistemas (Steel CRM, Steel Measurement) y el
 backend compartido (steel-backend/Supabase) crecieron con ~48 tablas entre
 los tres, casi todas agregadas de forma incremental durante agosto 2026. No
 existía hasta ahora un mapa único de qué entidad vive dónde, cómo se
@@ -80,7 +80,7 @@ flowchart TB
 
     CLI[("clientes<br/>(tabla única, compartida)")]
 
-    subgraph CRM["steelCRM"]
+    subgraph CRM["Steel CRM"]
         PCRM[presupuestos_crm]
         SEG[seguimientos]
         HIST[historial_interacciones]
@@ -167,7 +167,7 @@ Postgres.
 
 ---
 
-## 4. steelCRM — entidades y relaciones
+## 4. Steel CRM — entidades y relaciones
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
@@ -194,7 +194,7 @@ Postgres.
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
-| `presupuestos_sm` | `id` | `cliente_id→clientes`, `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a steelCRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de steelCRM — nunca se mapean 1:1. |
+| `presupuestos_sm` | `id` | `cliente_id→clientes`, `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. |
 | `items_presupuesto_sm` | `id` | `presupuesto_id→presupuestos_sm`, `computo_id→computos` (opcional), `anidado_id→anidados` (opcional) | `loadDBItems`/`saveDBItem` | — | Un ítem puede traer material de un cómputo o de un anidado, no ambos a la vez en general. |
 | `item_hierros`, `item_mat_generales`, `item_mo_fabricacion`, `item_mo_montajes`, `item_terc_fabricacion`, `item_terc_montajes`, `item_traslados`, `item_corte_pantografo` | `id` c/u | `item_id→items_presupuesto_sm` | dentro de `saveDBItem` | — | Los 9 rubros de costo por ítem (8 tablas de línea + 1 de tratamiento). |
 | `item_trat_superficie` | `id` (unique por item) | `item_id→items_presupuesto_sm` (1:1) | dentro de `saveDBItem` | — | `item_trat_pinturas`/`item_trat_otros` cuelgan de esta, no directo del ítem. |
@@ -210,11 +210,11 @@ Postgres.
 | `material_historial_precios` | `id` | `material_id` (text, sin FK real — referencia lógica a una de las 4 tablas de arriba según `material_tipo`) | `loadDBHistorialPrecios` | — | |
 | `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`, `tarifario_interes_financiero` | `id` c/u | — | `loadDBTarifario`/`saveDBTarifario` | — | |
 | `tarifario_config` | `tenant_id` (PK directa) | `tenant_id→tenants` | `loadDBTarifario`/`saveDBTarifario` | — | Única fila por tenant (no lista): `arenado_usd_m2`, `galvanizado_usd_kg`, `panto_usd_kg_2d/3d`. |
-| `comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm` | `id` c/u | `computo_id→computos` / `anidado_id→anidados` / `presupuesto_id→presupuestos_sm` | `saveDBComentario` (genérica) | — | Guardado directo al comentar (diseño original de Steel Measurement, luego replicado a steelCRM). |
+| `comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm` | `id` c/u | `computo_id→computos` / `anidado_id→anidados` / `presupuesto_id→presupuestos_sm` | `saveDBComentario` (genérica) | — | Guardado directo al comentar (diseño original de Steel Measurement, luego replicado a Steel CRM). |
 
 ---
 
-## 6. El vínculo cruzado steelCRM ↔ Steel Measurement
+## 6. El vínculo cruzado Steel CRM ↔ Steel Measurement
 
 Hay **dos mecanismos** en el esquema, y solo uno está activo:
 
@@ -276,7 +276,7 @@ con `TAXONOMIA-COMPARTIDA.md` (Familia/Categoría) y
 `BACKEND-COMPARTIDO.md` (diseño de fase 0 del backend, más narrativo,
 este documento es el que queda al día con el esquema real).
 
-**Regla de sync** (steelCRM: `CLAUDE.md` regla 9 · Steel Measurement:
+**Regla de sync** (Steel CRM: `CLAUDE.md` regla 9 · Steel Measurement:
 `PLAN.md` §11 punto 7 · steel-backend: `CLAUDE.md` regla 9): toda sesión
 que agregue, borre o modifique una tabla, columna o relación en
 `steel-backend/supabase/migrations/`, o que cambie qué entidad local mapea

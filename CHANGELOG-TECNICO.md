@@ -28,19 +28,19 @@ verdad. Este documento resume, no sustituye.
 - **M4 — Presupuesto**: 9 rubros de costo por ítem, importación de material desde Cómputo/Anidado.
 - **M5 — Historial**: registro de trabajos cerrados, benchmark para Predictor Eq.
 
-## 2026-08-02 — steelCRM: control de versiones
+## 2026-08-02 — Steel CRM: control de versiones
 
-- `git init` en steelCRM (no existía hasta esta fecha). Eliminado código muerto (`Cerebro.jsx`).
+- `git init` en Steel CRM (no existía hasta esta fecha). Eliminado código muerto (`Cerebro.jsx`).
 
-## 2026-08-05 — steelCRM: Prioridad A del roadmap completa
+## 2026-08-05 — Steel CRM: Prioridad A del roadmap completa
 
 - Agendar seguimiento desde Kanban/Presupuesto, último contacto en cards, color de urgencia por inactividad, mini-alarmas en Kanban, vista móvil (lista en vez de drag & drop).
 
 ## 2026-08-06 — Taxonomía compartida
 
-- Campo "Categoría" en Presupuestos (steelCRM), reemplaza el `tipo` genérico de 10 valores. Fuente canónica: las 32 Categorías de Predictor Eq v25 (`TAXONOMIA-COMPARTIDA.md`).
+- Campo "Categoría" en Presupuestos (Steel CRM), reemplaza el `tipo` genérico de 10 valores. Fuente canónica: las 32 Categorías de Predictor Eq v25 (`TAXONOMIA-COMPARTIDA.md`).
 
-## 2026-08-14 — steelCRM: preparación de carga histórica
+## 2026-08-14 — Steel CRM: preparación de carga histórica
 
 - Fix de `Importar.jsx` para datos reales de `presupuestos_v28.xlsm` (614 presupuestos + 186 contactos). Campo `recotizacionDe` nuevo — las recotizaciones venían como filas nuevas, no cambios de estado.
 
@@ -54,16 +54,16 @@ verdad. Este documento resume, no sustituye.
 
 - `nroDuplicado` conectado en los 3 puntos donde se guarda un presupuesto. Config > Empresa > Numeración (prefijo, dígitos, año, reinicio anual).
 
-## 2026-08-19/20 — Punto E: importador Steel Measurement → steelCRM
+## 2026-08-19/20 — Punto E: importador Steel Measurement → Steel CRM
 
-- Botón "⬇️ steelCRM" en Steel Measurement (exporta `.json`). Importador en steelCRM (`Importar.jsx`): `codigo_calculo` → append a `idsCalc`, `estado_sm` guardado aparte (no pisa el `estado` comercial real).
+- Botón "⬇️ Steel CRM" en Steel Measurement (exporta `.json`). Importador en Steel CRM (`Importar.jsx`): `codigo_calculo` → append a `idsCalc`, `estado_sm` guardado aparte (no pisa el `estado` comercial real).
 
 ## 2026-08-22 — Backend Fase 0-1, launchers, PDF por bloques
 
 - **Fase 0** (diseño de esquema): `BACKEND-COMPARTIDO.md`, ~48 tablas relevadas del código real.
 - **Fase 1** (infraestructura): proyecto Supabase creado (`lnblgecgskjyulbqocet`, São Paulo), migraciones aplicadas, RLS por `tenant_id`.
 - Launchers reemplazados (`.vbs` → `.ps1` + `.bat` oculto) — Windows bloqueaba VBScript.
-- `pdfPresupuesto.js`: PDF con bloques configurables (`RENDER_BLOQUE`), compartido 1:1 entre steelCRM y Steel Measurement.
+- `pdfPresupuesto.js`: PDF con bloques configurables (`RENDER_BLOQUE`), compartido 1:1 entre Steel CRM y Steel Measurement.
 - Sistema de temas (`colors.js`, `THEMES`): `industrial_dark` + `metalsales_light`.
 - Config > Sistema nueva (Numeración + PDF, sacados de Empresa).
 - Auditoría de UI: `Importar.jsx` reorganizado en pestañas ("Cargar datos" / "Mantenimiento").
@@ -73,8 +73,8 @@ verdad. Este documento resume, no sustituye.
 - **Fase 2** (`loadDB`/`saveDB`): capa de mapeo camelCase↔snake_case en los dos repos.
 - **Fase 3** (dual-write): las 9 entidades principales de cada sistema sincronizan a Supabase en paralelo al guardado local.
 - **Login real** (Supabase Auth) reemplaza la selección de usuario local, en los dos sistemas.
-- **Fase 4** (migración de datos históricos): 619 presupuestos + 188 clientes (steelCRM) subidos a Supabase.
-- **Fase 5** (piloto, lectura desde la nube): completa las 9 entidades en steelCRM.
+- **Fase 4** (migración de datos históricos): 619 presupuestos + 188 clientes (Steel CRM) subidos a Supabase.
+- **Fase 5** (piloto, lectura desde la nube): completa las 9 entidades en Steel CRM.
 - **Bug crítico, corregido el mismo día**: Fase 4 no guardaba `dbId` de vuelta en local → Fase 5 duplicaba todo en el siguiente reload (619→1237 presupuestos). Fix: `migrarTodoALaNube` devuelve `dbIds`, aplicados al estado local.
 - Cotización real del BROU (scraping) reemplaza el intento fallido con `frankfurter.app` (no cubre UYU).
 - PWA instalable en los dos sistemas (manifest + service worker + íconos).
@@ -96,11 +96,11 @@ verdad. Este documento resume, no sustituye.
 
 ## 2026-08-25 — Soft-delete generalizado, coordinación multi-sesión, documentación
 
-- Soft-delete (`eliminado`/`eliminado_por`/`eliminado_fecha`) extendido a: Presupuestos, Clientes, Obras, Solicitudes, Fichas de Aceptados, Seguimientos, Historial de Interacciones, Comentarios (steelCRM) y Presupuestos/Historial de Trabajos (Steel Measurement) — cubre prácticamente todo el sistema.
+- Soft-delete (`eliminado`/`eliminado_por`/`eliminado_fecha`) extendido a: Presupuestos, Clientes, Obras, Solicitudes, Fichas de Aceptados, Seguimientos, Historial de Interacciones, Comentarios (Steel CRM) y Presupuestos/Historial de Trabajos (Steel Measurement) — cubre prácticamente todo el sistema.
 - **Reglas 7-9** formalizadas en los tres `CLAUDE.md`/`PLAN.md`: identificación de sesión, coordinación antes de tocar archivos compartidos, sync de documentación técnica con cada cambio de esquema.
-- Documentación completa: `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md` (técnicos, en los repos); manuales de uso (steelCRM, Steel Measurement), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
-- Fix real: IA de steelCRM rota en producción — 8 call-sites con `localhost:3001` hardcodeado, sin función serverless equivalente a `api/cotizacion.js`. Corregido (`api/claude.js` nuevo + hostname switch). Segundo bug encontrado de paso en `Inicio.jsx` (formato de request incorrecto), también corregido.
-- Arranque de la estrategia comercial (Praxware): FODA de Praxware/steelCRM/Steel Measurement, identidad mínima, 4 segmentos de outreach en LinkedIn.
+- Documentación completa: `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md` (técnicos, en los repos); manuales de uso (Steel CRM, Steel Measurement), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
+- Fix real: IA de Steel CRM rota en producción — 8 call-sites con `localhost:3001` hardcodeado, sin función serverless equivalente a `api/cotizacion.js`. Corregido (`api/claude.js` nuevo + hostname switch). Segundo bug encontrado de paso en `Inicio.jsx` (formato de request incorrecto), también corregido.
+- Arranque de la estrategia comercial (Praxware): FODA de Praxware/Steel CRM/Steel Measurement, identidad mínima, 4 segmentos de outreach en LinkedIn.
 
 ---
 

@@ -66,7 +66,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 
 ---
 
-## 2. `clientes` (única, compartida entre steelCRM y Steel Measurement)
+## 2. `clientes` (única, compartida entre Steel CRM y Steel Measurement)
 
 | Columna | Tipo | Nota |
 |---|---|---|
@@ -81,7 +81,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 
 ---
 
-## 3. steelCRM
+## 3. Steel CRM
 
 ### `presupuestos_crm` — entidad central
 | Columna | Tipo | Nota |
@@ -192,11 +192,11 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 | Columna | Tipo | Nota |
 |---|---|---|
 | `nro` | text | Numeración interna de Steel Measurement — **no** es lo mismo que `nro` de `presupuestos_crm`. |
-| `codigo_calculo` | text | Antes `not null` — relajado (`fix_steel_measurement_schema`, 24/8) porque hay presupuestos reales más viejos que la funcionalidad y nunca tuvieron uno. Único por `(tenant_id, codigo_calculo)`. Es el identificador que viaja a steelCRM (`ids_calc`). |
+| `codigo_calculo` | text | Antes `not null` — relajado (`fix_steel_measurement_schema`, 24/8) porque hay presupuestos reales más viejos que la funcionalidad y nunca tuvieron uno. Único por `(tenant_id, codigo_calculo)`. Es el identificador que viaja a Steel CRM (`ids_calc`). |
 | `nombre`, `contacto`, `obra`, `detalle`, `empresa` | text | |
 | `cliente_id` | uuid → `clientes` on delete set null | |
-| `tipo_trabajo`, `categoria` | text | Misma lista canónica de 32 que `tipo` en steelCRM — sin traducción. Viaja Cómputo → Anidado → Presupuesto (traspaso automático, nunca pisa lo ya cargado a mano). |
-| `estado` | text not null default `'borrador'`, check in (`borrador`,`enviado`,`aprobado`,`rechazado`) | **Vocabulario propio, distinto al de steelCRM** — nunca mapear 1:1. |
+| `tipo_trabajo`, `categoria` | text | Misma lista canónica de 32 que `tipo` en Steel CRM — sin traducción. Viaja Cómputo → Anidado → Presupuesto (traspaso automático, nunca pisa lo ya cargado a mano). |
+| `estado` | text not null default `'borrador'`, check in (`borrador`,`enviado`,`aprobado`,`rechazado`) | **Vocabulario propio, distinto al de Steel CRM** — nunca mapear 1:1. |
 | `clonado_de_id` | uuid → `presupuestos_sm` (self) on delete set null | |
 | `negociacion_pct`, `negociacion_usd`, `neg_modo` | numeric/text | |
 | `interes_pct`, `interes_dias` | numeric/int | Interés financiero por plazo de pago. |
@@ -258,7 +258,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`: todas `nombre` + `usd`/`usd_hora`. `tarifario_interes_financiero`: `nombre`, `moneda`, `dias`, `pct`. `tarifario_config` (PK = `tenant_id`, una sola fila): `arenado_usd_m2`, `galvanizado_usd_kg`, `panto_usd_kg_2d`, `panto_usd_kg_3d`.
 
 ### `comentarios_computo` / `comentarios_anidado` / `comentarios_presupuesto_sm`
-Misma forma que los comentarios de steelCRM (`computo_id`/`anidado_id`/`presupuesto_id` → tabla padre cascade, `autor`, `texto`, `fecha`, `hora`). Sin columnas de soft-delete propias en la migración original de Steel Measurement — a diferencia de las de steelCRM, que sí las ganaron después (`soft_delete_comentarios`, ver §0). Confirmar contra el código si esto cambió antes de asumir.
+Misma forma que los comentarios de Steel CRM (`computo_id`/`anidado_id`/`presupuesto_id` → tabla padre cascade, `autor`, `texto`, `fecha`, `hora`). Sin columnas de soft-delete propias en la migración original de Steel Measurement — a diferencia de las de Steel CRM, que sí las ganaron después (`soft_delete_comentarios`, ver §0). Confirmar contra el código si esto cambió antes de asumir.
 
 ---
 

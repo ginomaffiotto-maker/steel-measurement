@@ -1,7 +1,7 @@
-# Backend compartido steelCRM + Steel Measurement — diseño de esquema
+# Backend compartido Steel CRM + Steel Measurement — diseño de esquema
 
 **Estado: Fase 0 (diseño) — sin implementar todavía.** Este documento es la fuente
-de verdad del esquema Postgres/Supabase compartido entre steelCRM y Steel
+de verdad del esquema Postgres/Supabase compartido entre Steel CRM y Steel
 Measurement. Antes de tocar clasificación de datos o agregar una tabla nueva,
 leer esto primero — mismo criterio que `TAXONOMIA-COMPARTIDA.md` para la
 taxonomía.
@@ -17,7 +17,7 @@ proyecto de coordinación para la arquitectura de integración en 3 etapas.
 | Decisión | Elegido |
 |---|---|
 | Motivo | Preparar la base para vender como SaaS (no hay demanda multi-tenant real todavía) |
-| Alcance | Backend **compartido** entre steelCRM y Steel Measurement (un solo proyecto, `tenant_id` desde el día uno) |
+| Alcance | Backend **compartido** entre Steel CRM y Steel Measurement (un solo proyecto, `tenant_id` desde el día uno) |
 | Stack | **Supabase** (Postgres gestionado + Auth + API) |
 | Migración de datos existentes | **Dual-write**: la app sigue escribiendo a localStorage y también al backend en paralelo durante un tiempo, antes de cortar la lectura |
 | Clientes | **Unificados** en una sola tabla — Steel Measurement pasa de autocompletar texto libre a elegir un cliente real del CRM (cambio de UX real en ese sistema) |
@@ -59,14 +59,14 @@ clientes(id, tenant_id → tenants, nombre, empresa, cargo, celular, tel, tel_li
   email, linkedin, zona, cumpleanos, notas, created_at, updated_at)
 ```
 
-Reemplaza tanto las fichas completas de steelCRM como la lista simple de nombres
+Reemplaza tanto las fichas completas de Steel CRM como la lista simple de nombres
 de Steel Measurement (`smeas_clientes`). La convención `matchClienteBudget`
 (clienteId exacto → nombre parcial → nunca por empresa sola) deja de hacer falta
 como heurística — con FK real, el match es directo por `cliente_id`.
 
 ---
 
-## 3. steelCRM
+## 3. Steel CRM
 
 ```
 presupuestos_crm(id, tenant_id → tenants, nro, cliente_id → clientes, cliente_nombre,
@@ -239,7 +239,7 @@ presupuesto_calculo_link(id, tenant_id → tenants,
 Relación muchos a muchos real (un cálculo puede derivar en varios presupuestos;
 un presupuesto puede necesitar varios cálculos — mismo acuerdo de
 `TAXONOMIA-COMPARTIDA.md` §7). Con esto, el export/import manual de JSON
-entre Steel Measurement y steelCRM (botón "⬇️ steelCRM", `Importar.jsx` →
+entre Steel Measurement y Steel CRM (botón "⬇️ Steel CRM", `Importar.jsx` →
 "Cargar desde Steel Measurement") deja de hacer falta una vez que los dos
 sistemas escriben contra el mismo backend — queda pendiente decidir en Fase 2/3
 si se retira el importador manual o se deja como vía alternativa (ej. para
@@ -264,8 +264,8 @@ cuando Steel Measurement se usa offline).
 1. Infraestructura: crear proyecto Supabase, Auth, aplicar migraciones, RLS.
 2. Capa de acceso a datos: `loadDB`/`saveDB` en cada repo, detrás de la misma
    abstracción `storage.js` que ya existe.
-3. Dual-write piloto en steelCRM (localStorage sigue siendo fuente de verdad,
+3. Dual-write piloto en Steel CRM (localStorage sigue siendo fuente de verdad,
    cada guardado también escribe a Supabase) — verificar paridad.
-4. Migración de datos históricos (619 presupuestos steelCRM + históricos de
+4. Migración de datos históricos (619 presupuestos Steel CRM + históricos de
    Steel Measurement) a un solo tenant real.
 5. Corte de lectura a Supabase, una vez verificada la paridad.

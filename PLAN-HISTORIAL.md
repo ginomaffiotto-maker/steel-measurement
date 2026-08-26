@@ -183,18 +183,18 @@ Pedidos de Gino, ordenados por tamaño y dependencias (no por importancia).
       en un momento de esta sesión porque el navegador de pruebas no estaba
       renderizando visualmente; usé `javascript_tool` (dispatch de eventos DOM reales)
       como alternativa para poder seguir verificando sin bloquear el trabajo.
-- [ ] **Integración Steel Measurement ↔ steelCRM**: exportar un presupuesto de Steel Measurement
-      a steelCRM para redacción y seguimiento comercial desde ahí; sync de estado bidireccional
-      (si en steelCRM se marca Aprobado/Rechazado/etc., debe reflejarse en Steel Measurement).
-      **Actualizado 2026-08-15 — ya no es "recién a estudiar":** steelCRM
+- [ ] **Integración Steel Measurement ↔ Steel CRM**: exportar un presupuesto de Steel Measurement
+      a Steel CRM para redacción y seguimiento comercial desde ahí; sync de estado bidireccional
+      (si en Steel CRM se marca Aprobado/Rechazado/etc., debe reflejarse en Steel Measurement).
+      **Actualizado 2026-08-15 — ya no es "recién a estudiar":** Steel CRM
       (`C:\Users\Gino\Documents\steelcrm`) tiene código React funcionando, con 614 presupuestos +
       183 contactos reales importados desde Gestsoft, y el esquema mínimo de IDs
-      compartido ya está acordado (ver `TAXONOMIA-COMPARTIDA.md` §7 — steelCRM genera `nro`,
-      steel-measurement genera el código de cálculo, `idsCalc` como array en steelCRM soporta la
+      compartido ya está acordado (ver `TAXONOMIA-COMPARTIDA.md` §7 — Steel CRM genera `nro`,
+      steel-measurement genera el código de cálculo, `idsCalc` como array en Steel CRM soporta la
       relación muchos-a-muchos). Sigue pendiente la pregunta de transporte: ambos son client-only
       (localStorage, sin backend) — hace falta backend real o al menos un formato de export/import
       de archivo, similar al de backup, hasta que exista el backend compartido que menciona el
-      CLAUDE.md de steelCRM.
+      CLAUDE.md de Steel CRM.
 
 ---
 
@@ -1173,7 +1173,7 @@ distinto.
 ## §9.19 — Taxonomía compartida Familia/Categoría (2026-08-06)
 
 Ver `TAXONOMIA-COMPARTIDA.md` en la raíz del proyecto para el acuerdo
-completo entre steel-measurement, Predictor Eq y steelCRM (documento
+completo entre steel-measurement, Predictor Eq y Steel CRM (documento
 compartido con las otras dos sesiones).
 
 - **`src/utils/taxonomia.js`** (nuevo): mapeo Familia (8) → Categoría (32),
@@ -1190,18 +1190,18 @@ Build limpio.
 
 ## §9.20 — Esquema de IDs compartido Presupuesto ↔ Cálculo (2026-08-15)
 
-Acordado desde la sesión de steelCRM. Ver `TAXONOMIA-COMPARTIDA.md` §7
-para el detalle completo. Resumen: steelCRM genera el código de presupuesto
+Acordado desde la sesión de Steel CRM. Ver `TAXONOMIA-COMPARTIDA.md` §7
+para el detalle completo. Resumen: Steel CRM genera el código de presupuesto
 (`nro`), steel-measurement genera el código de cálculo — relación
 muchos-a-muchos en ambos sentidos (un cálculo puede derivar en varios
-presupuestos, un presupuesto puede tener varios cálculos). steelCRM ya
+presupuestos, un presupuesto puede tener varios cálculos). Steel CRM ya
 migró su campo de `idCalc` (string único) a `idsCalc` (array), compatible
 hacia atrás. Formato del código de cálculo queda libre por ahora — si acá
 se define un formato fijo en el futuro, avisar en el documento compartido.
 
 También corregida ahí una nota vieja: la entrada de "Integración Steel
-Measurement ↔ steelCRM" en la lista de pendientes (línea ~773) decía que
-steelCRM era "solo documentación, sin código construido" — ya no es así,
+Measurement ↔ Steel CRM" en la lista de pendientes (línea ~773) decía que
+Steel CRM era "solo documentación, sin código construido" — ya no es así,
 tiene código React funcionando con 614 presupuestos + 183 contactos reales
 importados.
 
@@ -1336,8 +1336,8 @@ un botón "🖨️ PDF" que no debería haber estado ahí. Investigado: el archi
 **2026-08-16 23:40**, 37 minutos después de la última edición de este
 `PLAN.md` en esta sesión (23:03, §9.21) — es decir, se agregó por fuera de
 este hilo de trabajo, probablemente desde la sesión de coordinación con
-steelCRM (el propio archivo dice en su comentario que es la misma función
-compartida entre los dos repos, correspondiente a D1 de steelCRM). No fue
+Steel CRM (el propio archivo dice en su comentario que es la misma función
+compartida entre los dos repos, correspondiente a D1 de Steel CRM). No fue
 un error de grep — el archivo genuinamente no existía cuando se reportó.
 No se tocó ese código (no es de esta sesión), solo se corrigió el estado
 en el punto de la sección 9.4 más arriba.
@@ -1400,17 +1400,17 @@ exportan (ver punto 4). Visible en el topbar del detalle: "🔗
 SM-2026-0001". `TAXONOMIA-COMPARTIDA.md` §7 actualizado — reemplaza
 el "libre por ahora, sin acordar" anterior.
 
-**4. Transporte steel-measurement → steelCRM: lado steel-measurement
-construido.** Botón "⬇️ steelCRM" en el detalle de Presupuesto, junto al
+**4. Transporte steel-measurement → Steel CRM: lado steel-measurement
+construido.** Botón "⬇️ Steel CRM" en el detalle de Presupuesto, junto al
 de PDF — descarga `steelmeasurement-export-<codigo_calculo>.json` con el
 RESUMEN comercial (cliente, obra, tipo, fecha, kg, USD total, USD/kg,
 codigo_calculo, estado_sm) — deliberadamente SIN el desglose de los 9
 rubros de costo, mismo criterio de privacidad que ya usa el PDF.
 `exportPresupuestoParaSteelCRM()` en `storage.js`, mismo mecanismo de
 descarga que `exportBackup()`. Contrato completo (forma del JSON) documentado
-en `TAXONOMIA-COMPARTIDA.md` §8 nueva, para que la sesión de steelCRM
+en `TAXONOMIA-COMPARTIDA.md` §8 nueva, para que la sesión de Steel CRM
 construya el importador cuando le toque — **no se tocó código de
-steelCRM en esta sesión**, respetando el límite ya establecido de "cada
+Steel CRM en esta sesión**, respetando el límite ya establecido de "cada
 proyecto, su propia sesión". Gaps anotados ahí mismo para esa sesión:
 vocabulario de `estado` distinto entre los dos sistemas (por eso el campo
 se llama `estado_sm`, no `estado`), y que Presupuesto todavía no tiene un
@@ -1434,7 +1434,7 @@ mapeo de `taxonomia.js` que ya usa Historial — a propósito NO es texto
 libre como el de Historial, para no divergir de la lista canónica de 32.
 Agregado tanto al modal de creación (`ModalNuevo`) como al detalle
 ("Datos generales"), con la Familia derivada (`familiaDe()`) mostrada
-debajo como texto de referencia. El export a steelCRM (`exportPresupuestoParaSteelCRM`
+debajo como texto de referencia. El export a Steel CRM (`exportPresupuestoParaSteelCRM`
 en `storage.js`) ahora lleva `categoria` y `familia` — cierra el gap
 anotado en `TAXONOMIA-COMPARTIDA.md` §8 la sesión pasada. Presupuestos
 viejos quedan con `categoria:""` hasta que alguien los abra y la
@@ -1479,10 +1479,10 @@ C corriendo la suite completa).
 ## §9.25 — Auditoría de integración: Config en 6 pestañas + sidebar limpio (2026-08-22)
 
 Gino pidió auditar que las pantallas no tengan "herramientas entreveradas"
-y usen pestañas/desplegables — mismo principio de la Regla 6 de steelCRM
+y usen pestañas/desplegables — mismo principio de la Regla 6 de Steel CRM
 (una pantalla acumulando herramientas sueltas porque cada una se agregó
 para un pedido puntual, sin pensar el conjunto). Auditadas 3 pantallas
-(esta, más 2 del lado steelCRM — ver `CLAUDE.md` de esa sesión):
+(esta, más 2 del lado Steel CRM — ver `CLAUDE.md` de esa sesión):
 
 - **`Config.jsx` tenía solo 2 pestañas (Empresa/Usuarios), pero "Empresa"
   acumulaba 4 cosas sin relación entre sí**: nombre de empresa,
@@ -1505,23 +1505,23 @@ para un pedido puntual, sin pensar el conjunto). Auditadas 3 pantallas
   (interceptado el Blob de la descarga: 9 claves `smeas_*` exportadas
   correctamente), sidebar sin los botones sueltos.
 
-Del lado steelCRM (repo separado, `C:\Users\Gino\Documents\steelcrm`):
+Del lado Steel CRM (repo separado, `C:\Users\Gino\Documents\steelcrm`):
 `Importar.jsx` tenía 2 secciones ("Cargar datos"/"Mantenimiento", del fix
 del 2026-08-22 anterior) pero renderizadas juntas en un solo scroll, no
 como pestañas reales — convertidas a pestañas de verdad con el mismo
 `TAB_BTN` que ya usa `Config.jsx` de ese proyecto. Detalle completo en el
-`CLAUDE.md` de la sesión de coordinación de steelCRM, no acá — para no
+`CLAUDE.md` de la sesión de coordinación de Steel CRM, no acá — para no
 duplicar el registro de cambios de un repo ajeno.
 
 Build limpio en los 2 repos, los 3 cambios verificados en navegador con
-datos reales (incluida la vista de Mantenimiento de steelCRM mostrando
+datos reales (incluida la vista de Mantenimiento de Steel CRM mostrando
 2 presupuestos de prueba reales del entorno de desarrollo).
 
 ## §9.26 — Nuevo módulo: Dashboard (2026-08-22)
 
 Pedido de Gino: un dashboard de estadísticas/KPIs (presupuestos, empresas
 cotizadas, materiales más usados). Planificado primero, mismo lenguaje
-visual que el Dashboard de steelCRM (`KPI`/`Bar`, filtros con
+visual que el Dashboard de Steel CRM (`KPI`/`Bar`, filtros con
 desplegables, comparación ▲▼% vs. período anterior) — leído el código
 real de `steelcrm/src/components/Dashboard.jsx` y `shared.jsx` antes de
 diseñar, no copiado de memoria. Aprobado el plan, implementado.
@@ -1532,7 +1532,7 @@ diseñar, no copiado de memoria. Aprobado el plan, implementado.
   (presupuestos/monto/kg/USD-kg-promedio/empresas cotizadas, cada KPI
   con flecha vs. período anterior), 📈 Tendencia (barras por mes, últimos
   12), 🏢 Empresas (ranking con medallas 🥇🥈🥉), 🔩 Materiales (ranking
-  por kg, **el único que steelCRM no puede tener** — steelCRM no calcula
+  por kg, **el único que Steel CRM no puede tener** — Steel CRM no calcula
   materiales, sólo el monto final).
 - **Fuente de datos seleccionable** (pedido explícito): filtro
   "Fuente" = Presupuesto / Historial / Ambos. Función de normalización
@@ -1545,7 +1545,7 @@ diseñar, no copiado de memoria. Aprobado el plan, implementado.
   mezclarlos ahí sería directamente incorrecto, no sólo impreciso. Sí
   cuentan normalmente en Resumen/Tendencia/Empresas, donde el kg/USD
   agregado es real y confiable.
-- Filtros comunes: Período (mismo esquema que steelCRM, con período
+- Filtros comunes: Período (mismo esquema que Steel CRM, con período
   anterior para el ▲▼%), Desde/Hasta manual, Categoría (dropdown
   `FAMILIAS` con optgroup, mismo que el nuevo selector de Presupuesto),
   Cliente/Empresa (texto libre).

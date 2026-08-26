@@ -529,7 +529,7 @@ Lo que queda pendiente, por orden sugerido:
   → **Hallazgo nuevo**: `window.confirm()` en `BibliotecaMateriales.jsx`
   (guardar datos técnicos línea ~717, eliminar material línea ~753) y en
   `Computo.jsx` (eliminar ítem línea ~901) contradice la convención de
-  steelCRM ("sin window.confirm, usar ConfirmModal unificado") y además
+  Steel CRM ("sin window.confirm, usar ConfirmModal unificado") y además
   **bloquea las pruebas automatizadas** en este navegador. No se tocó — es
   una decisión de si migrar a `ModalConfirmarEliminar` (ya existe en el
   proyecto y se usa en otros lados).
@@ -554,7 +554,7 @@ Lo que queda pendiente, por orden sugerido:
 - [x] **Exportación a PDF** — implementada 2026-08-16 (23:40, fuera de esta
       sesión de trabajo — ver §9.22 para el detalle y la corrección de
       estado). `src/utils/pdfPresupuesto.js`, botón "🖨️ PDF" en
-      `Presupuesto.jsx`. Corresponde a D1 de steelCRM (mismo template
+      `Presupuesto.jsx`. Corresponde a D1 de Steel CRM (mismo template
       compartido entre los dos repos).
 - [x] **Backup manual (exportar/importar)** — implementado 2026-07-31.
       Botón "⬇️ Backup" (visible a todos) descarga un .json con todas las
@@ -698,7 +698,7 @@ probadas en Fase 3 (nada de código nuevo sin probar en esta parte).
   a la nube"), admin-only, con log en vivo y resumen final. **Marcado
   explícitamente como parche de una sola vez** — se puede borrar entero
   una vez que Gino confirme que migró bien (mismo criterio que las
-  herramientas de limpieza de `Importar.jsx` en steelCRM).
+  herramientas de limpieza de `Importar.jsx` en Steel CRM).
 - **No se pudo probar en navegador de mi lado** — desde que se sacó el
   login local, correr esto requiere sesión real y los datos reales de
   Gino, ninguna de las dos cosas la tengo yo. Validado por build limpio +
@@ -882,7 +882,7 @@ Con esto, **Fase 5 queda completa en las 9 entidades de Steel Measurement**.
 
 Gino quiere compartir acceso con un compañero (Tiao) desde su propia PC —
 ya tiene su email para crear la cuenta (mismo backend/tenant compartido
-con steelCRM, confirmado con `c9` — un solo login sirve para los dos
+con Steel CRM, confirmado con `c9` — un solo login sirve para los dos
 sistemas, sin nada extra de perfil/rol del lado de Steel Measurement).
 Antes de escribirle el instructivo, probé el launcher real de punta a
 punta (no solo leí el código) y encontré 2 bugs reales que le iban a
@@ -947,7 +947,7 @@ pueda tener la app en su PC — se le señaló que eso no acerca el objetivo rea
   lado de Vercel. Si en el futuro hace falta una capa extra (contraseña a
   nivel Vercel antes de llegar al login), es una función paga (plan Pro),
   evaluar si vale la pena cuando haya clientes reales.
-- steelCRM se despliega en paralelo del mismo modo, por la otra sesión de
+- Steel CRM se despliega en paralelo del mismo modo, por la otra sesión de
   coordinación — mismo hosting (Vercel), mismo criterio.
 - **Pendiente**: dominio propio (hoy es el gratuito `.vercel.app`) — a
   definir cuando haga falta. Redeploy no es automático todavía (no hay
@@ -957,9 +957,9 @@ pueda tener la app en su PC — se le señaló que eso no acerca el objetivo rea
 
 ## §9.41 — Comentarios internos en Cómputo/Anidado/Presupuesto (2026-08-23)
 
-Pedido de Gino, mismo patrón que steelCRM (`{id, autor, texto, fecha, hora}`)
+Pedido de Gino, mismo patrón que Steel CRM (`{id, autor, texto, fecha, hora}`)
 pero con una mejora de UX consultada y decidida en conjunto: **guardado
-directo al comentar**, no el flujo de dos pasos de steelCRM (comentar +
+directo al comentar**, no el flujo de dos pasos de Steel CRM (comentar +
 esperar al Guardar general) que ya había confundido a Gino una vez.
 
 - 3 tablas nuevas en steel-backend (`comentarios_computo`,
@@ -992,12 +992,12 @@ esperar al Guardar general) que ya había confundido a Gino una vez.
 ## §9.42 — PWA instalable + logo real en la pestaña (2026-08-23)
 
 Pedido de Gino: acceso directo al escritorio al primer uso ("hacelo para
-los dos" — steelCRM lo replica la otra sesión) + logo faltante en la
-pestaña del navegador (steelCRM sí tenía uno, Measurement no).
+los dos" — Steel CRM lo replica la otra sesión) + logo faltante en la
+pestaña del navegador (Steel CRM sí tenía uno, Measurement no).
 
 - Al revisar, Measurement no tenía **nada** de esto: `public/` solo tenía
   `index.html`, sin favicon, sin manifest, sin ningún ícono. Se detectó
-  además que el "logo" de steelCRM no es un logo real — son los
+  además que el "logo" de Steel CRM no es un logo real — son los
   `logo192.png`/`logo512.png` del boilerplate de Create React App sin
   personalizar (el átomo de React), con `manifest.json` todavía diciendo
   `"name": "Create React App Sample"`. Avisado a la otra sesión para que
@@ -1032,9 +1032,9 @@ pestaña del navegador (steelCRM sí tenía uno, Measurement no).
 
 ## §9.43 — Sidebar responsiva (2026-08-23)
 
-Mismo pedido que steelCRM (relayado por Gino a las dos sesiones). Antes
+Mismo pedido que Steel CRM (relayado por Gino a las dos sesiones). Antes
 solo tenía colapso manual (botón ◀/▶). Replicado 1:1 el patrón que ya
-comiteó y verificó la otra sesión en steelCRM (`c81b5ac`): arranca
+comiteó y verificó la otra sesión en Steel CRM (`c81b5ac`): arranca
 colapsada si el viewport es menor a 768px, y se reajusta sola al
 redimensionar la ventana (listener de `resize`) — el usuario sigue
 pudiendo expandirla a mano. `SW` (ancho del sidebar) ya dependía de
@@ -1045,7 +1045,7 @@ nada más. Build limpio, desplegado a producción.
 
 Gino reportó, probando en `steel-measurement.vercel.app` (origen sin nada
 en localStorage): no ve NADA de sus datos. La otra sesión encontró y
-corrigió el mismo síntoma en steelCRM (efectos de Fase 5 con
+corrigió el mismo síntoma en Steel CRM (efectos de Fase 5 con
 `useEffect(..., [])` disparando al montar App.js, antes de que
 `usuarioActivo` saliera de `null` — sin sesión, RLS bloqueaba todo) y
 avisó para revisar acá.
@@ -1057,7 +1057,7 @@ avisó para revisar acá.
   DESPUÉS de que `onLogin(local)` se dispara, y eso solo pasa tras
   `await supabase.auth.signInWithPassword(...)` exitoso (mismo `Login`
   llega a consultar `profiles` con RLS antes de eso). El bug específico de
-  steelCRM (montar antes de loguear) no debería reproducirse acá.
+  Steel CRM (montar antes de loguear) no debería reproducirse acá.
 - **Igual se blindó** (`esperarSesion()`, nuevo helper en `storage.js`):
   cada uno de los 8 hooks de Fase 5 ahora espera
   `supabase.auth.getSession()` antes de consultar — cierra un caso
@@ -1080,7 +1080,7 @@ avisó para revisar acá.
   `src/index.js`): la otra sesión encontró que el manifest solo no
   alcanza para que Chrome dispare el aviso de instalación automático —
   hace falta un service worker con fetch handler registrado. Mismo
-  patrón que aplicaron en steelCRM: sin caché, cada pedido pasa directo a
+  patrón que aplicaron en Steel CRM: sin caché, cada pedido pasa directo a
   la red (`event.respondWith(fetch(event.request))`), cero riesgo de
   servir una versión vieja. Verificado en producción: se registra
   (`serviceWorker.getRegistrations()` confirma el script activo), sin
@@ -1089,7 +1089,7 @@ avisó para revisar acá.
 
 ## §9.45 — Íconos PNG reales para el criterio de instalabilidad (2026-08-23)
 
-La otra sesión encontró, probando en vivo en steelCRM, que el manifest
+La otra sesión encontró, probando en vivo en Steel CRM, que el manifest
 con un solo ícono SVG no le alcanzaba a Chrome para disparar el aviso
 automático de instalar (`beforeinstallprompt`) — hace falta al menos un
 PNG real en 192x192 y 512x512, el SVG solo no cumple el criterio aunque
@@ -1155,7 +1155,7 @@ haber andado bien acá, más allá de cualquier fix de sesión.
   Gino: recargar la página después de migrar, antes de editar cualquier
   cómputo/anidado viejo. Bajo impacto (solo afecta a los ~6-10 registros
   con id legado, una sola vez hasta el próximo reload) — no se abordó el
-  patrón completo de reconciliación de `dbId` que sí tiene steelCRM,
+  patrón completo de reconciliación de `dbId` que sí tiene Steel CRM,
   quedaría para una pasada futura si hace falta.
 - **Sin resolver todavía**: "Tarifario: error" en el resumen de la
   migración, sin texto de error específico visible en la captura que
@@ -1252,7 +1252,7 @@ Cuarta y última vuelta del fix de migración: quedaba 1 solo error,
 
 ## §9.50 — Borrado de comentarios (2026-08-24)
 
-Pedido de Gino: paridad con steelCRM, que ya permite borrar un
+Pedido de Gino: paridad con Steel CRM, que ya permite borrar un
 comentario (autor propio, o admin/supervisor sobre cualquiera), con
 confirmación. `ComentariosPanel.jsx` solo tenía "agregar".
 
