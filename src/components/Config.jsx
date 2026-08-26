@@ -468,7 +468,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
               <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
                 <div style={{ gridColumn:"span 2" }}>
                   <label style={LBL}>Nombre de la empresa</label>
-                  <input style={INP} value={empresa} placeholder="Ej: Montajes Núñez S.A." disabled={soloLectura} onChange={e => guardarEmpresa(e.target.value)} />
+                  <input style={INP} value={empresa} placeholder="Ej: Acero del Sur S.A." disabled={soloLectura} onChange={e => guardarEmpresa(e.target.value)} />
                 </div>
                 <div style={{ gridColumn:"span 2" }}>
                   <label style={LBL}>Dirección</label>

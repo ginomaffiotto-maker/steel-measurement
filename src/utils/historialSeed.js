@@ -1,4 +1,4 @@
-// Histórico real de fabricación de MMN (2017-2024), 239 registros — extraído de
+// Histórico real de fabricación (2017-2024), 239 registros — extraído de
 // "Datos de fabricación.xlsx" (32 categorías) el 2026-07-31. Sirve como seed por
 // defecto de Historial: si el usuario ya tiene datos guardados en localStorage,
 // nunca se pisan (mismo patrón que la Biblioteca de materiales).
@@ -2622,7 +2622,7 @@ export const HISTORIAL_SEED = [
     "horas_mon_real": 0,
     "negociacion_pct": 1,
     "dias_obra": 18.53,
-    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno de MMN con conexiones para abulonar en obra. Equipo de 3 personas, el cliente suministra equipos [Desp: 18.0%]",
+    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno con conexiones para abulonar en obra. Equipo de 3 personas, el cliente suministra equipos [Desp: 18.0%]",
     "origen": "importado_excel",
     "presupuesto_id": null,
     "created_at": "2026-07-31T21:50:37.772817Z",
@@ -2727,7 +2727,7 @@ export const HISTORIAL_SEED = [
     "horas_mon_real": 0,
     "negociacion_pct": 3,
     "dias_obra": 21.26,
-    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno de MMN con conexiones para abulonar en obra. Equipo de 4 personas, el cliente suministra equipos. Ampliación [Desp: 33.0%]",
+    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno con conexiones para abulonar en obra. Equipo de 4 personas, el cliente suministra equipos. Ampliación [Desp: 33.0%]",
     "origen": "importado_excel",
     "presupuesto_id": null,
     "created_at": "2026-07-31T21:50:37.772817Z",
@@ -4652,7 +4652,7 @@ export const HISTORIAL_SEED = [
     "horas_mon_real": 282.5,
     "negociacion_pct": 1,
     "dias_obra": 29.74,
-    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno de MMN con conexiones para abulonar en obra. Equipo de 3 personas, el cliente suministra equipos",
+    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno con conexiones para abulonar en obra. Equipo de 3 personas, el cliente suministra equipos",
     "origen": "importado_excel",
     "presupuesto_id": null,
     "created_at": "2026-07-31T21:50:37.784754Z",
@@ -4862,7 +4862,7 @@ export const HISTORIAL_SEED = [
     "horas_mon_real": 233,
     "negociacion_pct": 3,
     "dias_obra": 24.53,
-    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno de MMN con conexiones para abulonar en obra. Equipo de 4 personas, el cliente suministra equipos. Ampliación",
+    "notas": "Tinglado para sala de Bombas en Nva Palmira. Diseño interno con conexiones para abulonar en obra. Equipo de 4 personas, el cliente suministra equipos. Ampliación",
     "origen": "importado_excel",
     "presupuesto_id": null,
     "created_at": "2026-07-31T21:50:37.784754Z",

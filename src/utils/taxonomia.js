@@ -1,6 +1,6 @@
 import { INP } from "../styles/colors";
 
-// Taxonomía compartida MMN — Familia (nivel 1) → Categoría (nivel 2).
+// Taxonomía compartida — Familia (nivel 1) → Categoría (nivel 2).
 //
 // Fuente canónica: Predictor Eq v25 (`DEFAULT_FAMILIES`). Ver
 // TAXONOMIA-COMPARTIDA.md en la raíz del proyecto para el acuerdo
