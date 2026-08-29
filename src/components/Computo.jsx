@@ -31,6 +31,7 @@ const TD_R  = { ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const n2    = v => (Math.round(v * 100)  / 100).toFixed(2);
 const n3    = v => (Math.round(v * 1000) / 1000).toFixed(3);
 const normStr = s => String(s||"").toLowerCase()
+  .normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"")
   .replace(/×/g,"x").replace(/²/g,"2").replace(/½/g,"1/2")
   .replace(/¼/g,"1/4").replace(/¾/g,"3/4").replace(/\s+/g," ").trim();
 
@@ -1212,7 +1213,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
           <span style={{ fontSize:20 }}>📐</span>
           <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:C.text }}>Cómputo de Materiales</h2>
-          <span style={BDG(C.info,true)}>MÓDULO 2</span>
           <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
             <button onClick={()=>setCreando(v=>!v)}
               style={{ ...BTN("primary"), padding:"6px 18px", fontSize:12 }}>+ Nuevo cómputo</button>

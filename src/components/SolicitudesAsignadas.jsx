@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { C, TH, TD, CARD, BTN, LBL, BDG } from "../styles/colors";
+import { C, TH, TD, CARD, BTN, BDG } from "../styles/colors";
 import { supabase } from "../utils/supabaseClient";
 
 // Lee directo de la tabla `solicitudes` de steelCRM — mismo backend
