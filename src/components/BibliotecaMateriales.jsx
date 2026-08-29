@@ -6,6 +6,10 @@ import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const hoy = () => new Date().toISOString().split("T")[0];
+// Saca tildes para que buscar "ang" encuentre "Ángulo" (mismo criterio que
+// normStr/norm en Computo.jsx y Anidado.jsx).
+const norm = s => String(s||"").toLowerCase()
+  .normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"");
 
 // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
 // puede romper el guardado local. Compartido por las 4 secciones de
@@ -1372,7 +1376,7 @@ function SeccionPerfiles() {
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
   const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("perfil", mat); };
 
-  const enFiltro = p => (cat === "Todas" || p.cat === cat) && p.nombre.toLowerCase().includes(busq.toLowerCase());
+  const enFiltro = p => (cat === "Todas" || p.cat === cat) && norm(p.nombre).includes(norm(busq));
   const lista = items.filter(enFiltro);
 
   const aplicarLote = (f) => {
@@ -1480,7 +1484,7 @@ function SeccionPlanchuelas() {
   const actualizar  = mat => { const t = touch(mat); setItems(prev => prev.map(p => p.id === mat.id ? t : p)); dualWriteMaterial("planchuela", t); };
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
   const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("planchuela", mat); };
-  const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
+  const lista = items.filter(p => norm(p.nombre).includes(norm(busq)));
 
   const aplicarLote = (f) => {
     const v = parseFloat(f.precio);
@@ -1571,7 +1575,7 @@ function SeccionPlanchas() {
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
   const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("plancha", mat); };
 
-  const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
+  const lista = items.filter(p => norm(p.nombre).includes(norm(busq)));
 
   const aplicarLote = (f) => {
     const v = parseFloat(f.precio);
@@ -1667,7 +1671,7 @@ function SeccionRejillas() {
   const eliminarMat = id  => setItems(prev => prev.filter(p => p.id !== id));
   const agregarMat  = mat => { setItems(prev => [...prev, mat]); dualWriteMaterial("rejilla", mat); };
 
-  const lista = items.filter(p => p.nombre.toLowerCase().includes(busq.toLowerCase()));
+  const lista = items.filter(p => norm(p.nombre).includes(norm(busq)));
 
   const aplicarLote = (f) => {
     const v = parseFloat(f.precio);
@@ -1755,7 +1759,7 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
   const upd = (id, field, val) => onChange(items.map(it => it.id === id ? { ...it, [field]: val } : it));
   const del = (id) => onChange(items.filter(it => it.id !== id));
   const add = () => onChange([...items, { id: uid(), nombre: "", [campoValor]: 0, unidad: unidad || "", proveedor:"", fecha_precio:"", obs:"" }]);
-  const lista = items.filter(it => (it.nombre||"").toLowerCase().includes(busq.toLowerCase()));
+  const lista = items.filter(it => norm(it.nombre).includes(norm(busq)));
 
   return (
     <div>
@@ -1817,7 +1821,7 @@ function CatalogoInteres({ items, soloLectura, onChange }) {
   const upd = (id, field, val) => onChange(items.map(it => it.id === id ? { ...it, [field]: val } : it));
   const del = (id) => onChange(items.filter(it => it.id !== id));
   const add = () => onChange([...items, { id: uid(), nombre: "", moneda: "USD", dias: 30, pct: 0 }]);
-  const lista = items.filter(it => (it.nombre||"").toLowerCase().includes(busq.toLowerCase()));
+  const lista = items.filter(it => norm(it.nombre).includes(norm(busq)));
 
   return (
     <div>
@@ -2025,12 +2029,12 @@ const TARIFARIO_BUSQUEDA = [
 ];
 function useBusquedaGlobalInsumos(query) {
   return useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = norm(query.trim());
     if (!q) return [];
     const out = [];
     CATALOGOS_BUSQUEDA.forEach(c => {
       loadLS(c.key, []).forEach(it => {
-        if (it.nombre && it.nombre.toLowerCase().includes(q)) {
+        if (it.nombre && norm(it.nombre).includes(q)) {
           out.push({ id:c.key+"_"+it.id, nombre:it.nombre, rubro:c.rubro, precio:+it[c.precioField]||0, unidad:c.unidad, sec:c.sec, sub:c.sub });
         }
       });
@@ -2038,7 +2042,7 @@ function useBusquedaGlobalInsumos(query) {
     const tarifario = loadTarifario();
     TARIFARIO_BUSQUEDA.forEach(c => {
       (tarifario[c.campo]||[]).forEach(it => {
-        if (it.nombre && it.nombre.toLowerCase().includes(q)) {
+        if (it.nombre && norm(it.nombre).includes(q)) {
           out.push({ id:c.campo+"_"+it.id, nombre:it.nombre, rubro:c.rubro, precio:+it[c.precioField]||0, unidad:c.unidad, sec:c.sec, sub:null });
         }
       });
