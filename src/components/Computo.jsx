@@ -10,6 +10,7 @@ import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 
 const COMPUTO_FILT_DEFAULTS = { nombre: "", cliente: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function computoCampos(usuarios) {
@@ -251,9 +252,9 @@ function calcResumen(piezas) {
 // ─── BIBLIOTECA ───────────────────────────────────────────────────
 function useBiblioteca() {
   return useMemo(() => {
-    const perfiles    = loadLS("smeas_perfiles",    []);
-    const planchuelas = loadLS("smeas_planchuelas", []);
-    const planchas    = loadLS("smeas_planchas",    []);
+    const perfiles    = migrar(mergeSeed(loadLS("smeas_perfiles",    null), PERFILES_DATA,    IDS_UNIFICADOS_GM));
+    const planchuelas = migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA));
+    const planchas    = migrar(mergeSeed(loadLS("smeas_planchas",    null), PLANCHAS_DATA));
     const lineales = [...perfiles, ...planchuelas].map(p => ({
       id:p.id, nombre:p.nombre, cat:p.cat, kg_m:p.kg_m, sup_m2m:p.sup||0,
       largo_mm:(p.largo||6)*1000,

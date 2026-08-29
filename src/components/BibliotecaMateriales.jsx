@@ -50,7 +50,7 @@ const TD_R = { ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 // Así, cuando se amplía una biblioteca (ej: Planilla GM V26), a los usuarios que
 // ya tienen datos en localStorage les aparecen los materiales nuevos automáticamente,
 // sin perder precios ni ediciones de los que ya tenían.
-function mergeSeed(existing, seed, deprecatedIds) {
+export function mergeSeed(existing, seed, deprecatedIds) {
   if (!existing) return seed.map(p => ({ ...p, precio_usd_kg: p.precio_usd_kg || 0, historial_precios: [] }));
   let base = existing;
   if (deprecatedIds && deprecatedIds.length) {
@@ -100,7 +100,7 @@ function BtnSyncPrecios({ items, seed, onSync }) {
 // Ids viejos unificados/reemplazados por el set completo de Planilla GM V26
 // (Ángulo, T, Tubo cuadrado, Tubo rectangular, Caño) — se filtran del localStorage
 // existente para no dejar materiales duplicados (ej: Ángulo aparecía 2 veces).
-const IDS_UNIFICADOS_GM = [
+export const IDS_UNIFICADOS_GM = [
   "ANG1x18","ANG114x18","ANG112x316","ANG112x14","ANG2x14","ANG212x316","ANG212x14",
   "ANG212x516","ANG3x14","ANG3x516","ANG312x14","ANG312x38","ANG4x516","ANG4x38","ANG5x38","ANG6x12",
   "T2x14","T3x14","T4x516",
@@ -114,7 +114,7 @@ const IDS_UNIFICADOS_GM = [
 ];
 
 // ─── MIGRACIÓN: agrega historial_precios a datos viejos ──────────
-const migrar = items => items.map(p => ({
+export const migrar = items => items.map(p => ({
   ...p,
   historial_precios: p.historial_precios ?? (
     p.precio_usd_kg > 0
@@ -124,7 +124,7 @@ const migrar = items => items.map(p => ({
 }));
 
 // ─── PERFILES LINEALES ───────────────────────────────────────────
-const PERFILES_DATA = [
+export const PERFILES_DATA = [
   // HEB (sup = m²/m pintura, fuente: Planilla GM V26)
   { id:"HEB100", nombre:"HEB 100", cat:"HEB", kg_m:20.4,  largo:12, sup:0.40, precio_usd_kg:2.45 },
   { id:"HEB120", nombre:"HEB 120", cat:"HEB", kg_m:26.7,  largo:12, sup:0.48, precio_usd_kg:2.45 },
@@ -700,7 +700,7 @@ function mkPL(id, ancho, esp, largo = 6) {
   const precio_usd_kg = ancho <= 80 ? 1.17 : 1.22;
   return { id, nombre:`Planchuela ${ancho}×${esp} mm`, cat:"Planchuelas", kg_m, largo, sup, precio_usd_kg, historial_precios:[] };
 }
-const PLANCHUELAS_DATA = [
+export const PLANCHUELAS_DATA = [
   mkPL("PL20x3",20,3),    mkPL("PL20x4",20,4),
   mkPL("PL25x3",25,3),    mkPL("PL25x4",25,4),    mkPL("PL25x5",25,5),
   mkPL("PL30x3",30,3),    mkPL("PL30x4",30,4),    mkPL("PL30x5",30,5),    mkPL("PL30x6",30,6),
@@ -742,7 +742,7 @@ function mkPA(nombre, esp_mm, L, A, precio_usd_kg = 0) {
   const kg_ud = Math.round(kg_m2 * area * 10) / 10;
   return { id:`PA_${nombre.replace(/[^a-z0-9]/gi,"_")}`, nombre, espesor:esp_mm, kg_m2, largo_mm:L, ancho_mm:A, area_m2:area, kg_ud, precio_usd_kg, historial_precios:[] };
 }
-const PLANCHAS_DATA = [
+export const PLANCHAS_DATA = [
   mkPA("Plancha 2 mm",            2,     2440, 1220),
   mkPA("Plancha 2,5 mm",          2.5,   2440, 1220),
   mkPA("Plancha 3 mm",            3,     2440, 1220),

@@ -10,6 +10,7 @@ import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 
 const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function anidadoCampos(usuarios) {
@@ -142,13 +143,13 @@ function Combobox({ opciones, value, onChange, placeholder = "Buscar…" }) {
 // ─── Bibliotecas ──────────────────────────────────────────────────
 function useBibliotecaLineales() {
   return useMemo(() => {
-    const perf  = loadLS("smeas_perfiles",    []);
-    const planch = loadLS("smeas_planchuelas", []);
+    const perf  = migrar(mergeSeed(loadLS("smeas_perfiles",    null), PERFILES_DATA,    IDS_UNIFICADOS_GM));
+    const planch = migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA));
     return [...perf, ...planch].map(p => ({ id:p.id, nombre:p.nombre, cat:p.cat, kg_m:p.kg_m, sup_m2m:p.sup||0, largo_mm:(p.largo||6)*1000, precio_usd_kg:parseFloat(p.precio_usd_kg)||0 }));
   }, []);
 }
 function useBibliotecaPlanchas() {
-  return useMemo(() => loadLS("smeas_planchas",[]).map(p => ({
+  return useMemo(() => migrar(mergeSeed(loadLS("smeas_planchas", null), PLANCHAS_DATA)).map(p => ({
     id:p.id, nombre:p.nombre, espesor:p.espesor, kg_m2:p.kg_m2,
     sheet_w:p.largo_mm, sheet_h:p.ancho_mm, kg_ud:p.kg_ud,
     precio_usd_kg:parseFloat(p.precio_usd_kg)||0,
