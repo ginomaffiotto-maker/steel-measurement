@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, exportPresupuestoParaSteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -1421,6 +1421,16 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
   // pantalla para los ítems, que es lo que se edita más seguido.
   const [datosAbiertos, setDatosAbiertos] = useState(false);
+  const [vinculoCRM, setVinculoCRM] = useState(null); // {crmId, nro} | null
+  const [enviandoCRM, setEnviandoCRM] = useState(false);
+
+  // Chequea si este presupuesto ya tiene un presupuesto real vinculado en
+  // Steel CRM (tabla presupuesto_calculo_link) — evita reenviarlo dos veces.
+  useEffect(() => {
+    let vivo = true;
+    if (pres?.id) buscarVinculoCRM(pres.id).then(v => { if (vivo) setVinculoCRM(v); });
+    return () => { vivo = false; };
+  }, [pres?.id]);
 
   const cambiarEstado = (k) => {
     if (k === "aprobado" && pres.estado !== "aprobado") {
@@ -1432,11 +1442,20 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
 
   // Backfill: presupuestos creados antes de este campo (o los históricos
   // importados) todavía no tienen codigo_calculo — se les asigna recién acá,
-  // en el momento en que hace falta exportarlos a steelCRM.
-  const exportarSteelCRM = () => {
+  // en el momento en que hace falta enviarlos a Steel CRM.
+  const enviarSteelCRM = async () => {
+    if (vinculoCRM || enviandoCRM) return;
     const codigo = pres.codigo_calculo || newCodigoCalculo();
     if (!pres.codigo_calculo) set("codigo_calculo", codigo);
-    exportPresupuestoParaSteelCRM({ ...pres, codigo_calculo: codigo }, c);
+    setEnviandoCRM(true);
+    try {
+      const v = await enviarPresupuestoASteelCRM({ ...pres, codigo_calculo: codigo }, c, usuario);
+      setVinculoCRM(v);
+    } catch (e) {
+      alert("No se pudo enviar a Steel CRM: " + (e.message || e));
+    } finally {
+      setEnviandoCRM(false);
+    }
   };
 
   return (
@@ -1469,7 +1488,14 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         </div>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <button style={BTN("ghost")} onClick={() => generarPDFPresupuesto(pres)} title="Generar PDF del presupuesto">🖨️ PDF</button>
-          <button style={BTN("ghost")} onClick={exportarSteelCRM} title="Descarga un .json con el resumen de este presupuesto (cliente, obra, kg, USD) para importar en steelCRM — no incluye el desglose interno de rubros">⬇️ steelCRM</button>
+          {vinculoCRM ? (
+            <span style={{ ...BDG(C.ok, true), fontSize: 11 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
+          ) : (
+            <button style={BTN("ghost")} onClick={enviarSteelCRM} disabled={enviandoCRM}
+              title="Crea el presupuesto en Steel CRM y lo vincula con este cálculo — directo, sin archivos de por medio">
+              {enviandoCRM ? "Enviando…" : "☁️ Enviar a Steel CRM"}
+            </button>
+          )}
           {Object.entries(ESTADO_CFG).map(([k,v]) => (
             <button key={k} onClick={() => cambiarEstado(k)}
               style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,

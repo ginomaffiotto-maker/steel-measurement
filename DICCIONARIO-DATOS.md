@@ -264,9 +264,9 @@ Misma forma que los comentarios de Steel CRM (`computo_id`/`anidado_id`/`presupu
 
 ---
 
-## 5. `presupuesto_calculo_link` — el vínculo real, sin usar
+## 5. `presupuesto_calculo_link` — el vínculo real, activo desde 2026-08-29
 
-`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Estado y motivo por el que no está wireada: `ENTIDADES-COMPARTIDAS.md` §6.
+`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Se escribe desde "☁️ Enviar a Steel CRM" en Steel Measurement, se lee desde `BudgetModal` en Steel CRM. Detalle: `ENTIDADES-COMPARTIDAS.md` §6.
 
 ---
 

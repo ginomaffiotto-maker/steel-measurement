@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { familiaDe } from "./taxonomia";
 import { supabase } from "./supabaseClient";
 
 // "" en una columna numeric/uuid/date rompe el insert — Postgres no la
@@ -1077,49 +1076,66 @@ export const restoreBackup = (payload) => {
   Object.entries(payload.data).forEach(([k, v]) => localStorage.setItem(k, v));
 };
 
-// ─── EXPORT PARA STEELCRM ────────────────────────────────────────
-// Lado steel-measurement del transporte manual entre los dos proyectos —
-// ambos son 100% client-only (localStorage, sin backend), así que hasta que
-// exista uno compartido, la conexión es un archivo .json descargado acá e
-// importado allá (mismo mecanismo que Backup/Restaurar, mismo espíritu:
-// nunca automático, el usuario elige cuándo exportar cada presupuesto).
-//
-// Formato y campos documentados en TAXONOMIA-COMPARTIDA.md §7 — si se
-// toca esta forma, actualizar ese archivo para que la sesión de steelCRM
-// sepa qué esperar del lado del importador (todavía no construido).
+// ─── ENVÍO DIRECTO A STEEL CRM ───────────────────────────────────
+// Reemplaza el mecanismo viejo de export/import .json (2026-08-29) — los
+// dos sistemas comparten el mismo backend de Supabase desde el 23/8, así
+// que ya no hace falta el archivo intermedio. Usa la tabla
+// `presupuesto_calculo_link` (creada el 22/8, sin wirear hasta ahora a
+// propósito — ver ENTIDADES-COMPARTIDAS.md §6) para un vínculo real,
+// verificable, en vez del `ids_calc` de texto libre.
 //
 // Sólo lleva el RESUMEN comercial (cliente, obra, kg, USD total, USD/kg) —
 // nunca el desglose interno de los 9 rubros de costo, mismo criterio de
-// privacidad que ya usa el PDF del presupuesto (buildPresupuestoHTML).
-export const exportPresupuestoParaSteelCRM = (pres, calc) => {
-  const payload = {
-    origen: "steel-measurement",
-    version: 1,
-    exported_at: new Date().toISOString(),
-    presupuesto: {
-      codigo_calculo: pres.codigo_calculo || null,
-      nro_interno_sm: pres.nro,
-      estado_sm: pres.estado,
-      cliente: pres.cliente || "",
-      contacto: pres.contacto || "",
-      obra: pres.obra || "",
-      tipo_trabajo: pres.tipo_trabajo || "",
-      categoria: pres.categoria || "",
-      familia: pres.categoria ? familiaDe(pres.categoria) : "",
-      fecha: pres.fecha,
-      detalle: pres.detalle || "",
-      kg_total: calc.total_kg,
-      usd_total: calc.gran_total,
-      usd_kg: calc.usd_kg,
-    },
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `steelmeasurement-export-${pres.codigo_calculo || pres.nro || "presupuesto"}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+// privacidad que ya usaba el export viejo y que sigue usando el PDF del
+// presupuesto (buildPresupuestoHTML).
+export const buscarVinculoCRM = async (presupuestoSmId) => {
+  if (!supabase || !presupuestoSmId) return null;
+  const { data, error } = await supabase
+    .from("presupuesto_calculo_link")
+    .select("presupuesto_crm_id, presupuestos_crm(nro)")
+    .eq("presupuesto_sm_id", presupuestoSmId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { crmId: data.presupuesto_crm_id, nro: data.presupuestos_crm?.nro || null };
+};
+
+// El N° de presupuesto de Steel CRM es único por tenant y sigue un formato
+// configurable (Config > Sistema, sólo en el localStorage de Steel CRM) que
+// acá no se puede replicar — se usa un N° provisorio "SM-<código de
+// cálculo>" y queda para quien reciba el presupuesto en Steel CRM corregirlo
+// con "Corregir N° de Presupuesto" (Importar > Mantenimiento, ya existe).
+export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const existente = await buscarVinculoCRM(pres.id);
+  if (existente) return existente;
+
+  const nombreParaClientes = (pres.contacto || pres.cliente || "").trim();
+  const empresaParaClientes = pres.contacto ? pres.cliente : null;
+  const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
+
+  const rowCrm = saneado({
+    nro: `SM-${pres.codigo_calculo}`,
+    cliente_id,
+    cliente_nombre: pres.contacto || pres.cliente || "",
+    empresa: pres.contacto ? pres.cliente : "",
+    fecha: pres.fecha || null,
+    tipo: pres.categoria || "",
+    categoria: pres.categoria || "",
+    obra: pres.obra || "",
+    kg_cotizados: calc.total_kg,
+    precio_usd_kg: calc.usd_kg,
+    monto_usd: calc.gran_total,
+    vendedor_id: usuario?.profileId || null,
+  });
+  const { data: crmRow, error: errCrm } = await supabase.from("presupuestos_crm").insert(rowCrm).select().single();
+  if (errCrm) throw errCrm;
+
+  const { error: errLink } = await supabase
+    .from("presupuesto_calculo_link")
+    .insert({ presupuesto_crm_id: crmRow.id, presupuesto_sm_id: pres.id });
+  if (errLink) throw errLink;
+
+  return { crmId: crmRow.id, nro: crmRow.nro };
 };
 
 export const iUsuarios = loadLS("smeas_usuarios", [

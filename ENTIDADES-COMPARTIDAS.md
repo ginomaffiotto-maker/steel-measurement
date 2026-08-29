@@ -113,7 +113,7 @@ flowchart TB
         COMPSM[comentarios_computo /<br/>comentarios_anidado /<br/>comentarios_presupuesto_sm]
     end
 
-    LINK{{"presupuesto_calculo_link<br/>(tabla existe, SIN USO en código — §6)"}}
+    LINK{{"presupuesto_calculo_link<br/>(activo desde 2026-08-29 — §6)"}}
 
     PROF --> TEN
     CLI -.tenant_id.-> TEN
@@ -154,16 +154,15 @@ flowchart TB
     COMPU --> COMPSM
     ANID --> COMPSM
 
-    PCRM -.->|"ids_calc text[]<br/>(código libre, SIN FK — activo hoy)"| PSM
-    PCRM -.->|"nunca escrito por la UI"| LINK
-    LINK -.-> PSM
+    PCRM -.->|"ids_calc text[]<br/>(código libre, SIN FK — manual/histórico)"| PSM
+    PCRM -->|"presupuesto_crm_id"| LINK
+    LINK -->|"presupuesto_sm_id"| PSM
 ```
 
-**Cómo leer las líneas punteadas**: son vínculos débiles o no wireados
-(`ids_calc` es texto libre sin integridad referencial; `presupuesto_calculo_link`
-es una tabla real pero ningún código la lee ni la escribe hoy — ver §6).
-Las líneas sólidas son foreign keys reales con integridad referencial en
-Postgres.
+**Cómo leer las líneas punteadas**: son vínculos débiles, sin integridad
+referencial (`ids_calc` es texto libre) — ver §6. El vínculo vía
+`presupuesto_calculo_link` sí es sólido (FK real en los dos sentidos), como
+el resto del diagrama.
 
 ---
 
@@ -216,30 +215,51 @@ Postgres.
 
 ## 6. El vínculo cruzado Steel CRM ↔ Steel Measurement
 
-Hay **tres mecanismos** en el esquema — dos activos, uno construido y sin usar:
+Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja:
 
-1. **`presupuestos_crm.ids_calc` (`text[]`) — el que se usa hoy.**
-   Texto libre, sin foreign key. Se llena de dos formas: (a) a mano, campo
-   "ID Cálculo(s)" en `BudgetModal`; (b) al usar "Cargar desde Steel
-   Measurement" en `Importar.jsx`, que hace *append* del `codigo_calculo`
-   exportado. Es deliberadamente débil — el código de cálculo puede ser
-   histórico/manual sin ninguna fila real de `presupuestos_sm` detrás
-   (presupuestos de antes de que existiera Steel Measurement).
-
-2. **`presupuesto_calculo_link` — existe en el esquema, sin usar.**
+1. **`presupuesto_calculo_link` — activo desde 2026-08-29 (reemplaza al `.json` manual).**
    Tabla real (`presupuesto_crm_id`, `presupuesto_sm_id`, ambas FK con
    integridad referencial real) creada en la migración
-   `20260822120300_link_table.sql`, pensada para reemplazar el mecanismo de
-   arriba con un vínculo verdadero cuando Steel Measurement pase un cálculo
-   real al CRM. **Confirmado por grep en ambos repos: ningún componente la
-   lee ni la escribe todavía.** Decisión explícita de Gino (2026-08-24): no
-   wirearla hasta que exista ese flujo concreto — no es un bug, es
-   intencional.
+   `20260822120300_link_table.sql` el 22/8, dejada a propósito sin conectar
+   hasta que Steel Measurement pasara un cálculo real al CRM. Ese momento
+   llegó el 29/8: botón "☁️ Enviar a Steel CRM" en el detalle de Presupuesto
+   de Steel Measurement (`enviarPresupuestoASteelCRM`, `storage.js`) —
+   escribe directo a Supabase (sin archivo intermedio): crea la fila en
+   `presupuestos_crm` con el resumen comercial (cliente, obra, categoría,
+   kg, USD) e inserta la fila de vínculo. El botón queda deshabilitado
+   ("✅ Vinculado a Steel CRM …") una vez enviado — `buscarVinculoCRM`
+   chequea el vínculo existente antes de reenviar. Del lado de Steel CRM,
+   `BudgetModal` (`shared.jsx`) lee el vínculo en vivo y muestra el N° y
+   estado actual de `presupuestos_sm` (reemplaza al viejo `estadoSM` estático,
+   que era una foto fija tomada al importar).
+   **Límite conocido**: el `nro` de `presupuestos_crm` es único por tenant y
+   sigue un formato configurable que sólo vive en el localStorage de Steel
+   CRM (Config > Sistema) — Steel Measurement no lo puede replicar, así que
+   el presupuesto se crea con un N° provisorio `SM-<código de cálculo>`. Hay
+   que corregirlo a mano con "Corregir N° de Presupuesto" (Importar >
+   Mantenimiento, ya existía para otro caso) — decisión explícita de Gino
+   (2026-08-29), no un bug.
 
-**Si una sesión futura conecta esta tabla**, actualizar esta sección y la
-línea correspondiente del diagrama en §3.
+2. **`presupuestos_crm.ids_calc` (`text[]`) — sigue activo, para lo manual/histórico.**
+   Texto libre, sin foreign key. Se llena a mano en el campo "ID Cálculo(s)"
+   de `BudgetModal` — sigue siendo el mecanismo correcto para códigos de
+   cálculo históricos o manuales sin ninguna fila real de `presupuestos_sm`
+   detrás (presupuestos de antes de que existiera Steel Measurement, o de
+   antes del 24/8 que ya lo sincroniza). No se toca al usar "Enviar a Steel
+   CRM" — son dos mecanismos independientes, uno de texto libre y uno con
+   integridad referencial real.
 
-3. **Lectura directa de `solicitudes` desde Steel Measurement — nuevo, activo
+3. **El mecanismo `.json` (Punto E) — dado de baja el 2026-08-29.**
+   Hasta esa fecha, el único camino era exportar un `.json` desde Steel
+   Measurement e importarlo a mano en `Importar.jsx` ("Cargar desde Steel
+   Measurement"). Reemplazado por completo por el punto 1 — se sacaron
+   `exportPresupuestoParaSteelCRM` (Steel Measurement) y el modo de import
+   correspondiente (Steel CRM). El campo local `estadoSM` (Steel CRM) queda
+   sin escribirse para presupuestos nuevos, pero no se borró — presupuestos
+   importados antes de esta fecha lo siguen mostrando como respaldo si no
+   hay vínculo real todavía.
+
+4. **Lectura directa de `solicitudes` desde Steel Measurement — activo
    (2026-08-26).** Steel Measurement lee la tabla `solicitudes` (propiedad de
    Steel CRM) directo de Supabase, filtrada por `asignado_a = profileId` del
    usuario logueado — pantalla nueva "📥 Mis solicitudes asignadas"

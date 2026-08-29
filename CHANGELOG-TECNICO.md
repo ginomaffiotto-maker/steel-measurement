@@ -112,6 +112,16 @@ verdad. Este documento resume, no sustituye.
 
 ---
 
+## 2026-08-29 — Vínculo real Steel Measurement → Steel CRM, sin archivo intermedio
+
+- **`presupuesto_calculo_link` pasa de "tabla existe, sin usar" a activa** — el vínculo que se dejó a propósito sin conectar el 22/8 (ver §6 de `ENTIDADES-COMPARTIDAS.md`) se wireó: botón "☁️ Enviar a Steel CRM" en el detalle de Presupuesto de Steel Measurement crea la fila en `presupuestos_crm` y el vínculo directo por Supabase, sin `.json` de por medio.
+- **Mecanismo `.json` (Punto E) dado de baja**: se sacaron `exportPresupuestoParaSteelCRM` (Steel Measurement) y el modo "Cargar desde Steel Measurement" de `Importar.jsx` (Steel CRM).
+- **Límite conocido, aceptado**: el `nro` de Steel CRM creado así es provisorio (`SM-<código de cálculo>`) — el formato real vive solo en el localStorage de Steel CRM, hay que corregirlo a mano con "Corregir N° de Presupuesto".
+- `BudgetModal` (Steel CRM) ahora muestra el vínculo y el estado de Steel Measurement en vivo (leído de `presupuestos_sm` vía el link), reemplaza al `estadoSM` estático para presupuestos nuevos.
+- **Sin verificar en vivo todavía** — armado y verificado por build, sin login real disponible en esta sesión.
+
+---
+
 ## Mantenimiento de este documento
 
 Misma Regla 9 que los otros documentos compartidos, con una diferencia de
