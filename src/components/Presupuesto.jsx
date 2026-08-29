@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -17,6 +18,75 @@ import FiltrosBar from "./FiltrosBar";
 const n2  = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
 const n3  = v => (Math.round((+v || 0) * 1000) / 1000).toFixed(3);
 const hoy = () => new Date().toISOString().split("T")[0];
+// Saca tildes para que buscar "ang"/"heb" encuentre "Ángulo"/"HEB 160"
+// (mismo criterio que normStr/norm en Computo.jsx y Anidado.jsx).
+const norm = s => String(s||"").toLowerCase()
+  .normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"");
+
+// Biblioteca combinada (perfiles+planchuelas+planchas) para el autocompletar
+// de la fila de Hierros — mismo catálogo con seed por defecto que ya usa
+// Cómputo/Anidado, para que funcione aunque nunca se haya abierto "Insumos
+// y Precios" en este browser.
+function useBibliotecaHierros() {
+  return useMemo(() => {
+    const perfiles    = migrar(mergeSeed(loadLS("smeas_perfiles",    null), PERFILES_DATA,    IDS_UNIFICADOS_GM));
+    const planchuelas = migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA));
+    const planchas    = migrar(mergeSeed(loadLS("smeas_planchas",    null), PLANCHAS_DATA));
+    return [...perfiles, ...planchuelas, ...planchas].map(p => ({
+      id: p.id, nombre: p.nombre, cat: p.cat,
+      precio_usd_kg: parseFloat(p.precio_usd_kg || 0) || 0,
+    }));
+  }, []);
+}
+
+// Input de texto libre (siempre se puede tipear cualquier nombre) con
+// sugerencias filtradas de la biblioteca debajo — al elegir una, completa
+// nombre + USD/kg de una. No obliga a elegir de la lista, a diferencia del
+// Combobox de Cómputo/Anidado (acá "Plancha e=10, sin catálogo" sigue
+// siendo un nombre válido).
+function AutocompleteMaterial({ value, onChange, onSeleccionar, opciones, placeholder, style }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const q = norm((value||"").trim());
+  const tokens = q ? q.split(" ").filter(Boolean) : [];
+  const lista = tokens.length === 0 ? [] : opciones.filter(o => {
+    const hay = norm(o.nombre + " " + (o.cat||""));
+    return tokens.every(t => hay.includes(t));
+  }).slice(0, 30);
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <input value={value} placeholder={placeholder}
+        onChange={e=>{ onChange(e.target.value); setOpen(true); }}
+        onFocus={()=>setOpen(true)}
+        style={style}/>
+      {open && lista.length > 0 && (
+        <div style={{ position:"absolute", top:"calc(100% + 2px)", left:0, width:260, zIndex:9999,
+          background:C.card, border:`1px solid ${C.accent}55`, borderRadius:8,
+          boxShadow:"0 8px 24px #00000077", overflow:"hidden" }}>
+          <div style={{ maxHeight:220, overflowY:"auto" }}>
+            {lista.map(o => (
+              <div key={o.id} onMouseDown={()=>{ onSeleccionar(o); setOpen(false); }}
+                style={{ padding:"7px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, fontSize:12 }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.iron}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{ flex:1 }}>{o.nombre}</span>
+                {o.precio_usd_kg > 0
+                  ? <span style={{ fontSize:11, color:C.muted }}>${n2(o.precio_usd_kg)}/kg</span>
+                  : <span title="Sin precio cargado" style={{ fontSize:11, color:C.warn }}>⚠ sin precio</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Tooltips para términos técnicos en cabeceras de tabla (title nativo del navegador)
 const TH_TOOLTIPS = {
@@ -340,14 +410,17 @@ const QuickPick = ({ catalogo, onPick }) => {
 // ─── TAB: HIERROS ────────────────────────────────────────────────
 function TabHierros({ item, set, onAnidadoVinculado }) {
   const rows = item.hierros || [];
-  const upd = (id, field, val) => set("hierros", rows.map(r => {
+  const bibMateriales = useBibliotecaHierros();
+  const updPatch = (id, patch) => set("hierros", rows.map(r => {
     if (r.id !== id) return r;
-    const nr = { ...r, [field]: val };
+    const nr = { ...r, ...patch };
     nr.subtotal_kg  = (+nr.kg_pieza || 0) * (+nr.cantidad || 0);
     nr.subtotal_m2  = (+nr.area_pieza_m2 || 0) * (+nr.cantidad || 0);
     nr.subtotal_usd = nr.subtotal_kg * (+nr.usd_kg || 0);
     return nr;
   }));
+  const upd = (id, field, val) => updPatch(id, { [field]: val });
+  const elegirMaterial = (id, mat) => updPatch(id, { nombre: mat.nombre, usd_kg: mat.precio_usd_kg || 0 });
   const add = () => set("hierros", [...rows, { id:uid(), nombre:"", proveedor:"", fecha_precio:"", obs:"", cantidad:1, kg_pieza:0, area_pieza_m2:0, usd_kg:0, arena:false, pintura:false, galvanizado:false, subtotal_kg:0, subtotal_m2:0, subtotal_usd:0 }]);
   const del = (id) => set("hierros", rows.filter(r => r.id !== id));
 
@@ -450,7 +523,10 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
               <tr key={r.id} style={{ background: r.arena ? C.teal+"0a" : r.pintura ? C.pur+"0a" : r.galvanizado ? C.gold+"0a" : "transparent" }}>
                 <td style={TD}>
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <input value={r.nombre} placeholder="HEB 160, Plancha e=10..." onChange={e=>upd(r.id,"nombre",e.target.value)} style={{...INP_SM,width:190}}/>
+                    <AutocompleteMaterial value={r.nombre} opciones={bibMateriales}
+                      onChange={v=>upd(r.id,"nombre",v)}
+                      onSeleccionar={mat=>elegirMaterial(r.id,mat)}
+                      placeholder="HEB 160, Plancha e=10..." style={{...INP_SM,width:190}}/>
                     {r.nombre?.trim() && !r.usd_kg && <span title="Sin USD/kg cargado en esta fila" style={{fontSize:11,color:C.warn,flexShrink:0}}>⚠</span>}
                   </div>
                 </td>
