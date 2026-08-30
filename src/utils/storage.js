@@ -42,14 +42,14 @@ export const esUUID = (id) => !!id && UUID_RE.test(String(id));
 // en Fase 4) que no tienen columna en la tabla. Elegir explícitamente
 // evita que un campo nuevo local rompa el insert.
 const COLUMNAS_PRESUPUESTO_SM = [
-  "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "detalle",
+  "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
   "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor",
   "eliminado", "eliminado_por", "eliminado_fecha",
 ];
-const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro",
+const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
-const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra",
+const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
@@ -60,7 +60,7 @@ const COLUMNAS_ITEM_PRESUPUESTO = [
 // retroactivamente), es más seguro soltar la referencia que hacer
 // fallar todo el presupuesto por un vínculo que de todos modos ya no
 // apunta a nada real.
-const CAMPOS_REF_UUID = new Set(["cliente_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
+const CAMPOS_REF_UUID = new Set(["cliente_id", "obra_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
 const soloColumnas = (obj, columnas) => {
   const row = {};
   for (const k of columnas) {
@@ -254,6 +254,49 @@ export const useListaEmpresas = () => {
             .sort((a, b) => a.localeCompare(b, "es"));
           _cacheListaEmpresas = empresas;
           if (vivo) setLista(empresas);
+        })
+        .catch(() => {});
+    })();
+    return () => { vivo = false; };
+  }, []);
+  return lista;
+};
+
+// ─── OBRAS — capa de acceso al backend (2026-08-29) ────────────────
+// Tabla `obras`, compartida con steelCRM (ver ENTIDADES-COMPARTIDAS.md) —
+// hasta ahora Steel Measurement nunca la usaba: "obra" era texto libre
+// suelto en Anidado/Presupuesto y ni siquiera existía como campo en
+// Cómputo. A diferencia de clientes, acá NO hay auto-creación silenciosa
+// al tipear — la única forma de crear una obra nueva es ObraRapidaModal
+// (obligatorio, pedido de Gino), por eso no existe un "resolverObraId" con
+// creación automática: el id se resuelve buscando por nombre exacto en la
+// lista ya cargada por useListaObras, algo que la UI ya garantiza que
+// exista antes de dejar guardar.
+export const loadDBObras = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("obras").select("*").order("nombre");
+  if (error) throw error;
+  return data;
+};
+export const saveDBObra = async (obra) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("obras").upsert(obra).select().single();
+  if (error) throw error;
+  return data;
+};
+
+let _cacheListaObras = null;
+export const useListaObras = () => {
+  const [lista, setLista] = useState(() => _cacheListaObras || []);
+  useEffect(() => {
+    if (!supabase) return;
+    let vivo = true;
+    (async () => {
+      if (!(await esperarSesion()) || !vivo) return;
+      loadDBObras()
+        .then((rows) => {
+          _cacheListaObras = rows || [];
+          if (vivo) setLista(rows || []);
         })
         .catch(() => {});
     })();

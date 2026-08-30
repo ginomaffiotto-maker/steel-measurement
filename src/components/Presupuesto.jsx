@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
+import AutocompleteObra from "./AutocompleteObra";
+import ClienteRapidoModal from "./ClienteRapidoModal";
+import ObraRapidaModal from "./ObraRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
@@ -344,6 +347,24 @@ function generarPDFPresupuesto(pres) {
 function ModalNuevo({ onSave, onClose }) {
   const [form, setForm] = useState({ nombre:"", cliente:"", contacto:"", obra:"", detalle:"", tipo_trabajo:"Fabricación", categoria:"" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [showClienteRapido, setShowClienteRapido] = useState(false);
+  const [showObraRapida, setShowObraRapida] = useState(false);
+  const listaClientes = useListaClientes();
+  const listaObras = useListaObras();
+  // Obligatorio resolver contacto y obra antes de crear el presupuesto
+  // (2026-08-29) — mismo criterio que Computo/Anidado. "Cliente (empresa)"
+  // queda afuera: en esta pantalla es solo metadata sugerida junto al
+  // contacto, no una entidad propia a resolver.
+  const contactoTexto = (form.contacto || "").trim();
+  const contactoSinResolver = contactoTexto && !listaClientes.some(n => n.toLowerCase() === contactoTexto.toLowerCase());
+  const obraTexto = (form.obra || "").trim();
+  const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
+  const crear = () => {
+    if (!form.nombre.trim()) return;
+    if (contactoSinResolver) { alert(`El contacto "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    onSave(form);
+  };
   return (
     <div style={{ position:"fixed",inset:0,zIndex:1000,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
       <div style={{ background:C.card,border:`1.5px solid ${C.accent}55`,borderRadius:14,padding:28,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto" }}>
@@ -357,8 +378,26 @@ function ModalNuevo({ onSave, onClose }) {
             <input style={INP} value={form.nombre} autoFocus placeholder="ej: Pérgola SACEEM" onChange={e=>set("nombre",e.target.value)}/>
           </div>
           <div><label style={LBL}>Cliente (empresa)</label><AutocompleteEmpresa style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
-          <div><label style={LBL}>Contacto</label><AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/></div>
-          <div><label style={LBL}>Obra / Ubicación</label><input style={INP} value={form.obra} placeholder="ej: Planta Canelones" onChange={e=>set("obra",e.target.value)}/></div>
+          <div>
+            <label style={LBL}>Contacto</label>
+            <AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
+            {contactoSinResolver && (
+              <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                ⚠️ No existe todavía
+                <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear cliente nuevo</button>
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={LBL}>Obra / Ubicación</label>
+            <AutocompleteObra style={INP} value={form.obra} placeholder="ej: Planta Canelones" onChange={v=>set("obra",v)}/>
+            {obraSinResolver && (
+              <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                ⚠️ No existe todavía
+                <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear obra nueva</button>
+              </div>
+            )}
+          </div>
           <div><label style={LBL}>Tipo de trabajo</label>
             <select style={INP} value={form.tipo_trabajo} onChange={e=>set("tipo_trabajo",e.target.value)}>
               {TIPOS.map(t=><option key={t}>{t}</option>)}
@@ -371,9 +410,25 @@ function ModalNuevo({ onSave, onClose }) {
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
           <button style={BTN("ghost")} onClick={onClose}>Cancelar</button>
           <button style={{ ...BTN("primary"),opacity:form.nombre.trim()?1:0.5 }}
-            onClick={()=>form.nombre.trim()&&onSave(form)}>Crear →</button>
+            onClick={crear}>Crear →</button>
         </div>
       </div>
+      {showClienteRapido && (
+        <ClienteRapidoModal
+          nombreInicial={contactoTexto}
+          empresaInicial={form.cliente}
+          onClose={() => setShowClienteRapido(false)}
+          onCreated={c => { set("contacto", c.nombre); if (c.empresa && !form.cliente) set("cliente", c.empresa); }}
+        />
+      )}
+      {showObraRapida && (
+        <ObraRapidaModal
+          nombreInicial={obraTexto}
+          empresaInicial={form.cliente}
+          onClose={() => setShowObraRapida(false)}
+          onCreated={o => set("obra", o.nombre)}
+        />
+      )}
     </div>
   );
 }
@@ -1497,6 +1552,19 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
   // pantalla para los ítems, que es lo que se edita más seguido.
   const [datosAbiertos, setDatosAbiertos] = useState(false);
+  const [showClienteRapido, setShowClienteRapido] = useState(false);
+  const [showObraRapida, setShowObraRapida] = useState(false);
+  const listaClientes = useListaClientes();
+  const listaObras = useListaObras();
+  // Este campo se auto-guarda en cada tecla (no hay botón "Guardar" general
+  // acá) — "obligatorio" se aplica en el punto donde de verdad importa:
+  // no dejar "Enviar a Steel CRM" con contacto/obra sin resolver (ver
+  // enviarSteelCRM más abajo). El aviso igual se muestra siempre que hay
+  // texto sin resolver, para que se note antes de llegar a ese paso.
+  const contactoTexto = (pres.contacto || "").trim();
+  const contactoSinResolver = contactoTexto && !listaClientes.some(n => n.toLowerCase() === contactoTexto.toLowerCase());
+  const obraTexto = (pres.obra || "").trim();
+  const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
   const [vinculoCRM, setVinculoCRM] = useState(null); // {crmId, nro} | null
   const [enviandoCRM, setEnviandoCRM] = useState(false);
 
@@ -1521,6 +1589,8 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // en el momento en que hace falta enviarlos a Steel CRM.
   const enviarSteelCRM = async () => {
     if (vinculoCRM || enviandoCRM) return;
+    if (contactoSinResolver) return alert(`El contacto "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
+    if (obraSinResolver) return alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de enviar a Steel CRM.`);
     const codigo = pres.codigo_calculo || newCodigoCalculo();
     if (!pres.codigo_calculo) set("codigo_calculo", codigo);
     setEnviandoCRM(true);
@@ -1549,6 +1619,22 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           color={C.gold}
           onConfirm={() => { aplicarCambiosPrecios(pres, confirmarSyncPrecios.cambios); setConfirmarSyncPrecios(null); }}
           onClose={() => setConfirmarSyncPrecios(null)}
+        />
+      )}
+      {showClienteRapido && (
+        <ClienteRapidoModal
+          nombreInicial={contactoTexto}
+          empresaInicial={pres.cliente}
+          onClose={() => setShowClienteRapido(false)}
+          onCreated={c => { set("contacto", c.nombre); if (c.empresa && !pres.cliente) set("cliente", c.empresa); }}
+        />
+      )}
+      {showObraRapida && (
+        <ObraRapidaModal
+          nombreInicial={obraTexto}
+          empresaInicial={pres.cliente}
+          onClose={() => setShowObraRapida(false)}
+          onCreated={o => set("obra", o.nombre)}
         />
       )}
       {/* Topbar */}
@@ -1602,10 +1688,26 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div><label style={LBL}>Cliente (empresa)</label>
                 <AutocompleteEmpresa style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
-              <div><label style={LBL}>Contacto</label>
-                <AutocompleteCliente style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={v=>set("contacto",v)}/></div>
-              <div><label style={LBL}>Obra / Ubicación</label>
-                <input style={INP} value={pres.obra||""} placeholder="Planta, dirección..." onChange={e=>set("obra",e.target.value)}/></div>
+              <div>
+                <label style={LBL}>Contacto</label>
+                <AutocompleteCliente style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
+                {contactoSinResolver && (
+                  <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                    ⚠️ No existe todavía
+                    <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear cliente nuevo</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={LBL}>Obra / Ubicación</label>
+                <AutocompleteObra style={INP} value={pres.obra||""} placeholder="Planta, dirección..." onChange={v=>set("obra",v)}/>
+                {obraSinResolver && (
+                  <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                    ⚠️ No existe todavía
+                    <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear obra nueva</button>
+                  </div>
+                )}
+              </div>
               <div><label style={LBL}>Tipo de trabajo</label>
                 <select style={INP} value={pres.tipo_trabajo||"Fabricación"} onChange={e=>set("tipo_trabajo",e.target.value)}>
                   {TIPOS.map(t=><option key={t}>{t}</option>)}
@@ -1828,6 +1930,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
 export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(setPres);
+  const listaObras = useListaObras();
   const { show: showUndo, Toast } = useUndoToast();
   const [vista,  setVista]  = useState("lista");
   const [selId,  setSelId]  = useState(null);
@@ -1915,9 +2018,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       const nombreParaClientes = (p.contacto || p.cliente || "").trim();
       const empresaParaClientes = p.contacto ? p.cliente : null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
+      const obra_id = p.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === p.obra.trim().toLowerCase())?.id || null) : null;
       const vendedor = usuarios.find(u => u.id === p.vendedor)?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = p;
-      await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor,
+      await saveDBPresupuestoSM({ ...resto, cliente_id, obra_id, clonado_de_id: clonado_de || null, vendedor,
         eliminado_por: p.eliminadoPor ?? null, eliminado_fecha: p.eliminadoFecha ?? null });
       for (const item of items || []) {
         await saveDBItem(p.id, item);

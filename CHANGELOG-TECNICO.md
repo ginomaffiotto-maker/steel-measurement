@@ -122,6 +122,39 @@ verdad. Este documento resume, no sustituye.
 
 ---
 
+## 2026-08-29 — Cliente/Obra obligatorios (Steel CRM + Steel Measurement) + Obra llega a Steel Measurement
+
+Pedido de Gino, aplicado en los dos sistemas para que tipear un cliente u
+obra nuevo en un Presupuesto/Solicitud/Cómputo/Anidado nunca quede como
+texto suelto ni se cree solo en silencio — siempre abre una ventana de
+alta real antes de dejar guardar (o, en pantallas de autoguardado por
+campo como Presupuesto de Steel Measurement, antes de "Enviar a Steel CRM").
+
+- **Steel CRM**: `ClienteRapidoModal`/`ObraRapidaModal` nuevos en
+  `shared.jsx`, wireados en `BudgetModal` (Presupuestos/Kanban/
+  Seguimientos), el formulario de alta de Presupuestos.jsx y Solicitudes —
+  bloquean guardar si el campo cambió y no matchea nada existente (no
+  afecta presupuestos viejos sin tocar ese campo). Empresa pasa a ser
+  campo propio y editable en "Crear presupuesto nuevo" y Solicitudes
+  (antes se heredaba en silencio del cliente elegido).
+- **Steel Measurement**: mismo mecanismo (`ClienteRapidoModal`/
+  `ObraRapidaModal`/`AutocompleteObra` nuevos) en Cómputo, Anidado y
+  Presupuesto — reemplaza la auto-creación silenciosa de `resolverClienteId`
+  (que solo guardaba nombre+empresa, sin cargo/tel/email/zona).
+- **Obra llega por primera vez a la tabla compartida `obras` desde Steel
+  Measurement**: `obra_id uuid → obras` agregado a `computos`, `anidados`
+  y `presupuestos_sm` (migración `20260829090000`), FK directa sin tabla
+  de vínculo intermedia (a diferencia de `obra_presupuestos` en Steel CRM).
+  `computos` gana además la columna `obra` (texto) — antes no distinguía
+  "obra" de su propio `nombre`, ahora es un campo aparte.
+- No hay auto-creación silenciosa para Obra en ningún lado — a diferencia
+  de `cliente_id`, la única forma de crear una obra nueva es
+  `ObraRapidaModal`.
+- **Sin verificar en vivo todavía** — build limpio en los dos repos, sin
+  login real disponible en esta sesión.
+
+---
+
 ## Mantenimiento de este documento
 
 Misma Regla 9 que los otros documentos compartidos, con una diferencia de

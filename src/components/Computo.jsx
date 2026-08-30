@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
+import AutocompleteObra from "./AutocompleteObra";
+import ClienteRapidoModal from "./ClienteRapidoModal";
+import ObraRapidaModal from "./ObraRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
@@ -994,7 +997,20 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
-  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
+  const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });
+  const [showClienteRapido, setShowClienteRapido] = useState(false);
+  const [showObraRapida, setShowObraRapida] = useState(false);
+  const listaClientes = useListaClientes();
+  const listaObras = useListaObras();
+  // Obligatorio resolver el cliente antes de crear el cómputo (2026-08-29) —
+  // antes, un nombre nuevo se creaba solo y en silencio (resolverClienteId)
+  // con solo nombre+empresa, sin ventana ni forma de cargar cargo/tel/email.
+  const clienteTexto = (nuevo.cliente || "").trim();
+  const clienteSinResolver = clienteTexto && !listaClientes.some(n => n.toLowerCase() === clienteTexto.toLowerCase());
+  // Obra: campo nuevo en Cómputo (2026-08-29, antes solo existía el nombre
+  // del propio cómputo, que hacía las veces de "obra" sin ser lo mismo).
+  const obraTexto = (nuevo.obra || "").trim();
+  const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
   // Prefill desde "Crear cómputo" en Solicitudes (asignadas desde steelCRM)
   // — mismo criterio liviano que el resto de la navegación cruzada de esta
   // app (onNidar/onExportarPresupuesto solo cambian de tab): se deja un
@@ -1042,12 +1058,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     if (!supabase) return;
     try {
       const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
+      const obra_id = c.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === c.obra.trim().toLowerCase())?.id || null) : null;
       // vendedor es un id local (Date.now()) hasta que esa persona inicia
       // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
       // completa profileId (mismo patrón que meta_usuarios en steelCRM).
       const vendedor = usuarios.find(u => u.id === c.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = c;
-      await saveDBComputo({ ...resto, cliente_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
+      await saveDBComputo({ ...resto, cliente_id, obra_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
     }
@@ -1081,16 +1098,18 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
   const crearComputo = () => {
     if (!nuevo.nombre.trim()) return;
+    if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     const nroManual = nuevo.nro?.trim();
     if (nroManual && computos.some(c => c.nro === nroManual)) {
       alert(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"" };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"" };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
-    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", categoria:"", tipo_trabajo:"Fabricación" });
+    setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });
     dualWriteComputo(c);
     logear?.("Cómputo creado", c.nro + " — " + c.nombre);
   };
@@ -1211,6 +1230,22 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             onClose={() => setConfirmarDelId(null)}
           />
         )}
+        {showClienteRapido && (
+          <ClienteRapidoModal
+            nombreInicial={clienteTexto}
+            empresaInicial={nuevo.empresa}
+            onClose={() => setShowClienteRapido(false)}
+            onCreated={c => setNuevo(s => ({ ...s, cliente: c.nombre, empresa: c.empresa || s.empresa }))}
+          />
+        )}
+        {showObraRapida && (
+          <ObraRapidaModal
+            nombreInicial={obraTexto}
+            empresaInicial={nuevo.empresa}
+            onClose={() => setShowObraRapida(false)}
+            onCreated={o => setNuevo(s => ({ ...s, obra: o.nombre }))}
+          />
+        )}
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
           <span style={{ fontSize:20 }}>📐</span>
           <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:C.text }}>Cómputo de Materiales</h2>
@@ -1242,11 +1277,27 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <label style={LBL}>Cliente</label>
             <AutocompleteCliente placeholder="Ej: Juan Pérez" value={nuevo.cliente}
               onChange={v=>setNuevo(s=>({...s,cliente:v}))}
-              style={{ ...INP,marginBottom:10 }} />
+              style={{ ...INP,marginBottom: clienteSinResolver ? 4 : 10 }} />
+            {clienteSinResolver && (
+              <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+                ⚠️ Este cliente no existe todavía
+                <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear cliente nuevo</button>
+              </div>
+            )}
             <label style={LBL}>Empresa</label>
             <AutocompleteEmpresa placeholder="Ej: CCFC" value={nuevo.empresa}
               onChange={v=>setNuevo(s=>({...s,empresa:v}))}
               style={{ ...INP,marginBottom:10 }} />
+            <label style={LBL}>Obra</label>
+            <AutocompleteObra placeholder="Ej: Nave Industrial" value={nuevo.obra}
+              onChange={v=>setNuevo(s=>({...s,obra:v}))}
+              style={{ ...INP,marginBottom: obraSinResolver ? 4 : 10 }} />
+            {obraSinResolver && (
+              <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+                ⚠️ Esta obra no existe todavía
+                <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear obra nueva</button>
+              </div>
+            )}
             <label style={LBL}>Tipo de trabajo</label>
             <select value={nuevo.tipo_trabajo} onChange={e=>setNuevo(v=>({...v,tipo_trabajo:e.target.value}))}
               style={{ ...INP,marginBottom:10 }}>
