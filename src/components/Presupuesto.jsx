@@ -1276,7 +1276,7 @@ function TabPanto({ item, set }) {
 }
 
 // ─── EDITOR DE RUBROS (9 PESTAÑAS) ───────────────────────────────
-function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
+function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
   const TABS = [
     { id:"resumen",          icon:"📊",  label:"Resumen"      },
     { id:"hierros",          icon:"⚙️",  label:"Hierros"      },
@@ -1407,15 +1407,9 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
           {tab === "resumen" && (() => {
             const q = +item.cantidad || 1;
             const rubros = { hier:c.hier_usd*q, mat:c.mat_usd*q, moFab:c.moFab_usd*q, moMon:c.moMon_usd*q, hesp:c.hesp_usd*q, tFab:c.tFab_usd*q, tMon:c.tMon_usd*q, trat:c.trat_usd*q, trasl:c.trasl_usd*q, panto:c.panto_usd*q };
-            const escalar = (obj) => Object.fromEntries(Object.entries(obj).map(([k,v]) => [k, v*q]));
-            const detalle = {
-              moFab_h: c.moFab_h*q, moMon_h: c.moMon_h*q, hesp_h: c.hesp_h*q, trat_lt: c.trat_lt*q,
-              arenado_m2: c.arenado_m2*q, galvanizado_kg: c.galvanizado_kg*q,
-              horasPorTipoFab: escalar(c.moFab_horasPorTipo), horasPorTipoMon: escalar(c.moMon_horasPorTipo),
-            };
             return (
               <div style={{ maxWidth:480 }}>
-                <ResumenRubros rubros={rubros} total_usd={c.total_usd} total_kg={c.total_kg} detalle={detalle} />
+                <ResumenConDetalle rubros={rubros} total_usd={c.total_usd} total_kg={c.total_kg} pres={pres} />
                 {c.pct_desperdicio > 0 && (
                   <div title="% de desperdicio ponderado por kg: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:13, color:C.warn, fontWeight:700 }}>
                     ⚠ {n2(c.pct_desperdicio)}% desperdicio (materiales del anidado vinculado)
@@ -1447,7 +1441,7 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
 }
 
 // ─── FILA ITEM ────────────────────────────────────────────────────
-function FilaItem({ item, onChange, onDelete, onAnidadoVinculado }) {
+function FilaItem({ item, onChange, onDelete, onAnidadoVinculado, pres }) {
   const [editando, setEditando] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const c = calcItem(item);
@@ -1518,7 +1512,7 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado }) {
       </div>
 
       {editorOpen && (
-        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} onAnidadoVinculado={onAnidadoVinculado} />
+        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} onAnidadoVinculado={onAnidadoVinculado} pres={pres} />
       )}
     </>
   );
@@ -1547,7 +1541,7 @@ function BarraRubro({ label, usd, total, kg, color }) {
   );
 }
 
-// Fila de horas por tipo (Común/Nocturna/Extra/Lluvia) dentro del desplegable de detalle.
+// Fila de horas por tipo (Común/Nocturna/Extra/Lluvia) dentro del bloque de detalle agregado.
 function DetalleHoras({ label, total, porTipo }) {
   const conHoras = Object.entries(porTipo || {}).filter(([,h]) => h > 0);
   return (
@@ -1567,72 +1561,147 @@ function DetalleHoras({ label, total, porTipo }) {
   );
 }
 
-// ─── RESUMEN DE RUBROS (reutilizado a nivel ítem y a nivel presupuesto) ──
-// detalle (opcional): horas por tipo, litros de pintura, arenado, galvanizado
-// — ver calcItem/calcPresupuesto. Si no hay nada que mostrar, no se ofrece
-// el desplegable.
-function ResumenRubros({ rubros, total_usd, total_kg, detalle }) {
-  const [detalleAbierto, setDetalleAbierto] = useState(false);
+// Bloque de detalle agregado (horas por tipo, litros de pintura, arenado,
+// galvanizado) — usado dentro de ModalResumenCompleto. null si no hay nada
+// para mostrar.
+function DetalleAgregado({ detalle }) {
   const hayDetalle = !!detalle && (
     detalle.moFab_h > 0 || detalle.moMon_h > 0 || detalle.hesp_h > 0 ||
     detalle.trat_lt > 0 || detalle.arenado_m2 > 0 || detalle.galvanizado_kg > 0
   );
+  if (!hayDetalle) return null;
+  return (
+    <div style={{ background:C.iron, borderRadius:8, padding:"10px 12px", fontSize:13, display:"flex", flexDirection:"column", gap:9 }}>
+      {detalle.moFab_h > 0 && <DetalleHoras label="🔨 Horas Fabricación" total={detalle.moFab_h} porTipo={detalle.horasPorTipoFab} />}
+      {detalle.moMon_h > 0 && <DetalleHoras label="🏗️ Horas Montaje" total={detalle.moMon_h} porTipo={detalle.horasPorTipoMon} />}
+      {detalle.hesp_h > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>⏰ Horas especiales</span><span style={{ fontWeight:700 }}>{n2(detalle.hesp_h)} h</span>
+        </div>
+      )}
+      {detalle.trat_lt > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>🎨 Litros de pintura</span><span style={{ fontWeight:700 }}>{n2(detalle.trat_lt)} lt</span>
+        </div>
+      )}
+      {detalle.arenado_m2 > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>🎨 Superficie arenada</span><span style={{ fontWeight:700 }}>{n2(detalle.arenado_m2)} m²</span>
+        </div>
+      )}
+      {detalle.galvanizado_kg > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>🔩 Galvanizado</span><span style={{ fontWeight:700 }}>{n2(detalle.galvanizado_kg)} kg</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
+// ─── RESUMEN DE RUBROS (reutilizado a nivel ítem y a nivel presupuesto) ──
+// Grilla pura, sin botón ni modal — usada standalone dentro de
+// ModalResumenCompleto (totales y desglose por ítem) y como base de
+// ResumenConDetalle.
+function ResumenRubros({ rubros, total_usd, total_kg }) {
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", columnGap:12, rowGap:6, fontSize:14 }}>
+      <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Rubro</span>
+      <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>Monto</span>
+      <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>%</span>
+      <span title="Precio en dólares por kilogramo de material de este rubro"
+        style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>U$S/kg</span>
+
+      <BarraRubro label="⚙️ Materiales / Hierros" usd={rubros.hier+rubros.mat} total={total_usd} kg={total_kg} color={C.info} />
+      <BarraRubro label="🔨 MO Fabricación"        usd={rubros.moFab}  total={total_usd} kg={total_kg} color={C.pur} />
+      <BarraRubro label="🏗️ MO Montaje"            usd={rubros.moMon}  total={total_usd} kg={total_kg} color={C.teal} />
+      <BarraRubro label="⏰ H. Especiales"         usd={rubros.hesp}   total={total_usd} kg={total_kg} color={C.warn} />
+      <BarraRubro label="🏭 Terc. Fabricación"     usd={rubros.tFab}   total={total_usd} kg={total_kg} color={C.steel} />
+      <BarraRubro label="🚛 Terc. Montaje"         usd={rubros.tMon}   total={total_usd} kg={total_kg} color={C.steel} />
+      <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
+      <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
+      <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
+    </div>
+  );
+}
+
+// Wrapper con el botón "Ver detalle completo" — usado en los dos lugares
+// reales (resumen del ítem y resumen del presupuesto). Abre
+// ModalResumenCompleto con TODOS los ítems del presupuesto (pres), no solo
+// los rubros de acá — a pedido de Gino (2026-08-30): quería una ventana
+// aparte con el desglose de todo lo cargado, no solo el agregado de este
+// ítem.
+function ResumenConDetalle({ rubros, total_usd, total_kg, pres }) {
+  const [modalAbierto, setModalAbierto] = useState(false);
   return (
     <div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", columnGap:12, rowGap:6, fontSize:14, marginBottom:4 }}>
-        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Rubro</span>
-        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>Monto</span>
-        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>%</span>
-        <span title="Precio en dólares por kilogramo de material de este rubro"
-          style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>U$S/kg</span>
+      <ResumenRubros rubros={rubros} total_usd={total_usd} total_kg={total_kg} />
+      <button onClick={() => setModalAbierto(true)} style={{
+        background:"none", border:"none", color:C.accent, cursor:"pointer",
+        fontSize:13, fontWeight:700, padding:"6px 0",
+      }}>▸ Ver detalle completo</button>
+      {modalAbierto && <ModalResumenCompleto pres={pres} onClose={() => setModalAbierto(false)} />}
+    </div>
+  );
+}
 
-        <BarraRubro label="⚙️ Materiales / Hierros" usd={rubros.hier+rubros.mat} total={total_usd} kg={total_kg} color={C.info} />
-        <BarraRubro label="🔨 MO Fabricación"        usd={rubros.moFab}  total={total_usd} kg={total_kg} color={C.pur} />
-        <BarraRubro label="🏗️ MO Montaje"            usd={rubros.moMon}  total={total_usd} kg={total_kg} color={C.teal} />
-        <BarraRubro label="⏰ H. Especiales"         usd={rubros.hesp}   total={total_usd} kg={total_kg} color={C.warn} />
-        <BarraRubro label="🏭 Terc. Fabricación"     usd={rubros.tFab}   total={total_usd} kg={total_kg} color={C.steel} />
-        <BarraRubro label="🚛 Terc. Montaje"         usd={rubros.tMon}   total={total_usd} kg={total_kg} color={C.steel} />
-        <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
-        <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
-        <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
-      </div>
+// ─── MODAL: RESUMEN AMPLIADO DE TODO EL PRESUPUESTO ──────────────────
+// Totales generales + detalle agregado (horas/litros/arenado/galvanizado)
+// + desglose de rubros ítem por ítem — todo el presupuesto, no solo el
+// ítem que se estaba editando cuando se abrió.
+function ModalResumenCompleto({ pres, onClose }) {
+  const c = calcPresupuesto(pres);
+  const items = pres.items || [];
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:1100, background:"#000d",
+      display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:C.bg, border:`1.5px solid ${C.accent}44`,
+        width:"100%", height:"100%", display:"flex", flexDirection:"column", boxShadow:"0 24px 60px #0008" }}>
 
-      {hayDetalle && (
-        <>
-          <button onClick={() => setDetalleAbierto(v => !v)} style={{
-            background:"none", border:"none", color:C.accent, cursor:"pointer",
-            fontSize:13, fontWeight:700, padding:"6px 0",
-          }}>{detalleAbierto ? "▾" : "▸"} Ver detalle completo</button>
+        <div style={{ padding:"12px 18px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ color:C.accent, fontWeight:800, fontSize:16,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Resumen ampliado — {pres.nombre || pres.nro}</div>
+            <div style={{ color:C.muted, fontSize:12 }}>{items.length} ítem(s) cargado(s)</div>
+          </div>
+          <span style={{...BDG(C.ok, true), fontSize:14, padding:"4px 12px", fontWeight:800}}>${n2(c.total_usd)}</span>
+          <button onClick={onClose} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6,
+            color:C.muted, cursor:"pointer", fontSize:18, padding:"2px 10px", flexShrink:0 }}>✕</button>
+        </div>
 
-          {detalleAbierto && (
-            <div style={{ background:C.iron, borderRadius:8, padding:"10px 12px", fontSize:13, display:"flex", flexDirection:"column", gap:9, marginTop:2 }}>
-              {detalle.moFab_h > 0 && <DetalleHoras label="🔨 Horas Fabricación" total={detalle.moFab_h} porTipo={detalle.horasPorTipoFab} />}
-              {detalle.moMon_h > 0 && <DetalleHoras label="🏗️ Horas Montaje" total={detalle.moMon_h} porTipo={detalle.horasPorTipoMon} />}
-              {detalle.hesp_h > 0 && (
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ color:C.muted }}>⏰ Horas especiales</span><span style={{ fontWeight:700 }}>{n2(detalle.hesp_h)} h</span>
-                </div>
-              )}
-              {detalle.trat_lt > 0 && (
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ color:C.muted }}>🎨 Litros de pintura</span><span style={{ fontWeight:700 }}>{n2(detalle.trat_lt)} lt</span>
-                </div>
-              )}
-              {detalle.arenado_m2 > 0 && (
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ color:C.muted }}>🎨 Superficie arenada</span><span style={{ fontWeight:700 }}>{n2(detalle.arenado_m2)} m²</span>
-                </div>
-              )}
-              {detalle.galvanizado_kg > 0 && (
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ color:C.muted }}>🔩 Galvanizado</span><span style={{ fontWeight:700 }}>{n2(detalle.galvanizado_kg)} kg</span>
-                </div>
-              )}
+        <div style={{ flex:1, overflowY:"auto", padding:18 }}>
+          <div style={{ maxWidth:600, marginBottom:28 }}>
+            <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+              Totales del presupuesto
             </div>
-          )}
-        </>
-      )}
+            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} />
+            <div style={{ marginTop:10 }}><DetalleAgregado detalle={c.detalle} /></div>
+          </div>
+
+          <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+            Detalle por ítem ({items.length})
+          </div>
+          {items.length === 0 && <div style={{ color:C.muted, fontSize:13 }}>Este presupuesto todavía no tiene ítems cargados.</div>}
+          {items.map(it => {
+            const ic = calcItem(it);
+            const q  = +it.cantidad || 1;
+            const rubrosIt = {
+              hier:ic.hier_usd*q, mat:ic.mat_usd*q, moFab:ic.moFab_usd*q, moMon:ic.moMon_usd*q,
+              hesp:ic.hesp_usd*q, tFab:ic.tFab_usd*q, tMon:ic.tMon_usd*q, trat:ic.trat_usd*q,
+              trasl:ic.trasl_usd*q, panto:ic.panto_usd*q,
+            };
+            return (
+              <div key={it.id} style={{ maxWidth:600, marginBottom:16, padding:14, background:C.card, border:`1px solid ${C.border}`, borderRadius:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
+                  <span style={{ fontWeight:700 }}>{it.titulo} <span style={{ color:C.muted, fontWeight:400 }}>×{it.cantidad}</span></span>
+                  <span style={{ fontWeight:800, color:C.ok }}>${n2(ic.total_usd)}</span>
+                </div>
+                <ResumenRubros rubros={rubrosIt} total_usd={ic.total_usd} total_kg={ic.total_kg} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1875,7 +1944,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               </div>
             )}
             {(pres.items||[]).map(it => (
-              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)}
+              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)} pres={pres}
                 onAnidadoVinculado={(categoria, tipo) => {
                   // Traspaso automático desde el Anidado — solo si el
                   // presupuesto todavía no tiene su propia clasificación
@@ -1894,7 +1963,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               Resumen
             </div>
 
-            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} detalle={c.detalle} />
+            <ResumenConDetalle rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} pres={pres} />
             {c.pct_desperdicio > 0 && (
               <div title="% de desperdicio ponderado por kg de todos los materiales que vinieron de un Anidado: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:13, color:C.warn, fontWeight:700 }}>
                 ⚠ {n2(c.pct_desperdicio)}% desperdicio general (materiales de anidados vinculados)
@@ -2136,7 +2205,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // puede romper el guardado local (localStorage sigue siendo la fuente de
   // verdad). Resuelve `cliente` (texto libre local) a `cliente_id` real
   // contra la tabla `clientes` — mismo helper que usa registrarCliente.
-  const dualWritePresupuesto = async (p) => {
+  const dualWritePresupuesto = async (p, intentoRegen = false) => {
     if (!supabase) return;
     try {
       // A diferencia de Cómputo/Anidado/Historial, acá "cliente" siempre fue
@@ -2160,6 +2229,20 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       limpiarSyncPendiente("presupuesto", p.id);
       refrescarSyncPendientes();
     } catch (e) {
+      // El código de cálculo se genera con un contador que vive solo en
+      // este navegador (ver newCodigoCalculo, storage.js) — si quedó
+      // desalineado con lo ya usado en Supabase (otro dispositivo, datos
+      // de prueba, etc.) el guardado choca contra la unicidad real de la
+      // columna (uq_presupuestos_sm_codigo). Se autocura: se regenera un
+      // código nuevo y se reintenta una sola vez, en vez de quedar
+      // trabado esperando que alguien note el cartel de sync pendiente.
+      if (!intentoRegen && (e.message || "").includes("uq_presupuestos_sm_codigo")) {
+        const nuevoCodigo = newCodigoCalculo();
+        console.warn(`[Fase 3] Código de cálculo duplicado en presupuesto "${p.nro || p.id}" — regenerado a ${nuevoCodigo}, reintentando.`);
+        const corregido = { ...p, codigo_calculo: nuevoCodigo };
+        setPres(prev => prev.map(x => x.id === p.id ? corregido : x));
+        return dualWritePresupuesto(corregido, true);
+      }
       console.warn(`[Fase 3] No se pudo sincronizar presupuesto "${p.nro || p.id}" con el backend:`, e.message || e);
       // Bug real detectado 2026-08-29 (mismo del lado de Steel CRM): sin
       // esto, el presupuesto queda guardado solo en este dispositivo sin
