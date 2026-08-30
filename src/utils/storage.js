@@ -337,7 +337,11 @@ export const useListaEmpresas = () => {
 // existe todavía" seguía mostrándose en el propio formulario que acaba de
 // crearla (ver comentario de crearCacheSuscribible).
 export const agregarAListaEmpresas = (nueva) => {
-  cacheListaEmpresas.set([nueva, ...cacheListaEmpresas.get()]);
+  // Sin el filter, si el fetch de montaje de otro campo resuelve justo
+  // después de este prepend, la fila recién creada podía quedar
+  // duplicada en la lista en memoria por un instante (nunca en la base
+  // — bug real visto por Gino, era una carrera de timing, no datos).
+  cacheListaEmpresas.set([nueva, ...cacheListaEmpresas.get().filter((e) => e.id !== nueva.id)]);
 };
 
 // ─── OBRAS — capa de acceso al backend (2026-08-29) ────────────────
@@ -382,7 +386,7 @@ export const useListaObras = () => {
 };
 // Llamado por ObraRapidaModal tras crear — mismo motivo que agregarAListaEmpresas.
 export const agregarAListaObras = (nueva) => {
-  cacheListaObras.set([nueva, ...cacheListaObras.get()]);
+  cacheListaObras.set([nueva, ...cacheListaObras.get().filter((o) => o.id !== nueva.id)]);
 };
 
 // ─── PRESUPUESTOS — capa de acceso al backend (Fase 2, sin cablear a la UI
