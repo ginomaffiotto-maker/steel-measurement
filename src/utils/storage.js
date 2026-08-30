@@ -1549,16 +1549,39 @@ const TARIFARIO_DEFAULT = {
   trat_superficie_extra: [],
   pantografo_extra: [],
 };
+// Cacheado por el string crudo de localStorage (no por saveTarifario, que es
+// una sola vía de escritura entre varias) — calcItem() lo llama una vez por
+// cada fila de costo de cada ítem de cada presupuesto visible, y Presupuesto.jsx
+// vuelve a llamar calcItem/calcPresupuesto en cada render sin memoizar (bug de
+// performance real, cuelgue de unos segundos al listar presupuestos — mismo
+// patrón que el fix aplicado en Steel CRM, ver CLAUDE.md 2026-08-30). Sin este
+// cache, cada uno de esos llamados repetía un localStorage.getItem + JSON.parse
+// + merge del tarifario completo. Comparar contra el string crudo (no contra un
+// flag manual) hace que se invalide solo ante cualquier escritura, venga de
+// saveTarifario o de restoreBackup (que además siempre recarga la página).
+// Sentinel en vez de null/undefined: localStorage.getItem() ya puede devolver
+// null cuando no hay tarifario guardado, así que null no sirve para distinguir
+// "todavía no se llamó nunca" de "se llamó y no había nada guardado".
+const _SIN_CACHEAR = Symbol("sin cachear");
+let _tarifarioRawCache = _SIN_CACHEAR, _tarifarioParsedCache = null;
 export const loadTarifario = () => {
-  const t = loadLS("smeas_tarifario", null);
-  if (!t) return TARIFARIO_DEFAULT;
-  // completa catálogos que puedan faltar si el tarifario se guardó con una versión vieja
-  const merged = { ...TARIFARIO_DEFAULT, ...t };
-  // Migración 2026-08-02: terc_fabricacion + terc_montajes → terceros unificado
-  // (solo si el tarifario guardado todavía no tiene "terceros").
-  if (!t.terceros) {
-    merged.terceros = [...(t.terc_fabricacion || TARIFARIO_DEFAULT.terc_fabricacion), ...(t.terc_montajes || [])];
+  const raw = localStorage.getItem("smeas_tarifario");
+  if (raw === _tarifarioRawCache) return _tarifarioParsedCache;
+  const t = raw ? JSON.parse(raw) : null;
+  let merged;
+  if (!t) {
+    merged = TARIFARIO_DEFAULT;
+  } else {
+    // completa catálogos que puedan faltar si el tarifario se guardó con una versión vieja
+    merged = { ...TARIFARIO_DEFAULT, ...t };
+    // Migración 2026-08-02: terc_fabricacion + terc_montajes → terceros unificado
+    // (solo si el tarifario guardado todavía no tiene "terceros").
+    if (!t.terceros) {
+      merged.terceros = [...(t.terc_fabricacion || TARIFARIO_DEFAULT.terc_fabricacion), ...(t.terc_montajes || [])];
+    }
   }
+  _tarifarioRawCache = raw;
+  _tarifarioParsedCache = merged;
   return merged;
 };
 export const saveTarifario = (t) => saveLS("smeas_tarifario", t);
