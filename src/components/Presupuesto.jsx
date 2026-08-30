@@ -285,8 +285,18 @@ export function calcItem(it) {
     (rows || []).forEach(r => { const t = normalizarTipoHora(r.tipo_hora); out[t] = (out[t]||0) + (+r.cant_horas||0); });
     return out;
   };
+  // Por categoría de operario (Oficial/Medio Oficial/Ayudante, etc.) — a
+  // diferencia de tipo de hora, las categorías son dinámicas (catálogo de
+  // Config), así que el objeto no tiene claves fijas.
+  const horasPorCategoria = (rows) => {
+    const out = {};
+    (rows || []).forEach(r => { const cat = r.categoria || "Sin categoría"; out[cat] = (out[cat]||0) + (+r.cant_horas||0); });
+    return out;
+  };
   const moFab_horasPorTipo = horasPorTipo(it.mo_fabricacion);
   const moMon_horasPorTipo = horasPorTipo(it.mo_montajes);
+  const moFab_horasPorCategoria = horasPorCategoria(it.mo_fabricacion);
+  const moMon_horasPorCategoria = horasPorCategoria(it.mo_montajes);
   const hesp_h     = (it.horas_especiales || []).reduce((s, h) => s + (+h.cant_horas || 0), 0);
   const trat_lt    = (ts.pinturas || []).reduce((s, p) => s + (+p.cant_lt||0) * (+p.cant_manos||0), 0);
   const arenado_m2 = +ts.arenado_m2 || 0;
@@ -297,23 +307,31 @@ export function calcItem(it) {
   const total_usd  = total_unit * cant;
   const total_kg   = it.no_agrega_kg ? 0 : hier_kg * cant;
   const usd_kg     = total_kg > 0 ? total_usd / total_kg : 0;
+  // Valor en USD del desperdicio, usando el USD/kg promedio de los hierros
+  // de este ítem como tasa (mismo criterio que Gestsoft).
+  const desperdicio_usd = hier_kg > 0 ? kg_desp_pond * (hier_usd / hier_kg) : 0;
 
   return {
     hier_usd, hier_kg, mat_usd, moFab_usd, moFab_h, moMon_usd, moMon_h,
     hesp_usd, tFab_usd, tMon_usd, trat_usd, trasl_usd, panto_usd,
-    total_unit, total_usd, total_kg, usd_kg, kg_con_desp, kg_desp_pond,
+    total_unit, total_usd, total_kg, usd_kg, kg_con_desp, kg_desp_pond, desperdicio_usd,
     pct_desperdicio: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
+    pct_desperdicio_total: total_kg>0 ? kg_desp_pond/total_kg*100 : 0,
     kg_hora_fab: (hier_kg > 0 && moFab_h > 0) ? hier_kg / moFab_h : 0,
-    moFab_horasPorTipo, moMon_horasPorTipo, hesp_h, trat_lt, arenado_m2, galvanizado_kg,
+    kg_hora_mon: (hier_kg > 0 && moMon_h > 0) ? hier_kg / moMon_h : 0,
+    moFab_horasPorTipo, moMon_horasPorTipo, moFab_horasPorCategoria, moMon_horasPorCategoria,
+    hesp_h, trat_lt, arenado_m2, galvanizado_kg,
   };
 }
 
 export function calcPresupuesto(p) {
   const rubros = { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 };
-  let total_usd = 0, total_kg = 0, kg_con_desp = 0, kg_desp_pond = 0;
+  let total_usd = 0, total_kg = 0, kg_con_desp = 0, kg_desp_pond = 0, desperdicio_usd = 0;
   let moFab_h = 0, moMon_h = 0, hesp_h = 0, trat_lt = 0, arenado_m2 = 0, galvanizado_kg = 0;
   const horasPorTipoFab = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
   const horasPorTipoMon = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
+  const horasPorCategoriaFab = {};
+  const horasPorCategoriaMon = {};
   for (const it of p.items || []) {
     const c = calcItem(it);
     const q = +it.cantidad || 1;
@@ -326,10 +344,13 @@ export function calcPresupuesto(p) {
     total_kg  += c.total_kg;
     kg_con_desp  += c.kg_con_desp  * q;
     kg_desp_pond += c.kg_desp_pond * q;
+    desperdicio_usd += c.desperdicio_usd * q;
     moFab_h += c.moFab_h * q; moMon_h += c.moMon_h * q; hesp_h += c.hesp_h * q;
     trat_lt += c.trat_lt * q; arenado_m2 += c.arenado_m2 * q; galvanizado_kg += c.galvanizado_kg * q;
     for (const k of Object.keys(horasPorTipoFab)) horasPorTipoFab[k] += (c.moFab_horasPorTipo[k]||0) * q;
     for (const k of Object.keys(horasPorTipoMon)) horasPorTipoMon[k] += (c.moMon_horasPorTipo[k]||0) * q;
+    for (const k of Object.keys(c.moFab_horasPorCategoria)) horasPorCategoriaFab[k] = (horasPorCategoriaFab[k]||0) + c.moFab_horasPorCategoria[k]*q;
+    for (const k of Object.keys(c.moMon_horasPorCategoria)) horasPorCategoriaMon[k] = (horasPorCategoriaMon[k]||0) + c.moMon_horasPorCategoria[k]*q;
   }
   // Negociación: monto que se SUMA al subtotal (margen de negociación, no descuento).
   const neg_usd  = p.neg_modo === "usd" ? (+p.negociacion_usd || 0) : total_usd * (+p.negociacion_pct || 0) / 100;
@@ -338,7 +359,15 @@ export function calcPresupuesto(p) {
   return {
     rubros, total_usd, total_kg, neg_usd, int_usd, gran_total, usd_kg: total_kg > 0 ? gran_total / total_kg : 0,
     pct_desperdicio: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
-    detalle: { moFab_h, moMon_h, hesp_h, trat_lt, arenado_m2, galvanizado_kg, horasPorTipoFab, horasPorTipoMon },
+    detalle: {
+      moFab_h, moMon_h, hesp_h, trat_lt, arenado_m2, galvanizado_kg, horasPorTipoFab, horasPorTipoMon,
+      horasPorCategoriaFab, horasPorCategoriaMon,
+      kg_hora_fab: moFab_h > 0 ? total_kg / moFab_h : 0,
+      kg_hora_mon: moMon_h > 0 ? total_kg / moMon_h : 0,
+      desperdicio_kg: kg_desp_pond, desperdicio_usd,
+      pct_desperdicio_hierros: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
+      pct_desperdicio_total: total_kg>0 ? kg_desp_pond/total_kg*100 : 0,
+    },
   };
 }
 
@@ -1543,17 +1572,25 @@ function BarraRubro({ label, usd, total, kg, color }) {
 }
 
 // Fila de horas por tipo (Común/Nocturna/Extra/Lluvia) dentro del bloque de detalle agregado.
-function DetalleHoras({ label, total, porTipo }) {
-  const conHoras = Object.entries(porTipo || {}).filter(([,h]) => h > 0);
+function DetalleHoras({ label, total, porTipo, porCategoria }) {
+  const conTipo = Object.entries(porTipo || {}).filter(([,h]) => h > 0);
+  const conCategoria = Object.entries(porCategoria || {}).filter(([,h]) => h > 0);
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
         <span style={{ color:C.muted }}>{label}</span>
         <span style={{ fontWeight:700 }}>{n2(total)} h</span>
       </div>
-      {conHoras.length > 0 && (
+      {conCategoria.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, paddingLeft:14, marginBottom:conTipo.length>0?4:0 }}>
+          {conCategoria.map(([cat,h]) => (
+            <span key={cat} style={{ ...BDG(C.steel, true), fontSize:12 }}>{cat}: {n2(h)}h</span>
+          ))}
+        </div>
+      )}
+      {conTipo.length > 0 && (
         <div style={{ display:"flex", flexWrap:"wrap", gap:6, paddingLeft:14 }}>
-          {conHoras.map(([tipo,h]) => (
+          {conTipo.map(([tipo,h]) => (
             <span key={tipo} style={{ ...BDG(tipo === "Común" ? C.ok : C.warn, true), fontSize:12 }}>{tipo}: {n2(h)}h</span>
           ))}
         </div>
@@ -1562,19 +1599,30 @@ function DetalleHoras({ label, total, porTipo }) {
   );
 }
 
-// Bloque de detalle agregado (horas por tipo, litros de pintura, arenado,
-// galvanizado) — usado dentro de ModalResumenCompleto. null si no hay nada
-// para mostrar.
+// Bloque de detalle agregado (horas por categoría/tipo, productividad
+// kg/hora, litros de pintura, arenado, galvanizado, desperdicio) — usado
+// dentro de ModalResumenCompleto. null si no hay nada para mostrar.
 function DetalleAgregado({ detalle }) {
   const hayDetalle = !!detalle && (
     detalle.moFab_h > 0 || detalle.moMon_h > 0 || detalle.hesp_h > 0 ||
-    detalle.trat_lt > 0 || detalle.arenado_m2 > 0 || detalle.galvanizado_kg > 0
+    detalle.trat_lt > 0 || detalle.arenado_m2 > 0 || detalle.galvanizado_kg > 0 ||
+    detalle.desperdicio_kg > 0
   );
   if (!hayDetalle) return null;
   return (
     <div style={{ background:C.iron, borderRadius:8, padding:"10px 12px", fontSize:13, display:"flex", flexDirection:"column", gap:9 }}>
-      {detalle.moFab_h > 0 && <DetalleHoras label="🔨 Horas Fabricación" total={detalle.moFab_h} porTipo={detalle.horasPorTipoFab} />}
-      {detalle.moMon_h > 0 && <DetalleHoras label="🏗️ Horas Montaje" total={detalle.moMon_h} porTipo={detalle.horasPorTipoMon} />}
+      {detalle.moFab_h > 0 && <DetalleHoras label="🔨 Horas Fabricación" total={detalle.moFab_h} porTipo={detalle.horasPorTipoFab} porCategoria={detalle.horasPorCategoriaFab} />}
+      {detalle.moMon_h > 0 && <DetalleHoras label="🏗️ Horas Montaje" total={detalle.moMon_h} porTipo={detalle.horasPorTipoMon} porCategoria={detalle.horasPorCategoriaMon} />}
+      {detalle.kg_hora_fab > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>📈 Productividad Fab.</span><span style={{ fontWeight:700 }}>{n2(detalle.kg_hora_fab)} kg/h</span>
+        </div>
+      )}
+      {detalle.kg_hora_mon > 0 && (
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:C.muted }}>📈 Productividad Mon.</span><span style={{ fontWeight:700 }}>{n2(detalle.kg_hora_mon)} kg/h</span>
+        </div>
+      )}
       {detalle.hesp_h > 0 && (
         <div style={{ display:"flex", justifyContent:"space-between" }}>
           <span style={{ color:C.muted }}>⏰ Horas especiales</span><span style={{ fontWeight:700 }}>{n2(detalle.hesp_h)} h</span>
@@ -1595,6 +1643,18 @@ function DetalleAgregado({ detalle }) {
           <span style={{ color:C.muted }}>🔩 Galvanizado</span><span style={{ fontWeight:700 }}>{n2(detalle.galvanizado_kg)} kg</span>
         </div>
       )}
+      {detalle.desperdicio_kg > 0 && (
+        <div style={{ borderTop:`1px solid ${C.border}`, marginTop:2, paddingTop:9 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+            <span style={{ color:C.muted }}>⚠️ Desperdicio</span>
+            <span style={{ fontWeight:700, color:C.warn }}>{n2(detalle.desperdicio_kg)} kg — ${n2(detalle.desperdicio_usd)}</span>
+          </div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, paddingLeft:14 }}>
+            <span style={{ ...BDG(C.warn, true), fontSize:12 }}>{n2(detalle.pct_desperdicio_hierros)}% de los hierros</span>
+            <span style={{ ...BDG(C.muted, true), fontSize:12 }}>{n2(detalle.pct_desperdicio_total)}% del total</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1603,7 +1663,10 @@ function DetalleAgregado({ detalle }) {
 // Grilla pura, sin botón ni modal — usada standalone dentro de
 // ModalResumenCompleto (totales y desglose por ítem) y como base de
 // ResumenConDetalle.
-function ResumenRubros({ rubros, total_usd, total_kg }) {
+// extra (opcional): filas adicionales fuera de los 9 rubros fijos — hoy
+// usado solo para Negociación/Interés Financiero a nivel presupuesto (los
+// ítems no tienen esos campos, así que ahí queda undefined).
+function ResumenRubros({ rubros, total_usd, total_kg, extra }) {
   return (
     <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", columnGap:12, rowGap:6, fontSize:14 }}>
       <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Rubro</span>
@@ -1621,6 +1684,9 @@ function ResumenRubros({ rubros, total_usd, total_kg }) {
       <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
       <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
       <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
+      {(extra || []).map(e => (
+        <BarraRubro key={e.label} label={e.label} usd={e.usd} total={total_usd} kg={total_kg} color={e.color} />
+      ))}
     </div>
   );
 }
@@ -1680,7 +1746,10 @@ function ModalResumenCompleto({ pres, onClose }) {
             <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
               Totales del presupuesto
             </div>
-            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} />
+            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} extra={[
+              c.neg_usd !== 0 && { label:"💰 Negociación", usd:c.neg_usd, color:C.gold },
+              c.int_usd !== 0 && { label:"🏦 Interés Financiero", usd:c.int_usd, color:C.warn },
+            ].filter(Boolean)} />
             <div style={{ marginTop:10 }}><DetalleAgregado detalle={c.detalle} /></div>
           </div>
 
