@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -8,6 +8,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import AutocompleteObra from "./AutocompleteObra";
 import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
+import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
@@ -1000,8 +1001,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
+  const [showEmpresaRapida, setShowEmpresaRapida] = useState(false);
   const listaClientes = useListaClientes();
   const listaObras = useListaObras();
+  const listaEmpresas = useListaEmpresas();
   // Obligatorio resolver el cliente antes de crear el cómputo (2026-08-29) —
   // antes, un nombre nuevo se creaba solo y en silencio (resolverClienteId)
   // con solo nombre+empresa, sin ventana ni forma de cargar cargo/tel/email.
@@ -1011,6 +1014,9 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // del propio cómputo, que hacía las veces de "obra" sin ser lo mismo).
   const obraTexto = (nuevo.obra || "").trim();
   const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
+  // Empresa: entidad real (2026-08-29, "igual que cliente y obra").
+  const empresaTexto = (nuevo.empresa || "").trim();
+  const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
   // Prefill desde "Crear cómputo" en Solicitudes (asignadas desde steelCRM)
   // — mismo criterio liviano que el resto de la navegación cruzada de esta
   // app (onNidar/onExportarPresupuesto solo cambian de tab): se deja un
@@ -1059,12 +1065,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     try {
       const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
       const obra_id = c.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === c.obra.trim().toLowerCase())?.id || null) : null;
+      const empresa_id = c.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === c.empresa.trim().toLowerCase())?.id || null) : null;
       // vendedor es un id local (Date.now()) hasta que esa persona inicia
       // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
       // completa profileId (mismo patrón que meta_usuarios en steelCRM).
       const vendedor = usuarios.find(u => u.id === c.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = c;
-      await saveDBComputo({ ...resto, cliente_id, obra_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
+      await saveDBComputo({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
     }
@@ -1100,6 +1107,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     if (!nuevo.nombre.trim()) return;
     if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
     const nroManual = nuevo.nro?.trim();
     if (nroManual && computos.some(c => c.nro === nroManual)) {
       alert(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
@@ -1246,6 +1254,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             onCreated={o => setNuevo(s => ({ ...s, obra: o.nombre }))}
           />
         )}
+        {showEmpresaRapida && (
+          <EmpresaRapidaModal
+            nombreInicial={empresaTexto}
+            onClose={() => setShowEmpresaRapida(false)}
+            onCreated={e => setNuevo(s => ({ ...s, empresa: e.nombre }))}
+          />
+        )}
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
           <span style={{ fontSize:20 }}>📐</span>
           <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:C.text }}>Cómputo de Materiales</h2>
@@ -1287,7 +1302,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <label style={LBL}>Empresa</label>
             <AutocompleteEmpresa placeholder="Ej: CCFC" value={nuevo.empresa}
               onChange={v=>setNuevo(s=>({...s,empresa:v}))}
-              style={{ ...INP,marginBottom:10 }} />
+              style={{ ...INP,marginBottom: empresaSinResolver ? 4 : 10 }} />
+            {empresaSinResolver && (
+              <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+                ⚠️ Esta empresa no existe todavía
+                <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear empresa nueva</button>
+              </div>
+            )}
             <label style={LBL}>Obra</label>
             <AutocompleteObra placeholder="Ej: Nave Industrial" value={nuevo.obra}
               onChange={v=>setNuevo(s=>({...s,obra:v}))}

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -8,6 +8,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import AutocompleteObra from "./AutocompleteObra";
 import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
+import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
@@ -886,14 +887,18 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
   const [computoSel, setComputoSel] = useState("");
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
+  const [showEmpresaRapida, setShowEmpresaRapida] = useState(false);
   const listaClientes = useListaClientes();
   const listaObras = useListaObras();
-  // Obligatorio resolver cliente y obra antes de crear el anidado
+  const listaEmpresas = useListaEmpresas();
+  // Obligatorio resolver cliente, obra y empresa antes de crear el anidado
   // (2026-08-29) — mismo criterio que Computo.jsx.
   const clienteTexto = (cliente || "").trim();
   const clienteSinResolver = clienteTexto && !listaClientes.some(n => n.toLowerCase() === clienteTexto.toLowerCase());
   const obraTexto = (obra || "").trim();
   const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
+  const empresaTexto = (empresa || "").trim();
+  const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [confirmarGrupoId, setConfirmarGrupoId] = useState(null);
   const [verMateriales, setVerMateriales] = useState(false);
@@ -916,9 +921,10 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     try {
       const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
       const obra_id = a.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === a.obra.trim().toLowerCase())?.id || null) : null;
+      const empresa_id = a.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === a.empresa.trim().toLowerCase())?.id || null) : null;
       const vendedor = usuarios.find(u => u.id === a.vendedor)?.profileId || null;
       const { cliente, comentarios, ...resto } = a;
-      await saveDBAnidado({ ...resto, cliente_id, obra_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
+      await saveDBAnidado({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
     }
@@ -974,6 +980,7 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     if (!nombre.trim()) return;
     if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
     // Tipo de trabajo/Categoría se heredan solos del cómputo de origen (si
     // se importó desde uno) — 2026-08-24, pedido de Gino: clasificar desde
@@ -1092,6 +1099,13 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
           onCreated={o => setObra(o.nombre)}
         />
       )}
+      {showEmpresaRapida && (
+        <EmpresaRapidaModal
+          nombreInicial={empresaTexto}
+          onClose={() => setShowEmpresaRapida(false)}
+          onCreated={e => setEmpresa(e.nombre)}
+        />
+      )}
       {!actual && (
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:20 }}>
         <span style={{ fontSize:20 }}>✂️</span>
@@ -1118,7 +1132,13 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
             </div>
           )}
           <label style={LBL}>Empresa</label>
-          <AutocompleteEmpresa placeholder="Ej: CCFC" value={empresa} onChange={setEmpresa} style={{ ...INP,marginBottom:10 }}/>
+          <AutocompleteEmpresa placeholder="Ej: CCFC" value={empresa} onChange={setEmpresa} style={{ ...INP,marginBottom: empresaSinResolver ? 4 : 10 }}/>
+          {empresaSinResolver && (
+            <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+              ⚠️ Esta empresa no existe todavía
+              <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear empresa nueva</button>
+            </div>
+          )}
           <label style={LBL}>Obra</label>
           <AutocompleteObra placeholder="Ej: Nave Industrial" value={obra} onChange={setObra} style={{ ...INP,marginBottom: obraSinResolver ? 4 : 10 }}/>
           {obraSinResolver && (

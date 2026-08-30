@@ -2,15 +2,17 @@ import { useState } from "react";
 import { C } from "../styles/colors";
 import { useListaEmpresas } from "../utils/storage";
 
-// Mismo patrón que AutocompleteCliente, pero para el campo "Empresa"
-// (2026-08-23) — sin efecto de registro automático, es solo metadata que
-// viaja junto al Cliente (contacto). La lista sale de `clientes.empresa`.
+// Mismo patrón que AutocompleteCliente/AutocompleteObra — solo sugiere,
+// nunca crea nada al tipear. Desde 2026-08-29 la lista sale de la tabla
+// real `empresas` (antes derivaba de `clientes.empresa`, sin tabla
+// propia) — la única forma de crear una empresa nueva es
+// EmpresaRapidaModal, obligatorio en las pantallas que la usan.
 export default function AutocompleteEmpresa({ value, onChange, placeholder, style, autoFocus }) {
   const lista = useListaEmpresas();
   const [open, setOpen] = useState(false);
 
   const q = (value || "").trim().toLowerCase();
-  const sugerencias = q ? lista.filter((n) => n.toLowerCase().includes(q)).slice(0, 8) : [];
+  const sugerencias = q ? lista.filter((e) => (e.nombre || "").toLowerCase().includes(q)).slice(0, 8) : [];
 
   return (
     <div style={{ position: "relative" }}>
@@ -32,15 +34,15 @@ export default function AutocompleteEmpresa({ value, onChange, placeholder, styl
           marginTop: 2, maxHeight: 180, overflowY: "auto",
           boxShadow: "0 4px 12px rgba(0,0,0,.35)",
         }}>
-          {sugerencias.map((n) => (
+          {sugerencias.map((e2) => (
             <div
-              key={n}
-              onMouseDown={(e) => { e.preventDefault(); onChange(n); setOpen(false); }}
+              key={e2.id}
+              onMouseDown={(e) => { e.preventDefault(); onChange(e2.nombre); setOpen(false); }}
               style={{ padding: "7px 10px", cursor: "pointer", fontSize: 13, color: C.text }}
               onMouseEnter={(e) => { e.currentTarget.style.background = C.bg; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              {n}
+              {e2.nombre}
             </div>
           ))}
         </div>

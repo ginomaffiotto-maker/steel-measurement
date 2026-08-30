@@ -42,14 +42,14 @@ export const esUUID = (id) => !!id && UUID_RE.test(String(id));
 // en Fase 4) que no tienen columna en la tabla. Elegir explícitamente
 // evita que un campo nuevo local rompa el insert.
 const COLUMNAS_PRESUPUESTO_SM = [
-  "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "detalle",
+  "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "empresa", "empresa_id", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
   "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor",
   "eliminado", "eliminado_por", "eliminado_fecha",
 ];
-const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id",
+const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
-const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id",
+const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id", "empresa", "empresa_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
@@ -60,7 +60,7 @@ const COLUMNAS_ITEM_PRESUPUESTO = [
 // retroactivamente), es más seguro soltar la referencia que hacer
 // fallar todo el presupuesto por un vínculo que de todos modos ya no
 // apunta a nada real.
-const CAMPOS_REF_UUID = new Set(["cliente_id", "obra_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
+const CAMPOS_REF_UUID = new Set(["cliente_id", "obra_id", "empresa_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
 const soloColumnas = (obj, columnas) => {
   const row = {};
   for (const k of columnas) {
@@ -259,8 +259,26 @@ export const resolverNombreCliente = async (id) => {
   return data.nombre || "";
 };
 
-// Lista de empresas conocidas (para autocompletar el campo Empresa, 2026-08-23)
-// — deriva de las mismas filas de `clientes`, cacheada en módulo aparte.
+// ─── EMPRESAS — capa de acceso al backend (2026-08-29) ─────────────
+// Tabla `empresas`, compartida con steelCRM — hasta esta fecha "empresa"
+// era texto libre derivado de `clientes.empresa`, sin ninguna tabla
+// propia. Mismo criterio que obras: sin auto-creación silenciosa al
+// tipear, la única forma de crear una empresa nueva es EmpresaRapidaModal
+// (obligatorio) — el id se resuelve por nombre exacto contra la lista ya
+// cargada acá.
+export const loadDBEmpresas = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("empresas").select("*").order("nombre");
+  if (error) throw error;
+  return data;
+};
+export const saveDBEmpresa = async (empresa) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("empresas").upsert(empresa).select().single();
+  if (error) throw error;
+  return data;
+};
+
 let _cacheListaEmpresas = null;
 export const useListaEmpresas = () => {
   const [lista, setLista] = useState(() => _cacheListaEmpresas || []);
@@ -269,12 +287,10 @@ export const useListaEmpresas = () => {
     let vivo = true;
     (async () => {
       if (!(await esperarSesion()) || !vivo) return;
-      loadDBClientes()
+      loadDBEmpresas()
         .then((rows) => {
-          const empresas = Array.from(new Set((rows || []).map((r) => r.empresa).filter(Boolean)))
-            .sort((a, b) => a.localeCompare(b, "es"));
-          _cacheListaEmpresas = empresas;
-          if (vivo) setLista(empresas);
+          _cacheListaEmpresas = rows || [];
+          if (vivo) setLista(rows || []);
         })
         .catch(() => {});
     })();
