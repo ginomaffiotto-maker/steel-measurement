@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
@@ -1651,7 +1652,12 @@ function ResumenConDetalle({ rubros, total_usd, total_kg, pres }) {
 function ModalResumenCompleto({ pres, onClose }) {
   const c = calcPresupuesto(pres);
   const items = pres.items || [];
-  return (
+  // Portal a document.body: este modal se abre desde adentro de otros
+  // contenedores posicionados (el panel "Resumen" con position:sticky del
+  // sidebar, o adentro del propio modal de EditorRubros) — sin el portal,
+  // el position:fixed puede quedar atado a ese ancestro en vez de cubrir
+  // la pantalla entera (bug real reportado por Gino, 2026-08-30).
+  return createPortal(
     <div style={{ position:"fixed", inset:0, zIndex:1100, background:"#000d",
       display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ background:C.bg, border:`1.5px solid ${C.accent}44`,
@@ -1669,8 +1675,8 @@ function ModalResumenCompleto({ pres, onClose }) {
             color:C.muted, cursor:"pointer", fontSize:18, padding:"2px 10px", flexShrink:0 }}>✕</button>
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:18 }}>
-          <div style={{ maxWidth:600, marginBottom:28 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
+          <div style={{ maxWidth:600, margin:"0 auto 28px" }}>
             <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
               Totales del presupuesto
             </div>
@@ -1678,31 +1684,34 @@ function ModalResumenCompleto({ pres, onClose }) {
             <div style={{ marginTop:10 }}><DetalleAgregado detalle={c.detalle} /></div>
           </div>
 
-          <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
-            Detalle por ítem ({items.length})
-          </div>
-          {items.length === 0 && <div style={{ color:C.muted, fontSize:13 }}>Este presupuesto todavía no tiene ítems cargados.</div>}
-          {items.map(it => {
-            const ic = calcItem(it);
-            const q  = +it.cantidad || 1;
-            const rubrosIt = {
-              hier:ic.hier_usd*q, mat:ic.mat_usd*q, moFab:ic.moFab_usd*q, moMon:ic.moMon_usd*q,
-              hesp:ic.hesp_usd*q, tFab:ic.tFab_usd*q, tMon:ic.tMon_usd*q, trat:ic.trat_usd*q,
-              trasl:ic.trasl_usd*q, panto:ic.panto_usd*q,
-            };
-            return (
-              <div key={it.id} style={{ maxWidth:600, marginBottom:16, padding:14, background:C.card, border:`1px solid ${C.border}`, borderRadius:10 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
-                  <span style={{ fontWeight:700 }}>{it.titulo} <span style={{ color:C.muted, fontWeight:400 }}>×{it.cantidad}</span></span>
-                  <span style={{ fontWeight:800, color:C.ok }}>${n2(ic.total_usd)}</span>
+          <div style={{ maxWidth:600, margin:"0 auto" }}>
+            <div style={{ fontWeight:700, fontSize:13, color:C.steel, textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>
+              Detalle por ítem ({items.length})
+            </div>
+            {items.length === 0 && <div style={{ color:C.muted, fontSize:13 }}>Este presupuesto todavía no tiene ítems cargados.</div>}
+            {items.map(it => {
+              const ic = calcItem(it);
+              const q  = +it.cantidad || 1;
+              const rubrosIt = {
+                hier:ic.hier_usd*q, mat:ic.mat_usd*q, moFab:ic.moFab_usd*q, moMon:ic.moMon_usd*q,
+                hesp:ic.hesp_usd*q, tFab:ic.tFab_usd*q, tMon:ic.tMon_usd*q, trat:ic.trat_usd*q,
+                trasl:ic.trasl_usd*q, panto:ic.panto_usd*q,
+              };
+              return (
+                <div key={it.id} style={{ marginBottom:16, padding:14, background:C.card, border:`1px solid ${C.border}`, borderRadius:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
+                    <span style={{ fontWeight:700 }}>{it.titulo} <span style={{ color:C.muted, fontWeight:400 }}>×{it.cantidad}</span></span>
+                    <span style={{ fontWeight:800, color:C.ok }}>${n2(ic.total_usd)}</span>
+                  </div>
+                  <ResumenRubros rubros={rubrosIt} total_usd={ic.total_usd} total_kg={ic.total_kg} />
                 </div>
-                <ResumenRubros rubros={rubrosIt} total_usd={ic.total_usd} total_kg={ic.total_kg} />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
