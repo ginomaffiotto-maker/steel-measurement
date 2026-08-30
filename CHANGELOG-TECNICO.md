@@ -183,6 +183,38 @@ directamente ausentes en una, un tercero con estado desactualizado).
 
 ---
 
+## 2026-08-29/30 — Empresa como entidad real ("igual que Cliente y Obra")
+
+- **Tabla `empresas` nueva** (compartida Steel CRM/Steel Measurement,
+  migración `20260829150000_empresas.sql`), reemplaza el texto libre que
+  tenía Empresa hasta ahora en toda la plataforma. `empresa_id` agregada a
+  `clientes`, `computos`, `anidados`, `presupuestos_sm` (FK directa, sin
+  tabla de vínculo intermedia). `computos` gana además columna `empresa`
+  (texto) — nunca la había tenido.
+- Sin auto-creación silenciosa en ningún lado: la única forma de crear una
+  empresa nueva es `EmpresaRapidaModal`, obligatorio (mismo cartel "no
+  existe todavía" que ya tenían Cliente y Obra) en BudgetModal/
+  Presupuestos/Solicitudes (Steel CRM) y Cómputo/Anidado/Presupuesto
+  (Steel Measurement). Sin pantalla de administración propia — decisión
+  explícita de Gino, alta solo desde el cartel por ahora.
+- Migración backfillea automáticamente toda razón social ya en uso
+  (`clientes`/`obras`/`presupuestos_crm`/`presupuestos_sm`/
+  `historial_trabajos`) para no bloquear presupuestos/clientes existentes
+  apenas alguien toque el campo.
+- **Bug real encontrado y corregido de paso**: `presupuestos_sm.empresa`
+  tenía columna real en la base pero nunca se sincronizaba — el campo
+  local (`cliente`, no `empresa`) se descartaba explícitamente antes del
+  insert. `anidados.empresa` tenía el mismo problema por faltar en el
+  allowlist de columnas de `storage.js`.
+- **Fix real de paso en Steel CRM**: el buscador de Cliente en "Crear
+  presupuesto nuevo" (Presupuestos.jsx) tenía su propio código separado
+  de `ClienteContactoField` con el mismo bug ya corregido ahí (matcheaba
+  por nombre O empresa) — encontrado al revisar el reporte de Gino con
+  captura real.
+- Sin verificar en vivo todavía — build limpio en los dos repos.
+
+---
+
 ## Mantenimiento de este documento
 
 Misma Regla 9 que los otros documentos compartidos, con una diferencia de

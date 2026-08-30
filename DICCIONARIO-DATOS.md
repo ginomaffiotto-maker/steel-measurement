@@ -75,9 +75,28 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 | `zona` | text | |
 | `cumpleanos` | date | |
 | `notas` | text | |
+| `empresa_id` | uuid → `empresas` on delete set null | Agregada 2026-08-29. Convive con `empresa` (texto) — no se resuelve/sincroniza en ningún `toDB` todavía (a diferencia de `obra_id`/`empresa_id` en otras tablas), queda la columna lista para cuando se decida wirearla. |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
 
 Índice extra: `(tenant_id, empresa)` — soporta el patrón `matchClienteBudget` (empresa con varios contactos).
+
+### `empresas` (única, compartida entre Steel CRM y Steel Measurement — nueva 2026-08-29)
+| Columna | Tipo | Nota |
+|---|---|---|
+| `nombre` | text | Razón social. |
+| `rut`, `direccion`, `telefono`, `email`, `notas` | text | |
+| `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
+
+"Igual que Cliente y Obra" (pedido de Gino) — reemplaza el texto libre que
+tenía Empresa hasta ahora, sin ninguna tabla propia. Sin auto-creación
+silenciosa al tipear en ningún formulario: la única forma de crear una fila
+nueva es `EmpresaRapidaModal`, obligatorio. Sin pantalla de administración
+propia (a diferencia de Clientes/Obras, que sí la tienen en Steel CRM) —
+decisión explícita de Gino, solo alta desde el cartel por ahora. La
+migración `20260829150000_empresas.sql` backfillea automáticamente toda
+razón social ya en uso en `clientes`/`obras`/`presupuestos_crm`/
+`presupuestos_sm`/`historial_trabajos` (no en `computos`/`anidados`: esas
+dos nunca tuvieron columna `empresa` en la base, nada que recuperar).
 
 ---
 
@@ -198,6 +217,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 | `nombre`, `contacto`, `obra`, `detalle`, `empresa` | text | |
 | `cliente_id` | uuid → `clientes` on delete set null | |
 | `obra_id` | uuid → `obras` on delete set null | Agregada 2026-08-29. `obra` (texto) sigue existiendo aparte — `obra_id` es la resolución real contra la tabla `obras` compartida con Steel CRM, sin auto-creación silenciosa (a diferencia de `cliente_id`): la única forma de crear una obra nueva es `ObraRapidaModal`. |
+| `empresa_id` | uuid → `empresas` on delete set null | Agregada 2026-08-29, mismo criterio que `obra_id`. La columna `empresa` (texto, razón social) ya existía en la base pero nunca se sincronizaba — el campo local se llama `cliente`, no `empresa`, y quedaba descartado explícitamente antes del insert (bug real, cerrado el mismo día junto con `empresa_id`). |
 | `tipo_trabajo`, `categoria` | text | Misma lista canónica de 32 que `tipo` en Steel CRM — sin traducción. Viaja Cómputo → Anidado → Presupuesto (traspaso automático, nunca pisa lo ya cargado a mano). |
 | `estado` | text not null default `'borrador'`, check in (`borrador`,`enviado`,`aprobado`,`rechazado`) | **Vocabulario propio, distinto al de Steel CRM** — nunca mapear 1:1. |
 | `clonado_de_id` | uuid → `presupuestos_sm` (self) on delete set null | |
@@ -226,7 +246,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 | `item_trat_otros` | `trat_id → item_trat_superficie` cascade — `nombre`, `usd_kg` | |
 
 ### `computos`
-`nombre`, `fecha`, `cliente_id → clientes`, `cantidad_total`, `nro`, `categoria`, `tipo_trabajo` (agregadas 24/8, ver arriba), `vendedor → profiles`. ✅ soft-delete (agregado 24/8, mismo commit que `categoria`/`tipo_trabajo`/`vendedor` — un hueco real donde estos 3 campos se guardaban solo local y nunca sincronizaban, cerrado en la misma migración). `obra` (text) y `obra_id → obras` on delete set null, agregadas 2026-08-29 — antes Cómputo no tenía ningún campo de obra propio, distinto de su `nombre`.
+`nombre`, `fecha`, `cliente_id → clientes`, `cantidad_total`, `nro`, `categoria`, `tipo_trabajo` (agregadas 24/8, ver arriba), `vendedor → profiles`. ✅ soft-delete (agregado 24/8, mismo commit que `categoria`/`tipo_trabajo`/`vendedor` — un hueco real donde estos 3 campos se guardaban solo local y nunca sincronizaban, cerrado en la misma migración). `obra` (text) y `obra_id → obras` on delete set null, agregadas 2026-08-29 — antes Cómputo no tenía ningún campo de obra propio, distinto de su `nombre`. `empresa` (text) y `empresa_id → empresas` on delete set null, mismo commit — tampoco tenía columna de empresa (el valor solo viajaba embebido en el cliente vía `resolverClienteId`).
 
 ### `computo_items`
 `computo_id → computos` cascade. `titulo`, `cantidad`, `n_plano`, `orden`.
@@ -235,7 +255,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 `computo_item_id → computo_items` cascade. `tipo` check (`perfil`,`plancha`). `material_id` (text, referencia lógica al catálogo de biblioteca — sin FK real porque biblioteca usa 4 tablas distintas según tipo). `material_nombre`, `kg_m`, `sup_m2m`, `largo_mm`, `ancho_mm`, `kg_m2`, `cantidad`. `granallado`/`pintura`/`galvanizado` (bool) + sus `pct_*`. `corte_maquina` (bool), `maquina`. `precio_raw`, `precio_por` (check `kg`/`m`/`m2`), `moneda`, `proveedor`, `fecha_precio`, `obs`.
 
 ### `anidados`
-`nombre`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `vendedor → profiles`. ✅ soft-delete (mismo momento y motivo que `computos`). `obra_id → obras` on delete set null, agregada 2026-08-29 — convive con `obra` (texto), mismo criterio que `presupuestos_sm`.
+`nombre`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `vendedor → profiles`. ✅ soft-delete (mismo momento y motivo que `computos`). `obra_id → obras` on delete set null, agregada 2026-08-29 — convive con `obra` (texto), mismo criterio que `presupuestos_sm`. `empresa_id → empresas` on delete set null, mismo commit — `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día: faltaba en el allowlist de columnas de `storage.js`).
 
 ### `anidado_grupos`
 `anidado_id → anidados` cascade. `tipo` check (`perfil`,`plancha`). `material_id`, `material_nombre`, `kg_m`, `sup_m2m`, `kg_m2` (agregada aparte — los grupos tipo plancha la necesitan, los de perfil usan `kg_m`/`sup_m2m`). `largo_barra_mm`, `kerf_mm`, `sheet_w`, `sheet_h`. `granallado`/`pintura`/`galvanizado` (bool). **`resultado jsonb`** — única columna verdaderamente "libre" del esquema, a propósito: es la salida calculada del algoritmo de optimización de corte, no una línea de costo estructurada. `orden`.

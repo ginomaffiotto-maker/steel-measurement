@@ -79,6 +79,7 @@ flowchart TB
     end
 
     CLI[("clientes<br/>(tabla única, compartida)")]
+    EMP[("empresas<br/>(tabla única, compartida — desde 2026-08-29)")]
 
     subgraph CRM["Steel CRM"]
         PCRM[presupuestos_crm]
@@ -117,6 +118,7 @@ flowchart TB
 
     PROF --> TEN
     CLI -.tenant_id.-> TEN
+    EMP -.->|"empresa_id"| CLI
 
     CLI --> PCRM
     PCRM --> SEG
@@ -153,6 +155,9 @@ flowchart TB
     OBRA -.->|"obra_id (2026-08-29)"| COMPU
     OBRA -.->|"obra_id (2026-08-29)"| ANID
     OBRA -.->|"obra_id (2026-08-29)"| PSM
+    EMP -.->|"empresa_id (2026-08-29)"| COMPU
+    EMP -.->|"empresa_id (2026-08-29)"| ANID
+    EMP -.->|"empresa_id (2026-08-29)"| PSM
     PSM --> COMPSM
     COMPU --> COMPSM
     ANID --> COMPSM
@@ -180,6 +185,7 @@ el resto del diagrama.
 | `historial_interacciones` | `id` | `cliente_id→clientes`, `presupuesto_id→presupuestos_crm` | `interaccionToDB`/`FromDB` | ✅ | |
 | `competencia` | `id` | `presupuesto_id→presupuestos_crm` | `competenciaToDB`/`FromDB` | — | Análisis de presupuestos perdidos. |
 | `obras` | `id` | — | `obraToDB`/`FromDB` | ✅ | Hasta 2026-08-29 solo la usaba Steel CRM (vía `obra_presupuestos`) — desde esa fecha, `computos`/`anidados`/`presupuestos_sm` de Steel Measurement también resuelven `obra_id` contra esta misma tabla (§5), sin tabla de vínculo intermedia (FK directa, no muchos-a-muchos como `obra_presupuestos`). |
+| `empresas` | `id` | — | `saveEmpresaDB`/`loadEmpresasDB` | ✅ | Nueva 2026-08-29 ("igual que Cliente y Obra", pedido de Gino) — antes Empresa era solo texto libre sin tabla propia. `clientes.empresa_id`, `computos.empresa_id`, `anidados.empresa_id` y `presupuestos_sm.empresa_id` la referencian, todas FK directa (sin tabla de vínculo intermedia). Sin auto-creación silenciosa al tipear en ningún lado — la única forma de crear una empresa nueva es `EmpresaRapidaModal`, obligatorio. Sin pantalla de administración propia (solo alta desde el cartel, decisión explícita de Gino). Migración `20260829150000_empresas.sql` backfillea automáticamente toda razón social ya en uso en `clientes`/`obras`/`presupuestos_crm`/`presupuestos_sm`/`historial_trabajos` para no bloquear datos existentes (`computos`/`anidados` quedan afuera del backfill: nunca tuvieron columna `empresa` en la base). |
 | `obra_presupuestos` | `id` | `obra_id→obras`, `presupuesto_id→presupuestos_crm` | `saveObraPresupuestosDB`/`syncObraPresupuestosDB` | — | Tabla de vínculo. El esquema permite muchos-a-muchos (`unique(obra_id, presupuesto_id)`) pero la UI actual (`BudgetModal`) solo deja un presupuesto vinculado a **una** obra a la vez — se desvincula de la anterior antes de vincular la nueva. |
 | `solicitudes` | `id` | `cliente_id→clientes`, `asignado_a→profiles`, `presupuesto_id→presupuestos_crm` | `solicitudToDB`/`FromDB` | ✅ | Solicitud entrante con scoring IA. `categoria` (2026-08-26, lista canónica de 32, obligatoria al guardar) y `creado_por` (texto, fijado una sola vez al crear — `asignado_a` es reasignable, este no) agregados. Al "ganar" se referencia el presupuesto creado; también se puede crear un presupuesto directo desde la solicitud antes de eso ("Crear presupuesto desde esta solicitud"). Leída directo por Steel Measurement — ver §6. |
 | `solicitud_versiones` | `id` | `solicitud_id→solicitudes` | `versionSolicitudToDB`/`FromDB` | — | |
@@ -196,15 +202,15 @@ el resto del diagrama.
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
-| `presupuestos_sm` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. `obra` (texto) convive con `obra_id` (real, resuelto contra la lista ya cargada — sin auto-creación silenciosa, a diferencia de `cliente_id`/`resolverClienteId`; la única forma de crear una obra nueva es `ObraRapidaModal`). |
+| `presupuestos_sm` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. `obra` (texto) convive con `obra_id` (real, resuelto contra la lista ya cargada — sin auto-creación silenciosa, a diferencia de `cliente_id`/`resolverClienteId`; la única forma de crear una obra nueva es `ObraRapidaModal`). `empresa` (texto, razón social — el campo local se llama `cliente`, no `empresa`) tenía columna real en la base pero **nunca se sincronizaba** (bug real, cerrado 2026-08-29 junto con `empresa_id`): quedaba explícitamente descartado antes del insert. |
 | `items_presupuesto_sm` | `id` | `presupuesto_id→presupuestos_sm`, `computo_id→computos` (opcional), `anidado_id→anidados` (opcional) | `loadDBItems`/`saveDBItem` | — | Un ítem puede traer material de un cómputo o de un anidado, no ambos a la vez en general. |
 | `item_hierros`, `item_mat_generales`, `item_mo_fabricacion`, `item_mo_montajes`, `item_terc_fabricacion`, `item_terc_montajes`, `item_traslados`, `item_corte_pantografo` | `id` c/u | `item_id→items_presupuesto_sm` | dentro de `saveDBItem` | — | Los 9 rubros de costo por ítem (8 tablas de línea + 1 de tratamiento). |
 | `item_trat_superficie` | `id` (unique por item) | `item_id→items_presupuesto_sm` (1:1) | dentro de `saveDBItem` | — | `item_trat_pinturas`/`item_trat_otros` cuelgan de esta, no directo del ítem. |
 | `item_trat_pinturas`, `item_trat_otros` | `id` c/u | `trat_id→item_trat_superficie` | dentro de `saveDBItem` | — | |
-| `computos` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `vendedor→profiles` | `loadDBComputos`/`saveDBComputo` | ✅ | `categoria`/`tipo_trabajo` viajan de acá hacia Anidado y Presupuesto (traspaso automático, no piso lo ya cargado a mano). `obra`/`obra_id` son campos nuevos (2026-08-29) — antes Cómputo no distinguía "obra" de su propio `nombre`. |
+| `computos` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles` | `loadDBComputos`/`saveDBComputo` | ✅ | `categoria`/`tipo_trabajo` viajan de acá hacia Anidado y Presupuesto (traspaso automático, no piso lo ya cargado a mano). `obra`/`obra_id` y `empresa`/`empresa_id` son campos nuevos (2026-08-29) — antes Cómputo no distinguía "obra" de su propio `nombre`, y no tenía ninguna columna de empresa (el valor sólo viajaba embebido en el cliente vía `resolverClienteId`). |
 | `computo_items` | `id` | `computo_id→computos` | dentro de `saveDBComputo` | — | |
 | `computo_piezas` | `id` | `computo_item_id→computo_items` | dentro de `saveDBComputo` | — | Perfil o plancha, con % de granallado/pintura/galvanizado y corte por máquina. |
-| `anidados` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `vendedor→profiles` | `loadDBAnidados`/`saveDBAnidado` | ✅ | `obra` (texto) convive con `obra_id` (real) — mismo criterio que `presupuestos_sm`. |
+| `anidados` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles` | `loadDBAnidados`/`saveDBAnidado` | ✅ | `obra` (texto) convive con `obra_id` (real) — mismo criterio que `presupuestos_sm`. `empresa_id` es nueva; `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día — faltaba en el allowlist de columnas). |
 | `anidado_grupos` | `id` | `anidado_id→anidados` | dentro de `saveDBAnidado` | — | `resultado jsonb` = salida calculada del algoritmo de optimización de corte (única columna jsonb "libre" del esquema, a propósito). |
 | `anidado_piezas` | `id` | `grupo_id→anidado_grupos` | dentro de `saveDBAnidado` | — | |
 | `historial_trabajos` | `id` | `cliente_id→clientes`, `vendedor→profiles` | `loadDBHistorialTrabajos`/`saveDBTrabajoHistorico` | ✅ | Benchmark: % de cada rubro sobre el total (`pct_hier`, `pct_mat`, `pct_mo_fab`, etc.) — insumo de Predictor Eq. |
