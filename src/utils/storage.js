@@ -298,6 +298,19 @@ export const loadDBEmpresas = async () => {
 };
 export const saveDBEmpresa = async (empresa) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const nombre = (empresa.nombre || "").trim();
+  // Evita duplicados (bug real reportado por Gino, 2026-08-30) — mismo
+  // criterio que steelcrm: a diferencia de Obra (dos obras reales
+  // distintas pueden compartir nombre), una Empresa es una razón social
+  // real, no debería poder crearse dos veces. Solo aplica en el alta
+  // (sin id todavía) — no interfiere con una actualización real.
+  if (nombre && !empresa.id) {
+    const { data: existentes, error: eSel } = await supabase.from("empresas").select("*").ilike("nombre", nombre);
+    if (!eSel) {
+      const match = existentes?.find((e) => (e.nombre || "").trim().toLowerCase() === nombre.toLowerCase());
+      if (match) return match;
+    }
+  }
   const { data, error } = await supabase.from("empresas").upsert(empresa).select().single();
   if (error) throw error;
   return data;
