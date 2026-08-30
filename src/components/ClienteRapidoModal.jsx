@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP, LBL, BTN } from "../styles/colors";
-import { saveDBCliente, registrarCliente } from "../utils/storage";
+import { saveDBCliente, registrarCliente, useListaClientes } from "../utils/storage";
 
 // ─── ALTA RÁPIDA DE CLIENTE (2026-08-29) ──────────────────────────
 // Antes, tipear un nombre nuevo en AutocompleteCliente lo creaba solo y en
@@ -13,9 +13,22 @@ export default function ClienteRapidoModal({ nombreInicial, empresaInicial, onCr
   const [f, setF] = useState({ nombre: nombreInicial || "", empresa: empresaInicial || "", cargo: "", celular: "", email: "", zona: "" });
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState("");
+  const listaClientes = useListaClientes();
+  // Cartel si el nombre tipeado DENTRO del modal coincide con un cliente ya
+  // existente (2026-08-30, pedido de Gino) — se permite crear uno nuevo
+  // igual de todos modos (puede haber dos personas distintas con el mismo
+  // nombre). "Usar el existente" no crea fila nueva — el nombre solo se
+  // pasa tal cual, el resto del sistema ya matchea por nombre exacto.
+  const [existente, setExistente] = useState(null);
+
+  function intentarGuardar() {
+    if (!f.nombre.trim()) return alert("Ingresá el nombre");
+    const match = listaClientes.find(n => n.toLowerCase() === f.nombre.trim().toLowerCase());
+    if (match) { setExistente(match); return; }
+    guardar();
+  }
 
   async function guardar() {
-    if (!f.nombre.trim()) return alert("Ingresá el nombre");
     setGuardando(true);
     setErr("");
     try {
@@ -38,26 +51,40 @@ export default function ClienteRapidoModal({ nombreInicial, empresaInicial, onCr
           <div style={{ color: C.ok, fontWeight: 800, fontSize: 15 }}>👤 Cliente nuevo</div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 20 }}>✕</button>
         </div>
-        <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>No existe todavía en el sistema — completá los datos para crear su ficha.</div>
-        <label style={LBL}>Nombre *</label>
-        <input autoFocus style={{ ...INP, marginBottom: 10 }} value={f.nombre} onChange={e => setF(x => ({ ...x, nombre: e.target.value }))} />
-        <label style={LBL}>Empresa</label>
-        <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} onChange={e => setF(x => ({ ...x, empresa: e.target.value }))} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div><label style={LBL}>Cargo</label><input style={{ ...INP, marginBottom: 10 }} value={f.cargo} onChange={e => setF(x => ({ ...x, cargo: e.target.value }))} /></div>
-          <div><label style={LBL}>Zona</label><input style={{ ...INP, marginBottom: 10 }} value={f.zona} onChange={e => setF(x => ({ ...x, zona: e.target.value }))} /></div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div><label style={LBL}>Celular</label><input style={{ ...INP, marginBottom: 10 }} value={f.celular} onChange={e => setF(x => ({ ...x, celular: e.target.value }))} /></div>
-          <div><label style={LBL}>Email</label><input style={{ ...INP, marginBottom: 10 }} value={f.email} onChange={e => setF(x => ({ ...x, email: e.target.value }))} /></div>
-        </div>
-        {err && <div style={{ color: C.err, fontSize: 11, marginBottom: 10, fontWeight: 600 }}>⚠ {err}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-          <button onClick={guardar} disabled={guardando} style={{ ...BTN("ok"), flex: 1, opacity: guardando ? 0.6 : 1 }}>
-            {guardando ? "Creando…" : "Crear cliente"}
-          </button>
-          <button onClick={onClose} style={{ ...BTN("ghost"), flex: 1 }}>Cancelar</button>
-        </div>
+        {existente ? (
+          <div style={{ background: C.warn + "15", border: `1px solid ${C.warn}44`, borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 13, color: C.warn, fontWeight: 700, marginBottom: 8 }}>⚠️ Ya existe un cliente llamado "{existente}"</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>¿Es la misma persona?</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => { onCreated({ nombre: existente, empresa: f.empresa.trim() }); onClose(); }} style={{ ...BTN("ok") }}>Sí, usar el existente</button>
+              <button onClick={guardar} disabled={guardando} style={{ ...BTN("ghost"), opacity: guardando ? 0.6 : 1 }}>No, crear uno nuevo igual</button>
+              <button onClick={() => setExistente(null)} style={{ ...BTN("ghost") }}>Volver</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>No existe todavía en el sistema — completá los datos para crear su ficha.</div>
+            <label style={LBL}>Nombre *</label>
+            <input autoFocus style={{ ...INP, marginBottom: 10 }} value={f.nombre} onChange={e => setF(x => ({ ...x, nombre: e.target.value }))} />
+            <label style={LBL}>Empresa</label>
+            <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} onChange={e => setF(x => ({ ...x, empresa: e.target.value }))} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={LBL}>Cargo</label><input style={{ ...INP, marginBottom: 10 }} value={f.cargo} onChange={e => setF(x => ({ ...x, cargo: e.target.value }))} /></div>
+              <div><label style={LBL}>Zona</label><input style={{ ...INP, marginBottom: 10 }} value={f.zona} onChange={e => setF(x => ({ ...x, zona: e.target.value }))} /></div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={LBL}>Celular</label><input style={{ ...INP, marginBottom: 10 }} value={f.celular} onChange={e => setF(x => ({ ...x, celular: e.target.value }))} /></div>
+              <div><label style={LBL}>Email</label><input style={{ ...INP, marginBottom: 10 }} value={f.email} onChange={e => setF(x => ({ ...x, email: e.target.value }))} /></div>
+            </div>
+            {err && <div style={{ color: C.err, fontSize: 11, marginBottom: 10, fontWeight: 600 }}>⚠ {err}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <button onClick={intentarGuardar} disabled={guardando} style={{ ...BTN("ok"), flex: 1, opacity: guardando ? 0.6 : 1 }}>
+                {guardando ? "Creando…" : "Crear cliente"}
+              </button>
+              <button onClick={onClose} style={{ ...BTN("ghost"), flex: 1 }}>Cancelar</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

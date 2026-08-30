@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP, LBL, BTN } from "../styles/colors";
-import { saveDBObra, agregarAListaObras } from "../utils/storage";
+import { saveDBObra, agregarAListaObras, useListaObras } from "../utils/storage";
 
 // ─── ALTA RÁPIDA DE OBRA (2026-08-29) ─────────────────────────────
 // Antes, "Obra" era texto libre suelto en Anidado/Presupuesto (sin ningún
@@ -12,9 +12,21 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
   const [f, setF] = useState({ nombre: nombreInicial || "", empresa: empresaInicial || "", direccion: "", fecha_inicio: new Date().toISOString().split("T")[0], estado: "activa" });
   const [guardando, setGuardando] = useState(false);
   const [err, setErr] = useState("");
+  const listaObras = useListaObras();
+  // Cartel si el nombre tipeado DENTRO del modal coincide con una obra ya
+  // existente (2026-08-30, pedido de Gino) — se permite crear una nueva
+  // igual de todos modos (dos obras reales distintas pueden compartir
+  // nombre, ej. "Ampliación" para dos clientes distintos).
+  const [existente, setExistente] = useState(null);
+
+  function intentarGuardar() {
+    if (!f.nombre.trim()) return alert("Ingresá el nombre de la obra");
+    const match = listaObras.find((o) => (o.nombre || "").trim().toLowerCase() === f.nombre.trim().toLowerCase());
+    if (match) { setExistente(match); return; }
+    guardar();
+  }
 
   async function guardar() {
-    if (!f.nombre.trim()) return alert("Ingresá el nombre de la obra");
     setGuardando(true);
     setErr("");
     try {
@@ -37,29 +49,43 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
           <div style={{ color: C.ok, fontWeight: 800, fontSize: 15 }}>🏗️ Obra nueva</div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 20 }}>✕</button>
         </div>
-        <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>No existe todavía en el sistema — completá los datos para crear su ficha.</div>
-        <label style={LBL}>Nombre *</label>
-        <input autoFocus style={{ ...INP, marginBottom: 10 }} value={f.nombre} onChange={e => setF(x => ({ ...x, nombre: e.target.value }))} />
-        <label style={LBL}>Empresa</label>
-        <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} onChange={e => setF(x => ({ ...x, empresa: e.target.value }))} />
-        <label style={LBL}>Dirección</label>
-        <input style={{ ...INP, marginBottom: 10 }} value={f.direccion} onChange={e => setF(x => ({ ...x, direccion: e.target.value }))} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div><label style={LBL}>Fecha inicio</label><input type="date" style={{ ...INP, marginBottom: 10 }} value={f.fecha_inicio} onChange={e => setF(x => ({ ...x, fecha_inicio: e.target.value }))} /></div>
-          <div>
-            <label style={LBL}>Estado</label>
-            <select style={{ ...INP, marginBottom: 10 }} value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
-              {["activa", "finalizada", "pausada", "cancelada"].map(s => <option key={s}>{s}</option>)}
-            </select>
+        {existente ? (
+          <div style={{ background: C.warn + "15", border: `1px solid ${C.warn}44`, borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 13, color: C.warn, fontWeight: 700, marginBottom: 8 }}>⚠️ Ya existe una obra llamada "{existente.nombre}"</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>¿Es la misma obra?</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => { onCreated(existente); onClose(); }} style={{ ...BTN("ok") }}>Sí, usar la existente</button>
+              <button onClick={guardar} disabled={guardando} style={{ ...BTN("ghost"), opacity: guardando ? 0.6 : 1 }}>No, crear una nueva igual</button>
+              <button onClick={() => setExistente(null)} style={{ ...BTN("ghost") }}>Volver</button>
+            </div>
           </div>
-        </div>
-        {err && <div style={{ color: C.err, fontSize: 11, marginBottom: 10, fontWeight: 600 }}>⚠ {err}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-          <button onClick={guardar} disabled={guardando} style={{ ...BTN("ok"), flex: 1, opacity: guardando ? 0.6 : 1 }}>
-            {guardando ? "Creando…" : "Crear obra"}
-          </button>
-          <button onClick={onClose} style={{ ...BTN("ghost"), flex: 1 }}>Cancelar</button>
-        </div>
+        ) : (
+          <>
+            <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>No existe todavía en el sistema — completá los datos para crear su ficha.</div>
+            <label style={LBL}>Nombre *</label>
+            <input autoFocus style={{ ...INP, marginBottom: 10 }} value={f.nombre} onChange={e => setF(x => ({ ...x, nombre: e.target.value }))} />
+            <label style={LBL}>Empresa</label>
+            <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} onChange={e => setF(x => ({ ...x, empresa: e.target.value }))} />
+            <label style={LBL}>Dirección</label>
+            <input style={{ ...INP, marginBottom: 10 }} value={f.direccion} onChange={e => setF(x => ({ ...x, direccion: e.target.value }))} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={LBL}>Fecha inicio</label><input type="date" style={{ ...INP, marginBottom: 10 }} value={f.fecha_inicio} onChange={e => setF(x => ({ ...x, fecha_inicio: e.target.value }))} /></div>
+              <div>
+                <label style={LBL}>Estado</label>
+                <select style={{ ...INP, marginBottom: 10 }} value={f.estado} onChange={e => setF(x => ({ ...x, estado: e.target.value }))}>
+                  {["activa", "finalizada", "pausada", "cancelada"].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            {err && <div style={{ color: C.err, fontSize: 11, marginBottom: 10, fontWeight: 600 }}>⚠ {err}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <button onClick={intentarGuardar} disabled={guardando} style={{ ...BTN("ok"), flex: 1, opacity: guardando ? 0.6 : 1 }}>
+                {guardando ? "Creando…" : "Crear obra"}
+              </button>
+              <button onClick={onClose} style={{ ...BTN("ghost"), flex: 1 }}>Cancelar</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
