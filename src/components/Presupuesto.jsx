@@ -76,13 +76,13 @@ function AutocompleteMaterial({ value, onChange, onSeleccionar, opciones, placeh
           <div style={{ maxHeight:220, overflowY:"auto" }}>
             {lista.map(o => (
               <div key={o.id} onMouseDown={()=>{ onSeleccionar(o); setOpen(false); }}
-                style={{ padding:"7px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, fontSize:12 }}
+                style={{ padding:"7px 12px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, fontSize:13 }}
                 onMouseEnter={e=>e.currentTarget.style.background=C.iron}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span style={{ flex:1 }}>{o.nombre}</span>
                 {o.precio_usd_kg > 0
-                  ? <span style={{ fontSize:11, color:C.muted }}>${n2(o.precio_usd_kg)}/kg</span>
-                  : <span title="Sin precio cargado" style={{ fontSize:11, color:C.warn }}>⚠ sin precio</span>}
+                  ? <span style={{ fontSize:13, color:C.muted }}>${n2(o.precio_usd_kg)}/kg</span>
+                  : <span title="Sin precio cargado" style={{ fontSize:13, color:C.warn }}>⚠ sin precio</span>}
               </div>
             ))}
           </div>
@@ -275,6 +275,22 @@ export function calcItem(it) {
   const trasl_usd = (it.traslados || []).reduce((s, t) => s + (+t.subtotal_usd || 0), 0);
   const panto_usd = (it.corte_pantografo || []).reduce((s, c) => s + (+c.subtotal_usd || 0), 0);
 
+  // Detalle para el desplegable de "Ver detalle completo" del resumen —
+  // horas por tipo (Común/Nocturna/Extra/Lluvia) y litros/superficie de
+  // tratamiento, valores que ya se calculaban dentro de TabMO/TabTrat
+  // pero nunca llegaban hasta acá.
+  const horasPorTipo = (rows) => {
+    const out = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
+    (rows || []).forEach(r => { const t = normalizarTipoHora(r.tipo_hora); out[t] = (out[t]||0) + (+r.cant_horas||0); });
+    return out;
+  };
+  const moFab_horasPorTipo = horasPorTipo(it.mo_fabricacion);
+  const moMon_horasPorTipo = horasPorTipo(it.mo_montajes);
+  const hesp_h     = (it.horas_especiales || []).reduce((s, h) => s + (+h.cant_horas || 0), 0);
+  const trat_lt    = (ts.pinturas || []).reduce((s, p) => s + (+p.cant_lt||0) * (+p.cant_manos||0), 0);
+  const arenado_m2 = +ts.arenado_m2 || 0;
+  const galvanizado_kg = ts.galvanizado ? (+ts.galvanizado_kg || 0) : 0;
+
   const total_unit = hier_usd + mat_usd + moFab_usd + moMon_usd + hesp_usd
                    + tFab_usd + tMon_usd + trat_usd + trasl_usd + panto_usd;
   const total_usd  = total_unit * cant;
@@ -287,12 +303,16 @@ export function calcItem(it) {
     total_unit, total_usd, total_kg, usd_kg, kg_con_desp, kg_desp_pond,
     pct_desperdicio: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
     kg_hora_fab: (hier_kg > 0 && moFab_h > 0) ? hier_kg / moFab_h : 0,
+    moFab_horasPorTipo, moMon_horasPorTipo, hesp_h, trat_lt, arenado_m2, galvanizado_kg,
   };
 }
 
 export function calcPresupuesto(p) {
   const rubros = { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 };
   let total_usd = 0, total_kg = 0, kg_con_desp = 0, kg_desp_pond = 0;
+  let moFab_h = 0, moMon_h = 0, hesp_h = 0, trat_lt = 0, arenado_m2 = 0, galvanizado_kg = 0;
+  const horasPorTipoFab = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
+  const horasPorTipoMon = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
   for (const it of p.items || []) {
     const c = calcItem(it);
     const q = +it.cantidad || 1;
@@ -305,6 +325,10 @@ export function calcPresupuesto(p) {
     total_kg  += c.total_kg;
     kg_con_desp  += c.kg_con_desp  * q;
     kg_desp_pond += c.kg_desp_pond * q;
+    moFab_h += c.moFab_h * q; moMon_h += c.moMon_h * q; hesp_h += c.hesp_h * q;
+    trat_lt += c.trat_lt * q; arenado_m2 += c.arenado_m2 * q; galvanizado_kg += c.galvanizado_kg * q;
+    for (const k of Object.keys(horasPorTipoFab)) horasPorTipoFab[k] += (c.moFab_horasPorTipo[k]||0) * q;
+    for (const k of Object.keys(horasPorTipoMon)) horasPorTipoMon[k] += (c.moMon_horasPorTipo[k]||0) * q;
   }
   // Negociación: monto que se SUMA al subtotal (margen de negociación, no descuento).
   const neg_usd  = p.neg_modo === "usd" ? (+p.negociacion_usd || 0) : total_usd * (+p.negociacion_pct || 0) / 100;
@@ -313,6 +337,7 @@ export function calcPresupuesto(p) {
   return {
     rubros, total_usd, total_kg, neg_usd, int_usd, gran_total, usd_kg: total_kg > 0 ? gran_total / total_kg : 0,
     pct_desperdicio: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
+    detalle: { moFab_h, moMon_h, hesp_h, trat_lt, arenado_m2, galvanizado_kg, horasPorTipoFab, horasPorTipoMon },
   };
 }
 
@@ -388,9 +413,9 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Empresa</label>
             <AutocompleteEmpresa style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/>
             {empresaSinResolver && (
-              <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                 ⚠️ No existe todavía
-                <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear empresa nueva</button>
+                <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear empresa nueva</button>
               </div>
             )}
           </div>
@@ -398,9 +423,9 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Cliente</label>
             <AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
             {contactoSinResolver && (
-              <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                 ⚠️ No existe todavía
-                <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear cliente nuevo</button>
+                <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear cliente nuevo</button>
               </div>
             )}
           </div>
@@ -408,9 +433,9 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Obra / Ubicación</label>
             <AutocompleteObra style={INP} value={form.obra} placeholder="ej: Planta Canelones" onChange={v=>set("obra",v)}/>
             {obraSinResolver && (
-              <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                 ⚠️ No existe todavía
-                <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear obra nueva</button>
+                <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear obra nueva</button>
               </div>
             )}
           </div>
@@ -457,19 +482,19 @@ function ModalNuevo({ onSave, onClose }) {
 }
 
 // ─── COMPONENTE BASE: TABLA EDITABLE DE RUBROS ───────────────────
-const INP_SM = { ...INP, padding:"4px 7px", fontSize:12 };
-const TD_R   = { ...TD, textAlign:"right", fontVariantNumeric:"tabular-nums", fontSize:12 };
+const INP_SM = { ...INP, padding:"4px 7px", fontSize:13 };
+const TD_R   = { ...TD, textAlign:"right", fontVariantNumeric:"tabular-nums", fontSize:13 };
 const BtnDel = ({ onClick }) => (
-  <button onClick={onClick} style={{ background:"none",border:"none",color:C.err,cursor:"pointer",fontSize:14,padding:"2px 6px" }}>🗑</button>
+  <button onClick={onClick} style={{ background:"none",border:"none",color:C.err,cursor:"pointer",fontSize:15,padding:"2px 6px" }}>🗑</button>
 );
 const Subtotal = ({ usd }) => (
   <td style={{ ...TD_R, color:C.ok, fontWeight:600 }}>${n2(usd)}</td>
 );
 const TotRow = ({ cols, label, usd, extra }) => (
   <tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
-    <td colSpan={cols} style={{ ...TD, fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.5 }}>{label}</td>
+    <td colSpan={cols} style={{ ...TD, fontSize:13, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.5 }}>{label}</td>
     {extra}
-    <td style={{ ...TD_R, fontWeight:800, color:C.ok, fontSize:14 }}>${n2(usd)}</td>
+    <td style={{ ...TD_R, fontWeight:800, color:C.ok, fontSize:15 }}>${n2(usd)}</td>
     <td style={TD}></td>
   </tr>
 );
@@ -528,7 +553,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
     <div>
       {anidados.length > 0 && (
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:14 }}>
-          <div style={{ fontWeight:700, color:C.pur, fontSize:12, marginBottom:8 }}>🔗 Anidado vinculado</div>
+          <div style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom:8 }}>🔗 Anidado vinculado</div>
           <select value={anidadoSelId} onChange={e=>{
               set("anidado_id", e.target.value);
               const a = anidados.find(x => x.id === e.target.value);
@@ -538,7 +563,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
             {anidados.map(a => <option key={a.id} value={a.id}>{a.nombre} ({a.fecha})</option>)}
           </select>
           {anidadoSel && (
-            <div style={{ display:"flex", gap:16, fontSize:12, color:C.muted, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+            <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
               <span>Kg 3D (perfiles): <b style={{color:C.info}}>{n2(anidKg3D)}</b></span>
               <span>Kg 2D (planchas): <b style={{color:C.pur}}>{n2(anidKg2D)}</b></span>
               {anidBarras>0 && <span>Barras a comprar: <b style={{color:C.steel}}>{n2(anidBarras)}</b></span>}
@@ -549,7 +574,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
             </div>
           )}
           {anidadoSel && (
-            <div style={{ display:"flex", gap:16, fontSize:12, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
               <button onClick={()=>{
                 const filas = materialesUnificadosAnidado(anidadoSel);
                 const bibMap = {};
@@ -567,7 +592,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
                   };
                 });
                 set("hierros", [...rows, ...nuevasFilas]);
-              }} style={{...BTN("primary"), padding:"4px 12px", fontSize:11}}>
+              }} style={{...BTN("primary"), padding:"4px 12px", fontSize:13}}>
                 ⬇ Importar materiales del anidado
               </button>
             </div>
@@ -575,17 +600,17 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
         </div>
       )}
       {arena_m2 > 0 && (
-        <div style={{ marginBottom:10, padding:"6px 12px", background:C.teal+"11", border:`1px solid ${C.teal}33`, borderRadius:6, fontSize:12, color:C.teal }}>
+        <div style={{ marginBottom:10, padding:"6px 12px", background:C.teal+"11", border:`1px solid ${C.teal}33`, borderRadius:6, fontSize:13, color:C.teal }}>
           🎨 {n2(arena_m2)} m² marcados para arenado → se trasladan a Trat. Superficie
         </div>
       )}
       {pintura_m2 > 0 && (
-        <div style={{ marginBottom:10, padding:"6px 12px", background:C.pur+"11", border:`1px solid ${C.pur}33`, borderRadius:6, fontSize:12, color:C.pur }}>
+        <div style={{ marginBottom:10, padding:"6px 12px", background:C.pur+"11", border:`1px solid ${C.pur}33`, borderRadius:6, fontSize:13, color:C.pur }}>
           🖌 {n2(pintura_m2)} m² marcados para pintura → se trasladan a Trat. Superficie
         </div>
       )}
       {galv_kg > 0 && (
-        <div style={{ marginBottom:10, padding:"6px 12px", background:C.gold+"11", border:`1px solid ${C.gold}33`, borderRadius:6, fontSize:12, color:C.gold }}>
+        <div style={{ marginBottom:10, padding:"6px 12px", background:C.gold+"11", border:`1px solid ${C.gold}33`, borderRadius:6, fontSize:13, color:C.gold }}>
           🔩 {n2(galv_kg)} kg marcados para galvanizado → se trasladan a Trat. Superficie
         </div>
       )}
@@ -593,7 +618,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
         <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1080 }}>
           <thead><tr>
             {["Nombre / Descripción","Proveedor","Fecha precio","Observaciones","Cant.","Kg/pieza","m²/pieza","USD/kg","% Desp.","Arena?","Pint.?","Galv.?","Subtotal kg","Subtotal m²","Subtotal USD",""].map(h=>(
-              <th key={h} title={TH_TOOLTIPS[h]} style={{ ...TH, fontSize:10 }}>{h}</th>
+              <th key={h} title={TH_TOOLTIPS[h]} style={{ ...TH, fontSize:12 }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
@@ -605,7 +630,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
                       onChange={v=>upd(r.id,"nombre",v)}
                       onSeleccionar={mat=>elegirMaterial(r.id,mat)}
                       placeholder="HEB 160, Plancha e=10..." style={{...INP_SM,width:190}}/>
-                    {r.nombre?.trim() && !r.usd_kg && <span title="Sin USD/kg cargado en esta fila" style={{fontSize:11,color:C.warn,flexShrink:0}}>⚠</span>}
+                    {r.nombre?.trim() && !r.usd_kg && <span title="Sin USD/kg cargado en esta fila" style={{fontSize:13,color:C.warn,flexShrink:0}}>⚠</span>}
                   </div>
                 </td>
                 <td style={TD}><input value={r.proveedor||""} placeholder="Proveedor..." onChange={e=>upd(r.id,"proveedor",e.target.value)} style={{...INP_SM,width:110}}/></td>
@@ -617,17 +642,17 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
                 <td style={TD}><input type="number" value={r.usd_kg} step="0.01" min="0" onChange={e=>upd(r.id,"usd_kg",+e.target.value)} style={{...INP_SM,width:75,textAlign:"right"}}/></td>
                 <td style={{...TD_R,color:r.pct_desperdicio>0?C.warn:C.muted,fontWeight:r.pct_desperdicio>0?700:400}}>{r.pct_desperdicio>0?`${n2(r.pct_desperdicio)}%`:"—"}</td>
                 <td style={{...TD,textAlign:"center"}}>
-                  <button onClick={()=>upd(r.id,"arena",!r.arena)} style={{...BTN(r.arena?"ok":"ghost"),padding:"3px 8px",fontSize:11}}>
+                  <button onClick={()=>upd(r.id,"arena",!r.arena)} style={{...BTN(r.arena?"ok":"ghost"),padding:"3px 8px",fontSize:13}}>
                     {r.arena ? "✓ Sí" : "○ No"}
                   </button>
                 </td>
                 <td style={{...TD,textAlign:"center"}}>
-                  <button onClick={()=>upd(r.id,"pintura",!r.pintura)} style={{...BTN(r.pintura?"ok":"ghost"),padding:"3px 8px",fontSize:11}}>
+                  <button onClick={()=>upd(r.id,"pintura",!r.pintura)} style={{...BTN(r.pintura?"ok":"ghost"),padding:"3px 8px",fontSize:13}}>
                     {r.pintura ? "✓ Sí" : "○ No"}
                   </button>
                 </td>
                 <td style={{...TD,textAlign:"center"}}>
-                  <button onClick={()=>upd(r.id,"galvanizado",!r.galvanizado)} style={{...BTN(r.galvanizado?"ok":"ghost"),padding:"3px 8px",fontSize:11}}>
+                  <button onClick={()=>upd(r.id,"galvanizado",!r.galvanizado)} style={{...BTN(r.galvanizado?"ok":"ghost"),padding:"3px 8px",fontSize:13}}>
                     {r.galvanizado ? "✓ Sí" : "○ No"}
                   </button>
                 </td>
@@ -640,12 +665,12 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
           </tbody>
           {rows.length > 0 && (
             <tfoot><tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
-              <td colSpan={8} style={{...TD,fontSize:11,fontWeight:700,color:C.muted}}>TOTALES</td>
+              <td colSpan={8} style={{...TD,fontSize:13,fontWeight:700,color:C.muted}}>TOTALES</td>
               <td style={{...TD_R,fontWeight:700,color:tot_pct_desp>0?C.warn:C.muted}}>{tot_pct_desp>0?`${n2(tot_pct_desp)}%`:"—"}</td>
               <td colSpan={3} style={TD}></td>
               <td style={{...TD_R,fontWeight:700,color:C.info}}>{n3(tot_kg)} kg</td>
               <td style={{...TD_R,fontWeight:700,color:C.teal}}>{n2(tot_m2)} m²</td>
-              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:14}}>${n2(tot_usd)}</td>
+              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:15}}>${n2(tot_usd)}</td>
               <td style={TD}></td>
             </tr></tfoot>
           )}
@@ -678,7 +703,7 @@ function TabMatGenerales({ item, set }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             {["Descripción","Proveedor","Fecha precio","Cantidad","Kg/u","m²/u","USD/u","Observaciones","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r => (
@@ -713,8 +738,6 @@ function TabMO({ item, set, tipo }) {
   const catalogo = (tipo === "fabricacion" ? tarifario.mo_fab : tarifario.mo_mon) || [];
   const cats = catalogo.length ? catalogo.map(c=>c.nombre) : ["Sin categorías — cargalas en Config"];
   const rows = item[key] || [];
-  const [agrupado, setAgrupado] = useState(false);
-  const [operariosPorGrupo, setOperariosPorGrupo] = useState({});
 
   const upd = (id, field, val) => set(key, rows.map(r => {
     if (r.id !== id) return r;
@@ -739,21 +762,17 @@ function TabMO({ item, set, tipo }) {
   const porTipo = {};
   rows.forEach(r => { const t = normalizarTipoHora(r.tipo_hora); porTipo[t] = (porTipo[t]||0) + (+r.cant_horas||0); });
 
-  // Vista agrupada: suma horas/USD por categoría + tipo de hora
-  const grupos = {};
-  rows.forEach(r => {
-    const t = normalizarTipoHora(r.tipo_hora);
-    const gkey = `${r.categoria||"Sin categoría"}|||${t}`;
-    if (!grupos[gkey]) grupos[gkey] = { key:gkey, categoria:r.categoria||"Sin categoría", tipo:t, horas:0, usd:0 };
-    grupos[gkey].horas += (+r.cant_horas||0);
-    grupos[gkey].usd   += (+r.subtotal_usd||0);
-  });
-  const listaGrupos = Object.values(grupos);
+  // Calculador de días: un solo recuadro de operarios por rubro (no por
+  // categoría/tipo de hora) — persistido en el ítem para que no se resetee
+  // al cerrar y reabrir el editor.
+  const operariosKey = key + "_operarios";
+  const operarios = item[operariosKey] || 1;
+  const dias = operarios > 0 ? tot_h / (operarios * HORAS_POR_DIA) : 0;
 
   return (
     <div>
       {rows.length > 0 && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:16, marginBottom:12, fontSize:11 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:16, marginBottom:12, fontSize:13 }}>
           <div>
             <span style={{ color:C.muted, marginRight:6 }}>Horas por categoría:</span>
             {Object.entries(porCategoria).map(([cat,h]) => (
@@ -769,55 +788,31 @@ function TabMO({ item, set, tipo }) {
         </div>
       )}
 
-      <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:C.text, marginBottom:12, cursor:"pointer" }}>
-        <input type="checkbox" checked={agrupado} onChange={e=>setAgrupado(e.target.checked)} />
-        Ver horas agrupadas (por categoría + tipo de hora, con cálculo de días)
-      </label>
-
-      {agrupado ? (
-        <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
-            <thead><tr>
-              {["Categoría","Tipo de hora","Horas","Operarios","Días","Subtotal USD"].map(h=>
-                <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {listaGrupos.length===0 && <tr><td colSpan={6} style={{...TD,textAlign:"center",color:C.muted,padding:20}}>Sin horas cargadas.</td></tr>}
-              {listaGrupos.map(g => {
-                const operarios = operariosPorGrupo[g.key] || 1;
-                const dias = operarios>0 ? g.horas / (operarios*HORAS_POR_DIA) : 0;
-                return (
-                  <tr key={g.key}>
-                    <td style={{...TD,fontWeight:600}}>{g.categoria}</td>
-                    <td style={TD}>{g.tipo}</td>
-                    <td style={{...TD_R,fontWeight:700,color:C.pur}}>{n2(g.horas)} h</td>
-                    <td style={TD}>
-                      <input type="number" min="1" step="1" value={operarios}
-                        onChange={e=>setOperariosPorGrupo(prev=>({...prev,[g.key]:Math.max(1,+e.target.value||1)}))}
-                        style={{...INP_SM,width:55,textAlign:"right"}}/>
-                    </td>
-                    <td style={{...TD_R,color:C.teal,fontWeight:700}}>{n2(dias)} d</td>
-                    <Subtotal usd={g.usd}/>
-                  </tr>
-                );
-              })}
-            </tbody>
-            {listaGrupos.length > 0 && (
-              <tfoot><tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
-                <td colSpan={2} style={{...TD,fontSize:11,fontWeight:700,color:C.muted}}>TOTALES</td>
-                <td style={{...TD_R,fontWeight:700,color:C.pur}}>{n2(tot_h)} h</td>
-                <td colSpan={2} style={TD}></td>
-                <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:14}}>${n2(tot_usd)}</td>
-              </tr></tfoot>
-            )}
-          </table>
+      {rows.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:18,
+          background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"12px 16px", marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Horas totales</div>
+            <div style={{ fontSize:18, fontWeight:800, color:C.pur }}>{n2(tot_h)} h</div>
+          </div>
+          <div>
+            <label style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, display:"block", marginBottom:3 }}>Operarios</label>
+            <input type="number" min="1" step="1" value={operarios}
+              onChange={e=>set(operariosKey, Math.max(1, +e.target.value || 1))}
+              style={{ ...INP, width:70, textAlign:"center", padding:"6px 8px", fontSize:15, fontWeight:700 }}/>
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Días estimados</div>
+            <div style={{ fontSize:18, fontWeight:800, color:C.teal }}>{n2(dias)} d</div>
+          </div>
         </div>
-      ) : (
+      )}
+
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
           <thead><tr>
             {["Categoría","Tipo de hora","Tarea","Horas","USD/h","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r => {
@@ -863,17 +858,16 @@ function TabMO({ item, set, tipo }) {
           </tbody>
           {rows.length > 0 && (
             <tfoot><tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
-              <td colSpan={3} style={{...TD,fontSize:11,fontWeight:700,color:C.muted}}>TOTALES</td>
+              <td colSpan={3} style={{...TD,fontSize:13,fontWeight:700,color:C.muted}}>TOTALES</td>
               <td style={{...TD_R,fontWeight:700,color:C.pur}}>{n2(tot_h)} h</td>
               <td style={TD}></td>
-              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:14}}>${n2(tot_usd)}</td>
+              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:15}}>${n2(tot_usd)}</td>
               <td style={TD}></td>
             </tr></tfoot>
           )}
         </table>
       </div>
-      )}
-      {!agrupado && <button style={{...BTN("ghost"),marginTop:10}} onClick={add}>+ Agregar fila MO</button>}
+      <button style={{...BTN("ghost"),marginTop:10}} onClick={add}>+ Agregar fila MO</button>
     </div>
   );
 }
@@ -904,7 +898,7 @@ function TabTerc({ item, set, tipo }) {
         <table style={{ width:"100%", borderCollapse:"collapse", minWidth:850 }}>
           <thead><tr>
             {["Descripción","Empresa","Fecha precio","Cantidad","Unidad","USD/u","Detalle","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r => (
@@ -979,9 +973,9 @@ function TabTrat({ item, set }) {
     <div>
       {/* Arenado / Granallado */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 }}>
-        <div style={{ fontWeight:700, color:C.teal, fontSize:13, marginBottom:12 }}>🎨 Arenado / Granallado</div>
+        <div style={{ fontWeight:700, color:C.teal, fontSize:14, marginBottom:12 }}>🎨 Arenado / Granallado</div>
         {arena_auto > 0 && (
-          <div style={{ fontSize:12, color:C.teal, background:C.teal+"11", border:`1px solid ${C.teal}33`, borderRadius:6, padding:"5px 10px", marginBottom:10 }}>
+          <div style={{ fontSize:13, color:C.teal, background:C.teal+"11", border:`1px solid ${C.teal}33`, borderRadius:6, padding:"5px 10px", marginBottom:10 }}>
             ↗ Desde hierros marcados: {n2(arena_auto)} m²
           </div>
         )}
@@ -992,7 +986,7 @@ function TabTrat({ item, set }) {
               onChange={e=>setTs("arenado_m2",+e.target.value)}
               style={{...INP_SM,width:90}} />
             {arena_auto > 0 && (
-              <button style={{...BTN("ghost"),fontSize:10,padding:"3px 8px",marginLeft:6}}
+              <button style={{...BTN("ghost"),fontSize:12,padding:"3px 8px",marginLeft:6}}
                 onClick={()=>setTs("arenado_m2", +arena_auto.toFixed(2))}>
                 Usar auto ({n2(arena_auto)})
               </button>
@@ -1005,12 +999,12 @@ function TabTrat({ item, set }) {
               style={{...INP_SM,width:80}}/>
           </div>
           <div style={{ paddingBottom:4 }}>
-            <span style={{ fontSize:12, color:C.muted }}>Subtotal arenado: </span>
-            <span style={{ fontSize:14, fontWeight:700, color:C.ok }}>${n2(tot_arenado)}</span>
+            <span style={{ fontSize:13, color:C.muted }}>Subtotal arenado: </span>
+            <span style={{ fontSize:15, fontWeight:700, color:C.ok }}>${n2(tot_arenado)}</span>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, paddingBottom:4 }}>
             <button onClick={()=>setTs("galvanizado",!ts.galvanizado)}
-              style={{...BTN(ts.galvanizado?"ok":"ghost"),padding:"4px 12px",fontSize:12}}>
+              style={{...BTN(ts.galvanizado?"ok":"ghost"),padding:"4px 12px",fontSize:13}}>
               {ts.galvanizado ? "✓ Galvanizado" : "○ Galvanizado"}
             </button>
           </div>
@@ -1023,7 +1017,7 @@ function TabTrat({ item, set }) {
                 onChange={e=>setTs("galvanizado_kg",+e.target.value)}
                 style={{...INP_SM,width:90}} />
               {galv_auto > 0 && (
-                <button style={{...BTN("ghost"),fontSize:10,padding:"3px 8px",marginLeft:6}}
+                <button style={{...BTN("ghost"),fontSize:12,padding:"3px 8px",marginLeft:6}}
                   onClick={()=>setTs("galvanizado_kg", +galv_auto.toFixed(2))}>
                   Usar auto ({n2(galv_auto)})
                 </button>
@@ -1036,8 +1030,8 @@ function TabTrat({ item, set }) {
                 style={{...INP_SM,width:80}}/>
             </div>
             <div style={{ paddingBottom:4 }}>
-              <span style={{ fontSize:12, color:C.muted }}>Subtotal galvanizado: </span>
-              <span style={{ fontSize:14, fontWeight:700, color:C.ok }}>${n2(tot_galv)}</span>
+              <span style={{ fontSize:13, color:C.muted }}>Subtotal galvanizado: </span>
+              <span style={{ fontSize:15, fontWeight:700, color:C.ok }}>${n2(tot_galv)}</span>
             </div>
           </div>
         )}
@@ -1045,13 +1039,13 @@ function TabTrat({ item, set }) {
 
       {/* Otros tratamientos */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:16 }}>
-        <div style={{ fontWeight:700, color:C.steel, fontSize:13, marginBottom:12 }}>🧪 Otros tratamientos</div>
-        <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Subtotal = USD/kg × {n2(hier_kg_item)} kg (peso total del ítem)</div>
+        <div style={{ fontWeight:700, color:C.steel, fontSize:14, marginBottom:12 }}>🧪 Otros tratamientos</div>
+        <div style={{ fontSize:13, color:C.muted, marginBottom:10 }}>Subtotal = USD/kg × {n2(hier_kg_item)} kg (peso total del ítem)</div>
         <QuickPick catalogo={tarifario.trat_superficie_extra} onPick={addOtroDesdeCatalogo} />
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             {["Descripción","USD/kg","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {otros.map(r=>(
@@ -1066,7 +1060,7 @@ function TabTrat({ item, set }) {
         </table>
         <button style={{...BTN("ghost"),marginTop:10}} onClick={addOtro}>+ Agregar tratamiento</button>
         {tot_otros > 0 && (
-          <div style={{ marginTop:10, textAlign:"right", fontSize:13, color:C.muted }}>
+          <div style={{ marginTop:10, textAlign:"right", fontSize:14, color:C.muted }}>
             Otros tratamientos: <strong style={{color:C.ok}}>${n2(tot_otros)}</strong>
           </div>
         )}
@@ -1074,8 +1068,8 @@ function TabTrat({ item, set }) {
 
       {/* Pinturas */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
-        <div style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom:12 }}>🖌 Pinturas</div>
-        <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>Subtotal = Litros × Manos × USD/lt</div>
+        <div style={{ fontWeight:700, color:C.pur, fontSize:14, marginBottom:12 }}>🖌 Pinturas</div>
+        <div style={{ fontSize:13, color:C.muted, marginBottom:10 }}>Subtotal = Litros × Manos × USD/lt</div>
         <QuickPick catalogo={tarifario.pinturas} onPick={addPinturaDesdeCatalogo} />
         <div style={{ marginBottom:12 }}>
           <label style={LBL}>m² a pintar</label>
@@ -1083,7 +1077,7 @@ function TabTrat({ item, set }) {
             onChange={e=>setTs("pintura_m2",+e.target.value)}
             style={{...INP_SM,width:90}} />
           {pintura_auto > 0 && (
-            <button style={{...BTN("ghost"),fontSize:10,padding:"3px 8px",marginLeft:6}}
+            <button style={{...BTN("ghost"),fontSize:12,padding:"3px 8px",marginLeft:6}}
               onClick={()=>setTs("pintura_m2", +pintura_auto.toFixed(2))}>
               Usar auto ({n2(pintura_auto)})
             </button>
@@ -1092,7 +1086,7 @@ function TabTrat({ item, set }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             {["Descripción","USD/lt","Litros","Manos","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {(ts.pinturas||[]).map(r=>(
@@ -1109,7 +1103,7 @@ function TabTrat({ item, set }) {
         </table>
         <button style={{...BTN("ghost"),marginTop:10}} onClick={addPintura}>+ Agregar pintura</button>
         {tot_pintura > 0 && (
-          <div style={{ marginTop:10, textAlign:"right", fontSize:13, color:C.muted }}>
+          <div style={{ marginTop:10, textAlign:"right", fontSize:14, color:C.muted }}>
             Pinturas: <strong style={{color:C.ok}}>${n2(tot_pintura)}</strong>
           </div>
         )}
@@ -1118,26 +1112,26 @@ function TabTrat({ item, set }) {
       {/* Resumen Trat. Superficie */}
       {(tot > 0 || tot_lt > 0) && (
         <div style={{ marginTop:12, padding:"12px 16px", background:C.teal+"11", border:`1px solid ${C.teal}33`, borderRadius:8 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:C.teal, marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Resumen Trat. Superficie</div>
+          <div style={{ fontSize:13, fontWeight:700, color:C.teal, marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Resumen Trat. Superficie</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:10, marginBottom:10 }}>
-            <div><div style={{ fontSize:10, color:C.muted }}>m² a pintar</div><div style={{ fontSize:14, fontWeight:700, color:C.text }}>{n2(ts.pintura_m2||0)}</div></div>
-            <div><div style={{ fontSize:10, color:C.muted }}>Litros totales</div><div style={{ fontSize:14, fontWeight:700, color:C.text }}>{n2(tot_lt)}</div></div>
-            <div><div style={{ fontSize:10, color:C.muted }}>Manos totales</div><div style={{ fontSize:14, fontWeight:700, color:C.text }}>{n2(tot_manos)}</div></div>
+            <div><div style={{ fontSize:12, color:C.muted }}>m² a pintar</div><div style={{ fontSize:15, fontWeight:700, color:C.text }}>{n2(ts.pintura_m2||0)}</div></div>
+            <div><div style={{ fontSize:12, color:C.muted }}>Litros totales</div><div style={{ fontSize:15, fontWeight:700, color:C.text }}>{n2(tot_lt)}</div></div>
+            <div><div style={{ fontSize:12, color:C.muted }}>Manos totales</div><div style={{ fontSize:15, fontWeight:700, color:C.text }}>{n2(tot_manos)}</div></div>
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:2 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted, marginBottom:2 }}>
             <span>$ Pintura</span><span>${n2(tot_pintura)}</span>
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:2 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted, marginBottom:2 }}>
             <span>$ Granallado</span><span>${n2(tot_arenado)}</span>
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:2 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted, marginBottom:2 }}>
             <span>$ Galvanizado</span><span>${n2(tot_galv)}</span>
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:C.muted, marginBottom:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:C.muted, marginBottom:8 }}>
             <span>$ Otros tratamientos</span><span>${n2(tot_otros)}</span>
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid ${C.teal}33`, paddingTop:8 }}>
-            <span style={{ fontSize:13, color:C.steel }}>Total Trat. Superficie</span>
+            <span style={{ fontSize:14, color:C.steel }}>Total Trat. Superficie</span>
             <span style={{ fontSize:16, fontWeight:800, color:C.ok }}>${n2(tot)}</span>
           </div>
         </div>
@@ -1168,7 +1162,7 @@ function TabTraslados({ item, set }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             {["Descripción","Proveedor","Fecha precio","Cantidad","Unidad","USD/u","Detalle","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r=>(
@@ -1221,14 +1215,14 @@ function TabPanto({ item, set }) {
     <div>
       {(anidKg3D > 0 || anidKg2D > 0) && (
         <div style={{ marginBottom:12, padding:"8px 12px", background:C.pur+"11", border:`1px solid ${C.pur}33`, borderRadius:6, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-          <span style={{ fontSize:12, color:C.pur }}>🔗 Desde anidados vinculados:</span>
+          <span style={{ fontSize:13, color:C.pur }}>🔗 Desde anidados vinculados:</span>
           {anidKg3D > 0 && (
-            <button style={{...BTN("ghost"),fontSize:11,padding:"4px 10px"}} onClick={()=>add("3D","Corte 3D (perfiles)",+anidKg3D.toFixed(2),tarifario.panto_usd_kg_3d)}>
+            <button style={{...BTN("ghost"),fontSize:13,padding:"4px 10px"}} onClick={()=>add("3D","Corte 3D (perfiles)",+anidKg3D.toFixed(2),tarifario.panto_usd_kg_3d)}>
               + Corte 3D ({n2(anidKg3D)} kg)
             </button>
           )}
           {anidKg2D > 0 && (
-            <button style={{...BTN("ghost"),fontSize:11,padding:"4px 10px"}} onClick={()=>add("2D","Corte 2D (planchas)",+anidKg2D.toFixed(2),tarifario.panto_usd_kg_2d)}>
+            <button style={{...BTN("ghost"),fontSize:13,padding:"4px 10px"}} onClick={()=>add("2D","Corte 2D (planchas)",+anidKg2D.toFixed(2),tarifario.panto_usd_kg_2d)}>
               + Corte 2D ({n2(anidKg2D)} kg)
             </button>
           )}
@@ -1236,7 +1230,7 @@ function TabPanto({ item, set }) {
       )}
       {tarifario.pantografo_extra?.length > 0 && (
         <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>Otros cortes — kg pre-cargado con el peso del ítem ({n2(hier_kg_item)} kg), editable en la fila:</div>
+          <div style={{ fontSize:13, color:C.muted, marginBottom:6 }}>Otros cortes — kg pre-cargado con el peso del ítem ({n2(hier_kg_item)} kg), editable en la fila:</div>
           <QuickPick catalogo={tarifario.pantografo_extra} onPick={addOtroDesdeCatalogo} />
         </div>
       )}
@@ -1244,7 +1238,7 @@ function TabPanto({ item, set }) {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
             {["Descripción","Tipo","kg","USD/kg","Detalle","Subtotal USD",""].map(h=>
-              <th key={h} style={{...TH,fontSize:10}}>{h}</th>)}
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map(r=>(
@@ -1267,10 +1261,10 @@ function TabPanto({ item, set }) {
           </tbody>
           {rows.length > 0 && (
             <tfoot><tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
-              <td colSpan={2} style={{...TD,fontSize:11,fontWeight:700,color:C.muted}}>TOTALES</td>
+              <td colSpan={2} style={{...TD,fontSize:13,fontWeight:700,color:C.muted}}>TOTALES</td>
               <td style={{...TD_R,fontWeight:700,color:C.info}}>{n2(tot_kg)} kg</td>
               <td style={TD}></td><td style={TD}></td>
-              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:14}}>${n2(tot_usd)}</td>
+              <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:15}}>${n2(tot_usd)}</td>
               <td style={TD}></td>
             </tr></tfoot>
           )}
@@ -1341,12 +1335,12 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ color:C.accent, fontWeight:800, fontSize:15,
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.titulo}</div>
-            <div style={{ color:C.muted, fontSize:11 }}>Cant. ×{item.cantidad} · Editor de rubros</div>
+            <div style={{ color:C.muted, fontSize:13 }}>Cant. ×{item.cantidad} · Editor de rubros</div>
           </div>
           <div style={{ display:"flex", gap:10, flexShrink:0 }}>
-            <span style={{...BDG(C.info, true),fontSize:14,padding:"4px 12px"}}>{n3(c.total_kg)} kg</span>
-            <span style={{...BDG(C.ok,   true),fontSize:14,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>
-            {c.usd_kg > 0 && <span style={{...BDG(C.gold, true),fontSize:14,padding:"4px 12px"}}>{n2(c.usd_kg)} USD/kg</span>}
+            <span style={{...BDG(C.info, true),fontSize:15,padding:"4px 12px"}}>{n3(c.total_kg)} kg</span>
+            <span style={{...BDG(C.ok,   true),fontSize:15,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>
+            {c.usd_kg > 0 && <span style={{...BDG(C.gold, true),fontSize:15,padding:"4px 12px"}}>{n2(c.usd_kg)} USD/kg</span>}
           </div>
           <button onClick={onClose} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6,
             color:C.muted, cursor:"pointer", fontSize:18, padding:"2px 10px", flexShrink:0 }}>✕</button>
@@ -1356,15 +1350,15 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
         <div style={{ padding:"10px 18px", borderBottom:`1px solid ${C.border}`,
           display:"flex", flexWrap:"wrap", alignItems:"center", gap:14, flexShrink:0 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <span style={{ fontSize:11, color:C.muted, fontWeight:700 }}>TIPO:</span>
+            <span style={{ fontSize:13, color:C.muted, fontWeight:700 }}>TIPO:</span>
             {[["fabricacion","🔨 Fabricación"],["montaje","🏗️ Montaje"],["fab_mont","🔨🏗️ Fab + Mont"]].map(([val,lbl]) => (
               <button key={val} onClick={() => setTipo(val)} style={{
-                ...BTN((item.tipo||"fab_mont")===val ? "primary" : "ghost"), padding:"4px 10px", fontSize:11,
+                ...BTN((item.tipo||"fab_mont")===val ? "primary" : "ghost"), padding:"4px 10px", fontSize:13,
               }}>{lbl}</button>
             ))}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-            <span style={{ fontSize:11, color:C.muted, fontWeight:700 }}>RUBROS:</span>
+            <span style={{ fontSize:13, color:C.muted, fontWeight:700 }}>RUBROS:</span>
             {TABS.filter(t => t.id !== "resumen").map(t => {
               const on = activo(t.id);
               const cnt = counts[t.id];
@@ -1375,11 +1369,11 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
                     background: on ? C.accent+"18" : "transparent",
                     border: `1px solid ${on ? C.accent+"55" : C.border}`,
                     color: on ? C.text : C.muted, opacity: on ? 1 : 0.55,
-                    borderRadius:5, padding:"3px 8px", fontSize:10, cursor:"pointer",
+                    borderRadius:5, padding:"3px 8px", fontSize:12, cursor:"pointer",
                     display:"flex", alignItems:"center", gap:3,
                   }}>
                   <span>{on ? "☑" : "☐"}</span><span>{t.icon}</span><span>{t.label}</span>
-                  {cnt > 0 && <span style={{ background: on ? C.accent : C.muted, color:"#fff", borderRadius:8, padding:"0 4px", fontSize:9, fontWeight:700 }}>{cnt}</span>}
+                  {cnt > 0 && <span style={{ background: on ? C.accent : C.muted, color:"#fff", borderRadius:8, padding:"0 4px", fontSize:11, fontWeight:700 }}>{cnt}</span>}
                 </button>
               );
             })}
@@ -1397,12 +1391,12 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
                 background: active ? C.accent+"22" : "transparent",
                 border: "none", borderBottom: active ? `2px solid ${C.accent}` : "2px solid transparent",
                 color: active ? C.accent : C.muted,
-                padding:"6px 10px", cursor:"pointer", fontSize:11, fontWeight: active ? 700 : 400,
+                padding:"6px 10px", cursor:"pointer", fontSize:13, fontWeight: active ? 700 : 400,
                 display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", borderRadius:"4px 4px 0 0",
               }}>
                 <span>{t.icon}</span>
                 <span>{t.label}</span>
-                {cnt > 0 && <span style={{ background:C.accent, color:"#fff", borderRadius:9, padding:"0 5px", fontSize:9, fontWeight:700 }}>{cnt}</span>}
+                {cnt > 0 && <span style={{ background:C.accent, color:"#fff", borderRadius:9, padding:"0 5px", fontSize:11, fontWeight:700 }}>{cnt}</span>}
               </button>
             );
           })}
@@ -1413,15 +1407,21 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado }) {
           {tab === "resumen" && (() => {
             const q = +item.cantidad || 1;
             const rubros = { hier:c.hier_usd*q, mat:c.mat_usd*q, moFab:c.moFab_usd*q, moMon:c.moMon_usd*q, hesp:c.hesp_usd*q, tFab:c.tFab_usd*q, tMon:c.tMon_usd*q, trat:c.trat_usd*q, trasl:c.trasl_usd*q, panto:c.panto_usd*q };
+            const escalar = (obj) => Object.fromEntries(Object.entries(obj).map(([k,v]) => [k, v*q]));
+            const detalle = {
+              moFab_h: c.moFab_h*q, moMon_h: c.moMon_h*q, hesp_h: c.hesp_h*q, trat_lt: c.trat_lt*q,
+              arenado_m2: c.arenado_m2*q, galvanizado_kg: c.galvanizado_kg*q,
+              horasPorTipoFab: escalar(c.moFab_horasPorTipo), horasPorTipoMon: escalar(c.moMon_horasPorTipo),
+            };
             return (
-              <div style={{ maxWidth:420 }}>
-                <ResumenRubros rubros={rubros} total_usd={c.total_usd} total_kg={c.total_kg} />
+              <div style={{ maxWidth:480 }}>
+                <ResumenRubros rubros={rubros} total_usd={c.total_usd} total_kg={c.total_kg} detalle={detalle} />
                 {c.pct_desperdicio > 0 && (
-                  <div title="% de desperdicio ponderado por kg: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:12, color:C.warn, fontWeight:700 }}>
+                  <div title="% de desperdicio ponderado por kg: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:13, color:C.warn, fontWeight:700 }}>
                     ⚠ {n2(c.pct_desperdicio)}% desperdicio (materiales del anidado vinculado)
                   </div>
                 )}
-                {c.total_usd === 0 && <div style={{ color:C.muted, fontSize:12 }}>Sin datos todavía — cargá materiales o mano de obra en las otras pestañas.</div>}
+                {c.total_usd === 0 && <div style={{ color:C.muted, fontSize:13 }}>Sin datos todavía — cargá materiales o mano de obra en las otras pestañas.</div>}
               </div>
             );
           })()}
@@ -1461,43 +1461,43 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado }) {
 
           {editando ? (
             <input autoFocus value={item.titulo}
-              style={{ ...INP, flex:1, minWidth:160, fontSize:14, fontWeight:700 }}
+              style={{ ...INP, flex:1, minWidth:160, fontSize:15, fontWeight:700 }}
               onChange={e => set("titulo", e.target.value)}
               onBlur={() => setEditando(false)}
               onKeyDown={e => e.key === "Enter" && setEditando(false)} />
           ) : (
             <div onClick={() => setEditando(true)}
-              style={{ flex:1, minWidth:160, cursor:"text", fontWeight:700, fontSize:14, color:C.text }}>
+              style={{ flex:1, minWidth:160, cursor:"text", fontWeight:700, fontSize:15, color:C.text }}>
               {item.titulo}
             </div>
           )}
 
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <span style={{ fontSize:11, color:C.muted }}>×</span>
+            <span style={{ fontSize:13, color:C.muted }}>×</span>
             <input type="number" value={item.cantidad} min="1"
               onChange={e => set("cantidad", +e.target.value)}
-              style={{ ...INP, width:55, textAlign:"center", padding:"4px 6px", fontSize:13 }} />
+              style={{ ...INP, width:55, textAlign:"center", padding:"4px 6px", fontSize:14 }} />
           </div>
 
           <input value={item.n_plano} placeholder="N° plano"
             onChange={e => set("n_plano", e.target.value)}
-            style={{ ...INP, width:100, padding:"4px 7px", fontSize:11, color:C.muted }} />
+            style={{ ...INP, width:100, padding:"4px 7px", fontSize:13, color:C.muted }} />
 
           <button onClick={() => set("no_agrega_kg", !item.no_agrega_kg)}
-            style={{ ...BTN(item.no_agrega_kg ? "danger" : "ghost"), padding:"3px 8px", fontSize:10 }}>
+            style={{ ...BTN(item.no_agrega_kg ? "danger" : "ghost"), padding:"3px 8px", fontSize:12 }}>
             {item.no_agrega_kg ? "⚠ No KG" : "KG ✓"}
           </button>
 
           {item.tipo === "fabricacion" && <span style={BDG(C.pur, true)}>🔨 Fab</span>}
           {item.tipo === "montaje" && <span style={BDG(C.teal, true)}>🏗️ Mont</span>}
 
-          {c.total_kg > 0  && <span style={{...BDG(C.info, true),fontSize:14,padding:"4px 12px"}}>{n3(c.total_kg)} kg</span>}
-          {c.total_usd > 0 && <span style={{...BDG(C.ok,   true),fontSize:14,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>}
-          {c.usd_kg > 0    && <span style={{...BDG(C.gold, true),fontSize:14,padding:"4px 12px"}}>{n2(c.usd_kg)} $/kg</span>}
+          {c.total_kg > 0  && <span style={{...BDG(C.info, true),fontSize:15,padding:"4px 12px"}}>{n3(c.total_kg)} kg</span>}
+          {c.total_usd > 0 && <span style={{...BDG(C.ok,   true),fontSize:15,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>}
+          {c.usd_kg > 0    && <span style={{...BDG(C.gold, true),fontSize:15,padding:"4px 12px"}}>{n2(c.usd_kg)} $/kg</span>}
 
-          <button style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}
+          <button style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:13 }}
             onClick={() => setEditorOpen(true)}>🔧 Rubros</button>
-          <button style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}
+          <button style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:15 }}
             onClick={onDelete}>🗑</button>
         </div>
 
@@ -1527,40 +1527,113 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado }) {
 // ─── BARRA DE RUBRO ───────────────────────────────────────────────
 // kg (opcional): si se pasa, además de $ y % muestra cuántos USD/kg del
 // total representa este rubro (usd del rubro / kg total del ítem o presupuesto).
+// Fila de grid (4 columnas: Rubro | Monto | % | U$S/kg) — debe vivir dentro
+// del mismo contenedor grid que el encabezado en ResumenRubros para que las
+// columnas queden alineadas entre filas.
 function BarraRubro({ label, usd, total, kg, color }) {
   const pct = total > 0 ? Math.round(usd / total * 1000) / 10 : 0;
   const usd_kg = kg > 0 ? usd / kg : 0;
   if (usd === 0) return null;
   return (
-    <div style={{ marginBottom:8 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:3 }}>
+    <>
+      <span style={{ color:C.muted, alignSelf:"end" }}>{label}</span>
+      <span style={{ color, fontWeight:700, textAlign:"right", alignSelf:"end" }}>${n2(usd)}</span>
+      <span style={{ color:C.muted, textAlign:"right", alignSelf:"end" }}>{pct}%</span>
+      <span style={{ color:C.gold, textAlign:"right", alignSelf:"end" }}>{usd_kg > 0 ? n2(usd_kg) : "—"}</span>
+      <div style={{ gridColumn:"1 / -1", background:C.iron, borderRadius:4, height:6 }}>
+        <div style={{ width:`${pct}%`, height:6, background:color, borderRadius:4 }} />
+      </div>
+    </>
+  );
+}
+
+// Fila de horas por tipo (Común/Nocturna/Extra/Lluvia) dentro del desplegable de detalle.
+function DetalleHoras({ label, total, porTipo }) {
+  const conHoras = Object.entries(porTipo || {}).filter(([,h]) => h > 0);
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
         <span style={{ color:C.muted }}>{label}</span>
-        <span style={{ color, fontWeight:700 }}>
-          ${n2(usd)} <span style={{ color:C.muted }}>({pct}%)</span>
-          {usd_kg > 0 && <span title="Precio en dólares por kilogramo de material de este rubro" style={{ color:C.gold, marginLeft:6 }}>{n2(usd_kg)} $/kg</span>}
-        </span>
+        <span style={{ fontWeight:700 }}>{n2(total)} h</span>
       </div>
-      <div style={{ background:C.iron, borderRadius:4, height:5 }}>
-        <div style={{ width:`${pct}%`, height:5, background:color, borderRadius:4 }} />
-      </div>
+      {conHoras.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, paddingLeft:14 }}>
+          {conHoras.map(([tipo,h]) => (
+            <span key={tipo} style={{ ...BDG(tipo === "Común" ? C.ok : C.warn, true), fontSize:12 }}>{tipo}: {n2(h)}h</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── RESUMEN DE RUBROS (reutilizado a nivel ítem y a nivel presupuesto) ──
-function ResumenRubros({ rubros, total_usd, total_kg }) {
+// detalle (opcional): horas por tipo, litros de pintura, arenado, galvanizado
+// — ver calcItem/calcPresupuesto. Si no hay nada que mostrar, no se ofrece
+// el desplegable.
+function ResumenRubros({ rubros, total_usd, total_kg, detalle }) {
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
+  const hayDetalle = !!detalle && (
+    detalle.moFab_h > 0 || detalle.moMon_h > 0 || detalle.hesp_h > 0 ||
+    detalle.trat_lt > 0 || detalle.arenado_m2 > 0 || detalle.galvanizado_kg > 0
+  );
+
   return (
-    <>
-      <BarraRubro label="⚙️ Materiales / Hierros" usd={rubros.hier+rubros.mat} total={total_usd} kg={total_kg} color={C.info} />
-      <BarraRubro label="🔨 MO Fabricación"        usd={rubros.moFab}  total={total_usd} kg={total_kg} color={C.pur} />
-      <BarraRubro label="🏗️ MO Montaje"            usd={rubros.moMon}  total={total_usd} kg={total_kg} color={C.teal} />
-      <BarraRubro label="⏰ H. Especiales"         usd={rubros.hesp}   total={total_usd} kg={total_kg} color={C.warn} />
-      <BarraRubro label="🏭 Terc. Fabricación"     usd={rubros.tFab}   total={total_usd} kg={total_kg} color={C.steel} />
-      <BarraRubro label="🚛 Terc. Montaje"         usd={rubros.tMon}   total={total_usd} kg={total_kg} color={C.steel} />
-      <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
-      <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
-      <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
-    </>
+    <div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", columnGap:12, rowGap:6, fontSize:14, marginBottom:4 }}>
+        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Rubro</span>
+        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>Monto</span>
+        <span style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>%</span>
+        <span title="Precio en dólares por kilogramo de material de este rubro"
+          style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>U$S/kg</span>
+
+        <BarraRubro label="⚙️ Materiales / Hierros" usd={rubros.hier+rubros.mat} total={total_usd} kg={total_kg} color={C.info} />
+        <BarraRubro label="🔨 MO Fabricación"        usd={rubros.moFab}  total={total_usd} kg={total_kg} color={C.pur} />
+        <BarraRubro label="🏗️ MO Montaje"            usd={rubros.moMon}  total={total_usd} kg={total_kg} color={C.teal} />
+        <BarraRubro label="⏰ H. Especiales"         usd={rubros.hesp}   total={total_usd} kg={total_kg} color={C.warn} />
+        <BarraRubro label="🏭 Terc. Fabricación"     usd={rubros.tFab}   total={total_usd} kg={total_kg} color={C.steel} />
+        <BarraRubro label="🚛 Terc. Montaje"         usd={rubros.tMon}   total={total_usd} kg={total_kg} color={C.steel} />
+        <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
+        <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
+        <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
+      </div>
+
+      {hayDetalle && (
+        <>
+          <button onClick={() => setDetalleAbierto(v => !v)} style={{
+            background:"none", border:"none", color:C.accent, cursor:"pointer",
+            fontSize:13, fontWeight:700, padding:"6px 0",
+          }}>{detalleAbierto ? "▾" : "▸"} Ver detalle completo</button>
+
+          {detalleAbierto && (
+            <div style={{ background:C.iron, borderRadius:8, padding:"10px 12px", fontSize:13, display:"flex", flexDirection:"column", gap:9, marginTop:2 }}>
+              {detalle.moFab_h > 0 && <DetalleHoras label="🔨 Horas Fabricación" total={detalle.moFab_h} porTipo={detalle.horasPorTipoFab} />}
+              {detalle.moMon_h > 0 && <DetalleHoras label="🏗️ Horas Montaje" total={detalle.moMon_h} porTipo={detalle.horasPorTipoMon} />}
+              {detalle.hesp_h > 0 && (
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ color:C.muted }}>⏰ Horas especiales</span><span style={{ fontWeight:700 }}>{n2(detalle.hesp_h)} h</span>
+                </div>
+              )}
+              {detalle.trat_lt > 0 && (
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ color:C.muted }}>🎨 Litros de pintura</span><span style={{ fontWeight:700 }}>{n2(detalle.trat_lt)} lt</span>
+                </div>
+              )}
+              {detalle.arenado_m2 > 0 && (
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ color:C.muted }}>🎨 Superficie arenada</span><span style={{ fontWeight:700 }}>{n2(detalle.arenado_m2)} m²</span>
+                </div>
+              )}
+              {detalle.galvanizado_kg > 0 && (
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ color:C.muted }}>🔩 Galvanizado</span><span style={{ fontWeight:700 }}>{n2(detalle.galvanizado_kg)} kg</span>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1677,7 +1750,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         <button style={BTN("ghost")} onClick={onBack}>← Volver</button>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:800, fontSize:17, color:C.accent }}>{pres.nombre||"Presupuesto sin nombre"}</div>
-          <div style={{ fontSize:11, color:C.muted }}>
+          <div style={{ fontSize:13, color:C.muted }}>
             {pres.nro} · {pres.fecha}
             {pres.codigo_calculo && <span title="Código de cálculo — vincula este presupuesto con steelCRM (idsCalc)"> · 🔗 {pres.codigo_calculo}</span>}
             {pres.clonado_de && <span> · 📋 clonado de {origenNro || pres.clonado_de}</span>}
@@ -1686,7 +1759,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <button style={BTN("ghost")} onClick={() => generarPDFPresupuesto(pres)} title="Generar PDF del presupuesto">🖨️ PDF</button>
           {vinculoCRM ? (
-            <span style={{ ...BDG(C.ok, true), fontSize: 11 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
+            <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
           ) : (
             <button style={BTN("ghost")} onClick={enviarSteelCRM} disabled={enviandoCRM}
               title="Crea el presupuesto en Steel CRM y lo vincula con este cálculo — directo, sin archivos de por medio">
@@ -1695,7 +1768,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           )}
           {Object.entries(ESTADO_CFG).map(([k,v]) => (
             <button key={k} onClick={() => cambiarEstado(k)}
-              style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,
+              style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:13,
                 ...(pres.estado===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
               {v.icon} {v.label}
             </button>
@@ -1711,7 +1784,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
             <div onClick={() => setDatosAbiertos(a => !a)}
               style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", userSelect:"none",
-                fontWeight:700, color:C.steel, fontSize:11, marginBottom:datosAbiertos?14:0, textTransform:"uppercase", letterSpacing:.5 }}>
+                fontWeight:700, color:C.steel, fontSize:13, marginBottom:datosAbiertos?14:0, textTransform:"uppercase", letterSpacing:.5 }}>
               <span>{datosAbiertos ? "▾" : "▸"}</span> Datos generales
               {!datosAbiertos && (pres.cliente || pres.obra) && (
                 <span style={{ textTransform:"none", fontWeight:400, color:C.muted, letterSpacing:0 }}>
@@ -1725,9 +1798,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 <label style={LBL}>Empresa</label>
                 <AutocompleteEmpresa style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/>
                 {empresaSinResolver && (
-                  <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                     ⚠️ No existe todavía
-                    <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear empresa nueva</button>
+                    <button type="button" onClick={()=>setShowEmpresaRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear empresa nueva</button>
                   </div>
                 )}
               </div>
@@ -1735,9 +1808,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 <label style={LBL}>Cliente</label>
                 <AutocompleteCliente style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
                 {contactoSinResolver && (
-                  <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                     ⚠️ No existe todavía
-                    <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear cliente nuevo</button>
+                    <button type="button" onClick={()=>setShowClienteRapido(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear cliente nuevo</button>
                   </div>
                 )}
               </div>
@@ -1745,9 +1818,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 <label style={LBL}>Obra / Ubicación</label>
                 <AutocompleteObra style={INP} value={pres.obra||""} placeholder="Planta, dirección..." onChange={v=>set("obra",v)}/>
                 {obraSinResolver && (
-                  <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                     ⚠️ No existe todavía
-                    <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:11, fontWeight:700 }}>+ Crear obra nueva</button>
+                    <button type="button" onClick={()=>setShowObraRapida(true)} style={{ background:"none", border:`1px solid ${C.warn}55`, color:C.warn, borderRadius:5, padding:"1px 8px", cursor:"pointer", fontSize:13, fontWeight:700 }}>+ Crear obra nueva</button>
                   </div>
                 )}
               </div>
@@ -1757,7 +1830,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 </select></div>
               <div><label style={LBL}>Categoría</label>
                 <SelectCategoria value={pres.categoria} onChange={v=>set("categoria",v)} />
-                {pres.categoria && <div style={{ fontSize:10, color:C.muted, marginTop:3 }}>Familia: {familiaDe(pres.categoria)}</div>}
+                {pres.categoria && <div style={{ fontSize:12, color:C.muted, marginTop:3 }}>Familia: {familiaDe(pres.categoria)}</div>}
               </div>
               <div><label style={LBL}>Vendedor</label>
                 <select style={INP} value={pres.vendedor||""} onChange={e=>set("vendedor",e.target.value)}>
@@ -1767,8 +1840,8 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               <div><label style={LBL}>TC (USD/UYU)</label>
                 <div style={{ ...INP, display:"flex", alignItems:"center", color:C.muted, background:C.bg }}>
                   {pres.tc != null
-                    ? <>{n2(pres.tc)} <span style={{ marginLeft:6, fontSize:10 }}>(valor histórico de este presupuesto)</span></>
-                    : <>{n2(tcGlobal)} <span style={{ marginLeft:6, fontSize:10 }}>(TC global — se edita en la barra lateral)</span></>}
+                    ? <>{n2(pres.tc)} <span style={{ marginLeft:6, fontSize:12 }}>(valor histórico de este presupuesto)</span></>
+                    : <>{n2(tcGlobal)} <span style={{ marginLeft:6, fontSize:12 }}>(TC global — se edita en la barra lateral)</span></>}
                 </div></div>
               <div><label style={LBL}>Detalle</label>
                 <input style={INP} value={pres.detalle||""} placeholder="Descripción breve..." onChange={e=>set("detalle",e.target.value)}/></div>
@@ -1790,13 +1863,13 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           {/* Ítems */}
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div style={{ fontWeight:700, color:C.steel, fontSize:11, textTransform:"uppercase", letterSpacing:.5 }}>
+              <div style={{ fontWeight:700, color:C.steel, fontSize:13, textTransform:"uppercase", letterSpacing:.5 }}>
                 Ítems ({(pres.items||[]).length})
               </div>
               <button style={BTN("ok")} onClick={addItem}>+ Agregar ítem</button>
             </div>
             {(pres.items||[]).length === 0 && (
-              <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:13,
+              <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:14,
                 border:`1px dashed ${C.border}`, borderRadius:10 }}>
                 Sin ítems — hacé clic en "Agregar ítem" para empezar
               </div>
@@ -1817,49 +1890,49 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         {/* DERECHA: Resumen */}
         <div style={{ position:"sticky", top:70 }}>
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
-            <div style={{ fontWeight:700, color:C.steel, fontSize:11, marginBottom:14, textTransform:"uppercase", letterSpacing:.5 }}>
+            <div style={{ fontWeight:700, color:C.steel, fontSize:13, marginBottom:14, textTransform:"uppercase", letterSpacing:.5 }}>
               Resumen
             </div>
 
-            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} />
+            <ResumenRubros rubros={c.rubros} total_usd={c.total_usd} total_kg={c.total_kg} detalle={c.detalle} />
             {c.pct_desperdicio > 0 && (
-              <div title="% de desperdicio ponderado por kg de todos los materiales que vinieron de un Anidado: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:12, color:C.warn, fontWeight:700 }}>
+              <div title="% de desperdicio ponderado por kg de todos los materiales que vinieron de un Anidado: kg perdidos en el corte ÷ kg totales comprados" style={{ marginBottom:8, padding:"6px 10px", background:C.warn+"11", border:`1px solid ${C.warn}33`, borderRadius:6, fontSize:13, color:C.warn, fontWeight:700 }}>
                 ⚠ {n2(c.pct_desperdicio)}% desperdicio general (materiales de anidados vinculados)
               </div>
             )}
 
             <div style={{ borderTop:`1px solid ${C.border}`, marginTop:10, paddingTop:12 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, marginBottom:8 }}>
                 <span style={{ color:C.muted }}>Subtotal</span>
                 <span style={{ fontWeight:700 }}>${n2(c.total_usd)}</span>
               </div>
 
               {/* Negociación */}
               <div style={{ background:C.iron, borderRadius:8, padding:10, marginBottom:8 }}>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:6, fontWeight:700 }}>Negociación (aumenta el total)</div>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:6, fontWeight:700 }}>Negociación (aumenta el total)</div>
                 <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  <button style={{ ...BTN(pres.neg_modo==="pct"?"ok":"ghost"), padding:"3px 8px", fontSize:10 }}
+                  <button style={{ ...BTN(pres.neg_modo==="pct"?"ok":"ghost"), padding:"3px 8px", fontSize:12 }}
                     onClick={() => set("neg_modo","pct")}>%</button>
-                  <button style={{ ...BTN(pres.neg_modo==="usd"?"ok":"ghost"), padding:"3px 8px", fontSize:10 }}
+                  <button style={{ ...BTN(pres.neg_modo==="usd"?"ok":"ghost"), padding:"3px 8px", fontSize:12 }}
                     onClick={() => set("neg_modo","usd")}>USD</button>
                 </div>
                 {pres.neg_modo === "pct" ? (
                   <input type="number" value={pres.negociacion_pct||0} min="0" max="100" step="0.1"
-                    style={{ ...INP, padding:"4px 7px", fontSize:12 }}
+                    style={{ ...INP, padding:"4px 7px", fontSize:13 }}
                     onChange={e => set("negociacion_pct",+e.target.value)} />
                 ) : (
                   <input type="number" value={pres.negociacion_usd||0} min="0" step="10"
-                    style={{ ...INP, padding:"4px 7px", fontSize:12 }}
+                    style={{ ...INP, padding:"4px 7px", fontSize:13 }}
                     onChange={e => set("negociacion_usd",+e.target.value)} />
                 )}
-                {c.neg_usd > 0 && <div style={{ fontSize:11, color:C.ok, marginTop:4 }}>+ ${n2(c.neg_usd)}</div>}
+                {c.neg_usd > 0 && <div style={{ fontSize:13, color:C.ok, marginTop:4 }}>+ ${n2(c.neg_usd)}</div>}
               </div>
 
               {/* Interés */}
               <div style={{ background:C.iron, borderRadius:8, padding:10, marginBottom:10 }}>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:6, fontWeight:700 }}>Interés financiero</div>
+                <div style={{ fontSize:13, color:C.muted, marginBottom:6, fontWeight:700 }}>Interés financiero</div>
                 {(loadTarifario().interes_financiero||[]).length > 0 && (
-                  <select value="" style={{ ...INP, padding:"4px 7px", fontSize:12, marginBottom:8, width:"100%" }}
+                  <select value="" style={{ ...INP, padding:"4px 7px", fontSize:13, marginBottom:8, width:"100%" }}
                     onChange={e=>{
                       const t = loadTarifario().interes_financiero.find(x=>x.id===e.target.value);
                       if (!t) return;
@@ -1872,41 +1945,41 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 )}
                 <div style={{ display:"flex", gap:8 }}>
                   <div style={{ flex:1 }}>
-                    <label style={{ fontSize:10, color:C.muted }}>% anual</label>
+                    <label style={{ fontSize:12, color:C.muted }}>% anual</label>
                     <input type="number" value={pres.interes_pct||0} min="0" step="0.5"
-                      style={{ ...INP, padding:"4px 7px", fontSize:12 }}
+                      style={{ ...INP, padding:"4px 7px", fontSize:13 }}
                       onChange={e => set("interes_pct",+e.target.value)} />
                   </div>
                   <div style={{ flex:1 }}>
-                    <label style={{ fontSize:10, color:C.muted }}>Días plazo</label>
+                    <label style={{ fontSize:12, color:C.muted }}>Días plazo</label>
                     <input type="number" value={pres.interes_dias||30} min="0"
-                      style={{ ...INP, padding:"4px 7px", fontSize:12 }}
+                      style={{ ...INP, padding:"4px 7px", fontSize:13 }}
                       onChange={e => set("interes_dias",+e.target.value)} />
                   </div>
                 </div>
-                {c.int_usd > 0 && <div style={{ fontSize:11, color:C.warn, marginTop:4 }}>+ ${n2(c.int_usd)}</div>}
+                {c.int_usd > 0 && <div style={{ fontSize:13, color:C.warn, marginTop:4 }}>+ ${n2(c.int_usd)}</div>}
               </div>
 
               {/* Gran total */}
               <div style={{ background:C.accent+"18", border:`1px solid ${C.accent}33`, borderRadius:8, padding:14 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-                  <span style={{ fontSize:13, color:C.accent, fontWeight:700 }}>TOTAL USD</span>
+                  <span style={{ fontSize:14, color:C.accent, fontWeight:700 }}>TOTAL USD</span>
                   <span style={{ fontSize:28, fontWeight:900, color:C.accent }}>${n2(c.gran_total)}</span>
                 </div>
                 {c.total_kg > 0 && (
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:8, paddingTop:8, borderTop:`1px solid ${C.accent}22` }}>
                     <div>
-                      <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Kg totales</div>
+                      <div style={{ fontSize:12, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Kg totales</div>
                       <div style={{ fontSize:22, fontWeight:800, color:C.text }}>{n3(c.total_kg)}</div>
                     </div>
                     <div style={{ textAlign:"right" }}>
-                      <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>USD/kg</div>
+                      <div style={{ fontSize:12, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>USD/kg</div>
                       <div style={{ fontSize:22, fontWeight:800, color:C.gold }}>{n2(c.usd_kg)}</div>
                     </div>
                   </div>
                 )}
                 {(pres.tc ?? tcGlobal) > 0 && (
-                  <div style={{ fontSize:12, color:C.muted, marginTop:3 }}>
+                  <div style={{ fontSize:13, color:C.muted, marginTop:3 }}>
                     ≈ UYU {n2(c.gran_total * (pres.tc ?? tcGlobal))} (TC {n2(pres.tc ?? tcGlobal)})
                   </div>
                 )}
@@ -1936,7 +2009,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
     <div style={{ position:"fixed", inset:0, zIndex:1500, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
       <div style={{ background:C.card, border:`1.5px solid ${C.accent}55`, borderRadius:14, padding:26, width:"100%", maxWidth:480 }}>
         <div style={{ color:C.accent, fontWeight:800, fontSize:15, marginBottom:6 }}>⬇ Importar materiales a Presupuesto</div>
-        <div style={{ color:C.muted, fontSize:12, marginBottom:18 }}>
+        <div style={{ color:C.muted, fontSize:13, marginBottom:18 }}>
           {(materiales||[]).length} materiales · {n2(totalKg)} kg totales — se cargan como filas de Hierros, con precio/proveedor y las selecciones de granallado/pintura/galvanizado precargadas cuando estén disponibles. Podés editar cada fila después.
         </div>
 
@@ -2215,7 +2288,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <div style={{ fontWeight:800, fontSize:20, color:C.accent }}>💰 Presupuestos</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{presupuestos.length} presupuesto{presupuestos.length!==1?"s":""}</div>
+          <div style={{ fontSize:13, color:C.muted, marginTop:2 }}>{presupuestos.length} presupuesto{presupuestos.length!==1?"s":""}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           {!historicoCargado && (
@@ -2230,9 +2303,9 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       {/* Aviso de presupuestos sin sincronizar a la nube — mismo mecanismo
           agregado del lado de Steel CRM (2026-08-29) */}
       {syncPendientes.length > 0 && (
-        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize: 13, color: C.err, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span>☁️ <strong>{syncPendientes.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
-          <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+          <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
             Reintentar ahora
           </button>
         </div>
@@ -2241,12 +2314,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       {/* Filtros por estado */}
       <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
         <button onClick={() => setFiltEst("")}
-          style={{ ...BTN(filtEst===""?"ok":"ghost"), padding:"4px 12px", fontSize:11 }}>
+          style={{ ...BTN(filtEst===""?"ok":"ghost"), padding:"4px 12px", fontSize:13 }}>
           Todos ({presupuestos.length})
         </button>
         {Object.entries(ESTADO_CFG).map(([k,v]) => (
           <button key={k} onClick={() => setFiltEst(filtEst===k?"":k)}
-            style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:11,
+            style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:13,
               ...(filtEst===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
             {v.icon} {v.label} ({cnt[k]||0})
           </button>
@@ -2262,11 +2335,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
             <>
               <div style={{ fontSize:40, marginBottom:12 }}>💰</div>
               <div style={{ fontSize:15, fontWeight:700, marginBottom:6, color:C.steel }}>Sin presupuestos todavía</div>
-              <div style={{ fontSize:12, marginBottom:20 }}>Creá el primer presupuesto para empezar</div>
+              <div style={{ fontSize:13, marginBottom:20 }}>Creá el primer presupuesto para empezar</div>
               <button style={BTN("primary")} onClick={() => setNuevoOpen(true)}>+ Nuevo presupuesto</button>
             </>
           ) : (
-            <div style={{ fontSize:13 }}>No hay resultados para ese filtro</div>
+            <div style={{ fontSize:14 }}>No hay resultados para ese filtro</div>
           )}
         </div>
       )}
@@ -2295,13 +2368,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     style={{ cursor:"pointer" }}
                     onMouseEnter={e => e.currentTarget.style.background=C.iron+"55"}
                     onMouseLeave={e => e.currentTarget.style.background=""}>
-                    <td style={TD}><span style={{ color:C.muted, fontSize:11 }}>{p.nro}</span></td>
+                    <td style={TD}><span style={{ color:C.muted, fontSize:13 }}>{p.nro}</span></td>
                     <td style={TD}><span style={{ fontWeight:700 }}>{p.nombre}</span></td>
-                    <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{p.cliente||"—"}</span></td>
-                    <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{p.obra||"—"}</span></td>
+                    <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p.cliente||"—"}</span></td>
+                    <td style={TD}><span style={{ fontSize:13, color:C.muted }}>{p.obra||"—"}</span></td>
                     <td style={TD}><span style={BDG(C.steel,true)}>{p.tipo_trabajo||"Fab"}</span></td>
-                    <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
-                    <td style={TD}><span style={{ fontSize:11, color:C.muted }}>{p.fecha}</span></td>
+                    <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
+                    <td style={TD}><span style={{ fontSize:13, color:C.muted }}>{p.fecha}</span></td>
                     <td style={{ ...TD, textAlign:"center" }}>{(p.items||[]).length}</td>
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
                       {p._total_usd>0 ? `$${n2(p._total_usd)}` : "—"}
@@ -2309,9 +2382,9 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     <td style={TD}><span style={BDG(est.color,true)}>{est.icon} {est.label}</span></td>
                     <td style={TD} onClick={e=>e.stopPropagation()}>
                       <button onClick={() => clonarPres(p)} title="Clonar presupuesto"
-                        style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:13, marginRight:8 }}>📋</button>
+                        style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:14, marginRight:8 }}>📋</button>
                       <button onClick={() => setConfirmarDelId(p.id)}
-                        style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
+                        style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
                     </td>
                   </tr>
                 );
