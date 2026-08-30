@@ -361,7 +361,7 @@ function ModalNuevo({ onSave, onClose }) {
   const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
   const crear = () => {
     if (!form.nombre.trim()) return;
-    if (contactoSinResolver) { alert(`El contacto "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (contactoSinResolver) { alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     onSave(form);
   };
@@ -377,9 +377,9 @@ function ModalNuevo({ onSave, onClose }) {
             <label style={LBL}>Nombre / Referencia *</label>
             <input style={INP} value={form.nombre} autoFocus placeholder="ej: Pérgola SACEEM" onChange={e=>set("nombre",e.target.value)}/>
           </div>
-          <div><label style={LBL}>Cliente (empresa)</label><AutocompleteEmpresa style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
+          <div><label style={LBL}>Empresa</label><AutocompleteEmpresa style={INP} value={form.cliente} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
           <div>
-            <label style={LBL}>Contacto</label>
+            <label style={LBL}>Cliente</label>
             <AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
             {contactoSinResolver && (
               <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
@@ -1589,7 +1589,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // en el momento en que hace falta enviarlos a Steel CRM.
   const enviarSteelCRM = async () => {
     if (vinculoCRM || enviandoCRM) return;
-    if (contactoSinResolver) return alert(`El contacto "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
+    if (contactoSinResolver) return alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
     if (obraSinResolver) return alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de enviar a Steel CRM.`);
     const codigo = pres.codigo_calculo || newCodigoCalculo();
     if (!pres.codigo_calculo) set("codigo_calculo", codigo);
@@ -1686,10 +1686,10 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
             </div>
             {datosAbiertos && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-              <div><label style={LBL}>Cliente (empresa)</label>
+              <div><label style={LBL}>Empresa</label>
                 <AutocompleteEmpresa style={INP} value={pres.cliente||""} placeholder="Razón social" onChange={v=>set("cliente",v)}/></div>
               <div>
-                <label style={LBL}>Contacto</label>
+                <label style={LBL}>Cliente</label>
                 <AutocompleteCliente style={INP} value={pres.contacto||""} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
                 {contactoSinResolver && (
                   <div style={{ fontSize:11, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>

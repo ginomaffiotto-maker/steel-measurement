@@ -1260,7 +1260,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <div style={{ background:C.iron, border:`1px solid ${C.accent}44`, borderRadius:10,
             padding:20, marginBottom:20, maxWidth:480 }}>
             <div style={{ fontWeight:700, fontSize:14, color:C.accent, marginBottom:14 }}>Nuevo cómputo</div>
-            <label style={LBL}>Nombre obra</label>
+            <label style={LBL}>Nombre cómputo</label>
             <input type="text" placeholder="Ej: Galpón CCFC" value={nuevo.nombre}
               onChange={e=>setNuevo(v=>({...v,nombre:e.target.value}))}
               onKeyDown={e=>e.key==="Enter"&&crearComputo()}
@@ -1423,7 +1423,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         <button onClick={()=>setSelId(null)}
           style={{ background:"transparent", border:"none", color:C.accent, cursor:"pointer",
             fontSize:13, fontWeight:700, padding:"4px 0" }}>
-          ← Obras
+          ← Cómputos
         </button>
         <span style={{ color:C.border }}>/</span>
         <span style={{ fontSize:13, color:C.muted }}>
