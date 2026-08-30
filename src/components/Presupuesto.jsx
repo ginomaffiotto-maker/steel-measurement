@@ -796,7 +796,8 @@ function TabMO({ item, set, tipo }) {
   // categoría/tipo de hora) — persistido en el ítem para que no se resetee
   // al cerrar y reabrir el editor.
   const operariosKey = key + "_operarios";
-  const operarios = item[operariosKey] || 1;
+  const operariosRaw = item[operariosKey];
+  const operarios = operariosRaw === "" || operariosRaw == null ? 1 : Math.max(1, +operariosRaw || 1);
   const dias = operarios > 0 ? tot_h / (operarios * HORAS_POR_DIA) : 0;
 
   return (
@@ -827,8 +828,9 @@ function TabMO({ item, set, tipo }) {
           </div>
           <div>
             <label style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, display:"block", marginBottom:3 }}>Operarios</label>
-            <input type="number" min="1" step="1" value={operarios}
-              onChange={e=>set(operariosKey, Math.max(1, +e.target.value || 1))}
+            <input type="number" min="1" step="1" value={operariosRaw ?? 1}
+              onChange={e=>set(operariosKey, e.target.value)}
+              onBlur={e=>set(operariosKey, Math.max(1, parseInt(e.target.value,10) || 1))}
               style={{ ...INP, width:70, textAlign:"center", padding:"6px 8px", fontSize:15, fontWeight:700 }}/>
           </div>
           <div>
@@ -1033,7 +1035,16 @@ function TabTrat({ item, set }) {
             <span style={{ fontSize:15, fontWeight:700, color:C.ok }}>${n2(tot_arenado)}</span>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, paddingBottom:4 }}>
-            <button onClick={()=>setTs("galvanizado",!ts.galvanizado)}
+            <button onClick={()=>{
+                const activar = !ts.galvanizado;
+                // 2026-08-30: antes había que activar Y ADEMÁS apretar "Usar
+                // auto" para que aparezcan los kg de los materiales marcados
+                // como galvanizado — si no, quedaba en 0 y parecía que no
+                // traía nada. Se precarga solo, igual que ya hacía "arena_m2".
+                const patch = { galvanizado: activar };
+                if (activar && !ts.galvanizado_kg && galv_auto > 0) patch.galvanizado_kg = +galv_auto.toFixed(2);
+                set("trat_superficie", { ...ts, ...patch });
+              }}
               style={{...BTN(ts.galvanizado?"ok":"ghost"),padding:"4px 12px",fontSize:13}}>
               {ts.galvanizado ? "✓ Galvanizado" : "○ Galvanizado"}
             </button>
@@ -1675,7 +1686,12 @@ function ResumenRubros({ rubros, total_usd, total_kg, extra }) {
       <span title="Precio en dólares por kilogramo de material de este rubro"
         style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, textAlign:"right" }}>U$S/kg</span>
 
-      <BarraRubro label="⚙️ Materiales / Hierros" usd={rubros.hier+rubros.mat} total={total_usd} kg={total_kg} color={C.info} />
+      {/* 2026-08-30: antes "Hierros" y "Mat. General" se sumaban en una sola
+          línea — con Hierros en $0 (ítem sin USD/kg cargado todavía) parecía
+          que Mat. General "no se veía" en el resumen aunque sí se estaba
+          sumando. Separadas para que cada pestaña se refleje sola. */}
+      <BarraRubro label="⚙️ Hierros"        usd={rubros.hier} total={total_usd} kg={total_kg} color={C.info} />
+      <BarraRubro label="📦 Mat. General"   usd={rubros.mat}  total={total_usd} kg={total_kg} color={C.info} />
       <BarraRubro label="🔨 MO Fabricación"        usd={rubros.moFab}  total={total_usd} kg={total_kg} color={C.pur} />
       <BarraRubro label="🏗️ MO Montaje"            usd={rubros.moMon}  total={total_usd} kg={total_kg} color={C.teal} />
       <BarraRubro label="⏰ H. Especiales"         usd={rubros.hesp}   total={total_usd} kg={total_kg} color={C.warn} />
@@ -2251,7 +2267,15 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const selPres = presupuestos.find(p => p.id === selId) || null;
   const cnt = Object.fromEntries(Object.keys(ESTADO_CFG).map(k => [k, presupuestos.filter(p => !p.eliminado && p.estado===k).length]));
 
-  const listaFiltrada = presupuestos
+  // listaFiltrada recorría presupuestos + recalculaba calcPresupuesto() (que
+  // internamente llama calcItem() por cada ítem, y antes del fix de
+  // loadTarifario() en storage.js eso era un localStorage.getItem+JSON.parse
+  // por cada ítem) en CADA render de esta pantalla, no solo cuando cambiaban
+  // los filtros — bug de performance real, mismo patrón que el cuelgue de
+  // unos segundos ya corregido del lado de Steel CRM (ver CLAUDE.md
+  // 2026-08-30). Como además el array resultante era una referencia nueva en
+  // cada render, el useMemo interno de useSortable nunca podía cachear nada.
+  const listaFiltrada = useMemo(() => presupuestos
     .filter(p => !p.eliminado)
     .filter(p => !filtEst || p.estado === filtEst)
     .filter(p => !filt.nombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filt.nombre.toLowerCase()))
@@ -2263,15 +2287,18 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     .filter(p => !filt.desde || (p.fecha||"") >= filt.desde)
     .filter(p => !filt.hasta || (p.fecha||"") <= filt.hasta)
     .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length,
-      _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" }));
+      _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" })),
+    [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
   // Reintento de sincronización (2026-08-29) — mismo mecanismo agregado del
   // lado de Steel CRM. Se recalcula desde localStorage después de cada
   // intento (éxito o fallo) para que el banner refleje el estado real.
   const [syncPendientes, setSyncPendientes] = useState(() => obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
+  const [syncError, setSyncError] = useState(null);
   const refrescarSyncPendientes = () => setSyncPendientes(obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
   const reintentarSync = () => {
+    setSyncError(null);
     syncPendientes.forEach(sp => {
       const p = presupuestos.find(x => x.id === sp.id);
       if (p) dualWritePresupuesto(p);
@@ -2327,6 +2354,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       // ningún aviso para el usuario.
       marcarSyncPendiente("presupuesto", p.id);
       refrescarSyncPendientes();
+      // 2026-08-30: el error real solo quedaba en la consola — "Reintentar
+      // ahora" parecía no hacer nada porque, si vuelve a fallar por la misma
+      // causa, el cartel se ve idéntico al de antes. Se muestra el motivo.
+      setSyncError(`"${p.nro || p.id}": ${e.message || e}`);
     }
   };
 
@@ -2464,11 +2495,16 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       {/* Aviso de presupuestos sin sincronizar a la nube — mismo mecanismo
           agregado del lado de Steel CRM (2026-08-29) */}
       {syncPendientes.length > 0 && (
-        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span>☁️ <strong>{syncPendientes.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
-          <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-            Reintentar ahora
-          </button>
+        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <span>☁️ <strong>{syncPendientes.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
+            <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              Reintentar ahora
+            </button>
+          </div>
+          {syncError && (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: .85 }}>Volvió a fallar — {syncError}</div>
+          )}
         </div>
       )}
 
