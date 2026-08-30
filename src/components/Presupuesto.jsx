@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -2002,6 +2002,19 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" }));
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
+  // Reintento de sincronización (2026-08-29) — mismo mecanismo agregado del
+  // lado de Steel CRM. Se recalcula desde localStorage después de cada
+  // intento (éxito o fallo) para que el banner refleje el estado real.
+  const [syncPendientes, setSyncPendientes] = useState(() => obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
+  const refrescarSyncPendientes = () => setSyncPendientes(obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
+  const reintentarSync = () => {
+    syncPendientes.forEach(sp => {
+      const p = presupuestos.find(x => x.id === sp.id);
+      if (p) dualWritePresupuesto(p);
+      else { limpiarSyncPendiente("presupuesto", sp.id); refrescarSyncPendientes(); }
+    });
+  };
+
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local (localStorage sigue siendo la fuente de
   // verdad). Resuelve `cliente` (texto libre local) a `cliente_id` real
@@ -2026,8 +2039,15 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       for (const item of items || []) {
         await saveDBItem(p.id, item);
       }
+      limpiarSyncPendiente("presupuesto", p.id);
+      refrescarSyncPendientes();
     } catch (e) {
       console.warn(`[Fase 3] No se pudo sincronizar presupuesto "${p.nro || p.id}" con el backend:`, e.message || e);
+      // Bug real detectado 2026-08-29 (mismo del lado de Steel CRM): sin
+      // esto, el presupuesto queda guardado solo en este dispositivo sin
+      // ningún aviso para el usuario.
+      marcarSyncPendiente("presupuesto", p.id);
+      refrescarSyncPendientes();
     }
   };
 
@@ -2161,6 +2181,17 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
           <button style={BTN("primary")} onClick={() => setNuevoOpen(true)}>+ Nuevo presupuesto</button>
         </div>
       </div>
+
+      {/* Aviso de presupuestos sin sincronizar a la nube — mismo mecanismo
+          agregado del lado de Steel CRM (2026-08-29) */}
+      {syncPendientes.length > 0 && (
+        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize: 13, color: C.err, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span>☁️ <strong>{syncPendientes.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
+          <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+            Reintentar ahora
+          </button>
+        </div>
+      )}
 
       {/* Filtros por estado */}
       <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>

@@ -299,8 +299,29 @@ un cliente cargado desde cualquiera de los dos aparece en el otro.
   no tener `dbId` todavía.
 - **Fase 5 (lectura desde la nube)**: al montar la app, cada entidad
   también trae lo que exista en Supabase y no esté ya en localStorage
-  (creado desde otro dispositivo/sesión) — nunca reemplaza ni pisa un
-  registro local, nunca deja al usuario sin datos si falla la lectura.
+  (creado desde otro dispositivo/sesión) nunca deja al usuario sin datos si
+  falla la lectura. **Excepción, desde 2026-08-29**: para `presupuestos_crm`
+  y `presupuestos_sm` (los únicos dos casos confirmados con bug real —
+  Gino vio un mismo presupuesto con estado distinto en dos PCs), Fase 5 ya
+  no es "solo agregar": si un presupuesto ya existe local pero la nube
+  tiene un `updated_at` más nuevo (editado desde otro dispositivo), lo
+  actualiza. Requiere un trigger de `updated_at` en cada tabla (antes
+  quedaba congelado en la fecha de creación — migración
+  `20260829140000_updated_at_trigger_presupuestos.sql`). Límite conocido y
+  aceptado: si dos dispositivos editan el mismo presupuesto antes de que
+  cualquiera sincronice, gana el que se guardó más tarde en el reloj del
+  servidor — no hay resolución de conflictos real. El resto de las
+  entidades sigue con el criterio viejo (solo agregar, nunca actualizar).
+- **Guardados que fallan en silencio**: el dual-write nunca puede bloquear
+  el guardado local, pero eso significa que un fallo (ej. sin internet un
+  segundo) dejaba el registro sin ningún aviso — invisible para cualquier
+  otro dispositivo porque nunca llegaba a Supabase (mismo bug real de
+  arriba). Desde 2026-08-29, Presupuestos en los dos sistemas registra el
+  fallo en localStorage (`scrm_sync_pendientes` / `smeas_sync_pendientes`)
+  y muestra un aviso con botón "Reintentar ahora" — en Inicio (Steel CRM)
+  o arriba de la lista (Steel Measurement, que no tiene pantalla de
+  Inicio). Mecanismo genérico, pensado para sumar el resto de las
+  entidades con dual-write más adelante si hace falta.
 - **Soft-delete**: las entidades marcadas ✅ en §4/§5 nunca se borran de
   verdad — se marcan `eliminado = true` (+ `eliminado_por`, `eliminado_fecha`
   donde aplica) y se filtran de las vistas activas. Recuperables desde una

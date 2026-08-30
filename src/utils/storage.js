@@ -95,6 +95,27 @@ export const saveLS = (k, v) => {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch {}
 };
 
+// Reintento de sincronización — mismo mecanismo agregado del lado de
+// Steel CRM (2026-08-29): un dualWrite* puede fallar en silencio (nunca
+// bloquea el guardado local), así que sin esto no hay forma de saber que
+// algo quedó solo en este dispositivo. Genérico a propósito, hoy solo se
+// conecta a Presupuesto.
+const SYNC_PENDIENTES_KEY = "smeas_sync_pendientes";
+
+export function obtenerSyncPendientes() {
+  return loadLS(SYNC_PENDIENTES_KEY, []);
+}
+
+export function marcarSyncPendiente(tipo, id) {
+  const actuales = obtenerSyncPendientes();
+  if (actuales.some(p => p.tipo === tipo && p.id === id)) return;
+  saveLS(SYNC_PENDIENTES_KEY, [...actuales, { tipo, id, fecha: new Date().toISOString() }]);
+}
+
+export function limpiarSyncPendiente(tipo, id) {
+  saveLS(SYNC_PENDIENTES_KEY, obtenerSyncPendientes().filter(p => !(p.tipo === tipo && p.id === id)));
+}
+
 export const uid = () =>
   (typeof crypto !== "undefined" && crypto.randomUUID)
     ? crypto.randomUUID()
@@ -325,11 +346,24 @@ export const saveDBPresupuestoSM = async (presupuesto) => {
   return data;
 };
 
-// Fase 5 (piloto, 2026-08-23): fusiona por id — nunca reemplaza lo local,
-// solo agrega presupuestos que existan remoto y no local (ej. sincronizados
-// desde otro dispositivo). Reconstruye la forma completa: resuelve
-// cliente_id → nombre y trae los ítems con loadDBItems — una llamada extra
-// por presupuesto, pero solo corre para lo que todavía no está local.
+const camposDesdeRemoto = (r, cliente, items) => ({
+  nro: r.nro || "", codigo_calculo: r.codigo_calculo || "", nombre: r.nombre || "",
+  cliente, contacto: r.contacto || "", obra: r.obra || "", detalle: r.detalle || "",
+  tipo_trabajo: r.tipo_trabajo || "Fabricación", categoria: r.categoria || "",
+  estado: r.estado || "borrador", clonado_de: r.clonado_de_id || null,
+  negociacion_pct: r.negociacion_pct || 0, negociacion_usd: r.negociacion_usd || 0,
+  neg_modo: r.neg_modo || "pct", interes_pct: r.interes_pct || 0, interes_dias: r.interes_dias || 30,
+  items: items || [], notas: r.notas || "", fecha: r.fecha, updated_at: r.updated_at,
+});
+
+// Fase 5 (piloto, 2026-08-23): fusiona por id. Si el presupuesto no existe
+// local, lo agrega (ej. creado desde otro dispositivo). Si ya existe, compara
+// `updated_at` — si la nube tiene una versión más nueva, la trae y pisa el
+// local (bug real detectado 2026-08-29: antes nunca actualizaba nada ya
+// conocido, así que un cambio hecho en otro dispositivo no se veía nunca).
+// Límite conocido y aceptado: si dos dispositivos editan lo mismo antes de
+// que cualquiera sincronice, gana el que se guardó más tarde en el reloj
+// del servidor — no hay resolución de conflictos real.
 export const useMergePresupuestosNube = (setPresupuestos) => {
   useEffect(() => {
     if (!supabase) return;
@@ -339,25 +373,30 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
       try {
         const remotos = await loadDBPresupuestosSM();
         let faltantes = [];
+        let actualizables = [];
         setPresupuestos((local) => {
-          const idsLocales = new Set(local.map((p) => p.id));
-          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
+          const localPorId = new Map(local.map((p) => [p.id, p]));
+          faltantes = (remotos || []).filter((r) => !localPorId.has(r.id));
+          actualizables = (remotos || []).filter((r) => {
+            const l = localPorId.get(r.id);
+            return l && r.updated_at && (!l.updated_at || new Date(r.updated_at) > new Date(l.updated_at));
+          });
           return local;
         });
+        for (const r of actualizables) {
+          if (!vivo) return;
+          try {
+            const [cliente, items] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBItems(r.id)]);
+            if (vivo) setPresupuestos((prev) => prev.map((p) => p.id === r.id ? { ...p, ...camposDesdeRemoto(r, cliente, items) } : p));
+          } catch (e) {
+            console.warn(`[Fase 5] No se pudo actualizar el presupuesto ${r.nro || r.id} desde la nube:`, e.message || e);
+          }
+        }
         for (const r of faltantes) {
           if (!vivo) return;
           try {
             const [cliente, items] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBItems(r.id)]);
-            const nuevo = {
-              id: r.id, nro: r.nro || "", codigo_calculo: r.codigo_calculo || "", nombre: r.nombre || "",
-              cliente, contacto: r.contacto || "", obra: r.obra || "", detalle: r.detalle || "",
-              tipo_trabajo: r.tipo_trabajo || "Fabricación", categoria: r.categoria || "",
-              estado: r.estado || "borrador", clonado_de: r.clonado_de_id || null,
-              negociacion_pct: r.negociacion_pct || 0, negociacion_usd: r.negociacion_usd || 0,
-              neg_modo: r.neg_modo || "pct", interes_pct: r.interes_pct || 0, interes_dias: r.interes_dias || 30,
-              items: items || [], notas: r.notas || "", fecha: r.fecha,
-              created_at: r.created_at, updated_at: r.updated_at,
-            };
+            const nuevo = { id: r.id, created_at: r.created_at, ...camposDesdeRemoto(r, cliente, items) };
             if (vivo) setPresupuestos((prev) => (prev.some((p) => p.id === nuevo.id) ? prev : [...prev, nuevo]));
           } catch (e) {
             console.warn(`[Fase 5] No se pudo traer el presupuesto ${r.nro || r.id} de la nube:`, e.message || e);

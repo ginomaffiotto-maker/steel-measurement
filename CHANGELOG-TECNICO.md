@@ -153,6 +153,34 @@ campo como Presupuesto de Steel Measurement, antes de "Enviar a Steel CRM").
 - **Sin verificar en vivo todavía** — build limpio en los dos repos, sin
   login real disponible en esta sesión.
 
+## 2026-08-29 — 2 bugs reales de sync entre dispositivos (Steel CRM + Steel Measurement)
+
+Encontrados investigando un reporte real de Gino: el mismo presupuesto se
+veía distinto en su PC de trabajo y su PC personal (dos presupuestos
+directamente ausentes en una, un tercero con estado desactualizado).
+
+- **Bug A — guardado que falla en silencio nunca avisa.** El dual-write a
+  Supabase nunca bloquea el guardado local si falla (por diseño), pero eso
+  significaba que un presupuesto podía quedar guardado solo en un
+  dispositivo sin ningún aviso — invisible para cualquier otro. Fix: se
+  registra el fallo en localStorage (`scrm_sync_pendientes` en Steel CRM,
+  `smeas_sync_pendientes` en Steel Measurement) y se muestra un aviso con
+  botón "Reintentar ahora" (Inicio en Steel CRM; arriba de la lista de
+  Presupuesto en Steel Measurement, que no tiene pantalla de Inicio). Por
+  ahora solo conectado a Presupuestos en los dos sistemas.
+- **Bug B — Fase 5 nunca actualizaba lo ya existente.** La lectura desde
+  la nube solo agregaba presupuestos nuevos — un presupuesto ya conocido
+  en un dispositivo nunca se actualizaba aunque otro dispositivo lo
+  hubiera editado. Fix: se agregó un trigger de `updated_at` (antes
+  quedaba congelado en la fecha de creación) en `presupuestos_crm` y
+  `presupuestos_sm` (migración
+  `20260829140000_updated_at_trigger_presupuestos.sql`), y Fase 5 ahora
+  compara esa fecha para decidir si pisar el local con la versión de la
+  nube. Límite conocido y aceptado: sin resolución de conflictos real —
+  si dos dispositivos editan lo mismo antes de sincronizar, gana el
+  último guardado según el reloj del servidor.
+- Ver detalle completo en `ENTIDADES-COMPARTIDAS.md` §7.
+
 ---
 
 ## Mantenimiento de este documento
