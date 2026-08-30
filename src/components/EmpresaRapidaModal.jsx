@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP, LBL, BTN } from "../styles/colors";
-import { saveDBEmpresa } from "../utils/storage";
+import { saveDBEmpresa, agregarAListaEmpresas } from "../utils/storage";
 
 // ─── ALTA RÁPIDA DE EMPRESA (2026-08-29, "igual que cliente y obra") ──
 // Antes "Empresa" era texto libre sin ninguna tabla propia (solo un
@@ -18,6 +18,7 @@ export default function EmpresaRapidaModal({ nombreInicial, onCreated, onClose }
     setErr("");
     try {
       const saved = await saveDBEmpresa(f);
+      agregarAListaEmpresas(saved);
       onCreated({ id: saved.id, nombre: f.nombre.trim() });
       onClose();
     } catch (e) {

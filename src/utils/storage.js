@@ -130,17 +130,40 @@ export const stamp = () => {
 };
 export const touch = (obj) => ({ ...obj, updated_at: new Date().toISOString() });
 
+// Cache de módulo + pub-sub chico (2026-08-30) — useListaClientes/
+// useListaObras/useListaEmpresas cacheaban en una variable de módulo para
+// no repetir el fetch, pero mutar esa variable sola nunca re-renderiza los
+// componentes YA MONTADOS con el hook (React no reacciona a una variable
+// externa que cambia sin pasar por setState). Bug real reportado por Gino:
+// crear una empresa nueva desde el cartel la guardaba bien en Supabase,
+// pero el cartel "no existe todavía" seguía ahí — el hook ya montado en
+// ese mismo formulario nunca se enteró del alta. Cada hook se suscribe acá
+// al montar; quien crea un registro nuevo notifica con `.set(...)` y todos
+// los montados se actualizan en el momento, sin esperar a un reload.
+function crearCacheSuscribible(inicial) {
+  let valor = inicial;
+  const listeners = new Set();
+  return {
+    get: () => valor,
+    set: (nuevo) => { valor = nuevo; listeners.forEach((fn) => fn(valor)); },
+    suscribir: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+}
+
 // ─── CLIENTES (lista centralizada, autocompletado) ────────────────
 // Cómputo, Anidado y Presupuesto comparten esta lista para que "CCFC" y
 // "Ccfc" no queden como 2 clientes distintos en el Buscador/filtros — se
 // arma sola: cada vez que alguien tipea un cliente nuevo se agrega acá.
 export const loadClientes = () => loadLS("smeas_clientes", []);
+const cacheListaClientes = crearCacheSuscribible(loadClientes());
 export const registrarCliente = (nombre) => {
   const n = (nombre || "").trim();
   if (!n) return;
   const lista = loadClientes();
   if (!lista.some(c => c.toLowerCase() === n.toLowerCase())) {
-    saveLS("smeas_clientes", [...lista, n]);
+    const actualizada = [...lista, n];
+    saveLS("smeas_clientes", actualizada);
+    cacheListaClientes.set(Array.from(new Set([...cacheListaClientes.get(), n])).sort((a, b) => a.localeCompare(b, "es")));
   }
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local — localStorage sigue siendo la única
@@ -193,20 +216,21 @@ export const loadClientesConNube = async () => {
 
 // Hook compartido por AutocompleteCliente (y cualquier otro campo que
 // necesite la lista) — cachea en módulo para no repetir el fetch cada vez
-// que se monta un campo nuevo en la misma pantalla.
-let _cacheListaClientes = null;
+// que se monta un campo nuevo en la misma pantalla. Suscribible (ver
+// crearCacheSuscribible) para que un alta nueva se refleje al instante en
+// cualquier otro campo ya montado.
 export const useListaClientes = () => {
-  const [lista, setLista] = useState(() => _cacheListaClientes || loadClientes());
+  const [lista, setLista] = useState(() => cacheListaClientes.get());
   useEffect(() => {
+    const unsub = cacheListaClientes.suscribir(setLista);
     let vivo = true;
     (async () => {
       await esperarSesion();
       if (!vivo) return;
       const l = await loadClientesConNube();
-      _cacheListaClientes = l;
-      if (vivo) setLista(l);
+      cacheListaClientes.set(l);
     })();
-    return () => { vivo = false; };
+    return () => { vivo = false; unsub(); };
   }, []);
   return lista;
 };
@@ -279,24 +303,28 @@ export const saveDBEmpresa = async (empresa) => {
   return data;
 };
 
-let _cacheListaEmpresas = null;
+const cacheListaEmpresas = crearCacheSuscribible([]);
 export const useListaEmpresas = () => {
-  const [lista, setLista] = useState(() => _cacheListaEmpresas || []);
+  const [lista, setLista] = useState(() => cacheListaEmpresas.get());
   useEffect(() => {
-    if (!supabase) return;
+    const unsub = cacheListaEmpresas.suscribir(setLista);
+    if (!supabase) return unsub;
     let vivo = true;
     (async () => {
       if (!(await esperarSesion()) || !vivo) return;
       loadDBEmpresas()
-        .then((rows) => {
-          _cacheListaEmpresas = rows || [];
-          if (vivo) setLista(rows || []);
-        })
+        .then((rows) => cacheListaEmpresas.set(rows || []))
         .catch(() => {});
     })();
-    return () => { vivo = false; };
+    return () => { vivo = false; unsub(); };
   }, []);
   return lista;
+};
+// Llamado por EmpresaRapidaModal tras crear — sin esto, el cartel "no
+// existe todavía" seguía mostrándose en el propio formulario que acaba de
+// crearla (ver comentario de crearCacheSuscribible).
+export const agregarAListaEmpresas = (nueva) => {
+  cacheListaEmpresas.set([nueva, ...cacheListaEmpresas.get()]);
 };
 
 // ─── OBRAS — capa de acceso al backend (2026-08-29) ────────────────
@@ -322,24 +350,26 @@ export const saveDBObra = async (obra) => {
   return data;
 };
 
-let _cacheListaObras = null;
+const cacheListaObras = crearCacheSuscribible([]);
 export const useListaObras = () => {
-  const [lista, setLista] = useState(() => _cacheListaObras || []);
+  const [lista, setLista] = useState(() => cacheListaObras.get());
   useEffect(() => {
-    if (!supabase) return;
+    const unsub = cacheListaObras.suscribir(setLista);
+    if (!supabase) return unsub;
     let vivo = true;
     (async () => {
       if (!(await esperarSesion()) || !vivo) return;
       loadDBObras()
-        .then((rows) => {
-          _cacheListaObras = rows || [];
-          if (vivo) setLista(rows || []);
-        })
+        .then((rows) => cacheListaObras.set(rows || []))
         .catch(() => {});
     })();
-    return () => { vivo = false; };
+    return () => { vivo = false; unsub(); };
   }, []);
   return lista;
+};
+// Llamado por ObraRapidaModal tras crear — mismo motivo que agregarAListaEmpresas.
+export const agregarAListaObras = (nueva) => {
+  cacheListaObras.set([nueva, ...cacheListaObras.get()]);
 };
 
 // ─── PRESUPUESTOS — capa de acceso al backend (Fase 2, sin cablear a la UI

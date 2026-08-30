@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, INP, LBL, BTN } from "../styles/colors";
-import { saveDBObra } from "../utils/storage";
+import { saveDBObra, agregarAListaObras } from "../utils/storage";
 
 // ─── ALTA RÁPIDA DE OBRA (2026-08-29) ─────────────────────────────
 // Antes, "Obra" era texto libre suelto en Anidado/Presupuesto (sin ningún
@@ -19,6 +19,7 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
     setErr("");
     try {
       const saved = await saveDBObra(f);
+      agregarAListaObras(saved);
       onCreated({ id: saved.id, nombre: f.nombre.trim(), empresa: f.empresa.trim() });
       onClose();
     } catch (e) {
