@@ -215,6 +215,29 @@ directamente ausentes en una, un tercero con estado desactualizado).
 
 ---
 
+## 2026-08-31 — Metas con escalones de premio (Steel CRM)
+
+- `metas` (Steel CRM) suma `escalones` y `sobregiro` (jsonb, nullable) —
+  Config > Metas gana una subsección opcional "Escalones de premio" (3
+  filas Mínimo/Medio/Máximo + sobregiro solo en tipo "monto"). Bonificaciones.jsx
+  deja de tener sus propios 3 escalones + sobregiro hardcodeados en
+  `calcBonus()` (`utils/calculos.js`) y los lee de la meta real
+  correspondiente vía nueva `calcularPremioEscalones()` — `calcBonus()`
+  queda como fallback para metas sin escalones cargados, sin borrarse.
+- **Fix real de paso**: el borrado de una meta (Config.jsx) nunca
+  llamaba a `deleteFilaDB` — quedaba viva en Supabase y Fase 5 la volvía
+  a traer en el próximo login, por eso las metas duplicadas reaparecían
+  después de borrarlas. Además, Fase 5 ahora deduplica por contenido
+  (`claveMeta`: tipo+período+asignación), no solo por `dbId` — dos
+  dispositivos que sembraron cada uno su propio set de metas por
+  defecto antes de sincronizar terminaban con dbId distinto para "la
+  misma" meta, y se traían la copia del otro para siempre.
+- Sin verificar en vivo — build limpio. Falta que Gino corra la
+  migración, cargue escalones reales en las 3 metas desde Config, y
+  confirme que Bonificaciones muestra los números correctos.
+
+---
+
 ## Mantenimiento de este documento
 
 Misma Regla 9 que los otros documentos compartidos, con una diferencia de

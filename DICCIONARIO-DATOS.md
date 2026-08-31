@@ -192,6 +192,7 @@ Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade),
 
 ### `metas`
 `nombre`, `tipo` (check in `monto`/`presupuestos`/`aprobacion`/`seguimientos`/`clientes_nuevos`/`kg_vendidos`), `valor`, `periodo` (check in `mes`/`trimestre`/`semestre`/`anio`), `icono`, `color`, `asignado_a_todos` (boolean default true), `activa`, `umbral_alerta` (numeric default 80), `notas_supervisor`, `mostrar_en_inicio`.
+`escalones` (jsonb, nullable — `[{valor, premio}, ...]`, 3 escalones mínimo/medio/máximo) y `sobregiro` (jsonb, nullable — `{desde, hasta, premioAdicional}`, extensión proporcional más allá del último escalón, hoy solo usada por `tipo="monto"`). Agregadas 2026-08-31: antes Bonificaciones.jsx (steelcrm) tenía sus propios 3 escalones + sobregiro hardcodeados en `calcBonus()`, ahora editables desde Config > Metas y leídos de acá — `calcBonus()` queda como fallback para cuando una meta todavía no tiene `escalones` cargados.
 
 ### `meta_usuarios`
 `meta_id → metas` cascade, `profile_id → profiles` cascade, `unique(meta_id, profile_id)`. Solo se llena cuando `asignado_a_todos = false`.
