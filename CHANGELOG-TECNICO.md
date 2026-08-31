@@ -236,6 +236,23 @@ directamente ausentes en una, un tercero con estado desactualizado).
   migración, cargue escalones reales en las 3 metas desde Config, y
   confirme que Bonificaciones muestra los números correctos.
 
+## 2026-08-31 — 2 bugs reales de datos, sin cambio de esquema
+
+- **Steel Measurement** (`ff7d9bc`): sincronizar un presupuesto sin
+  Contacto cargado escribía el nombre de la Empresa en la tabla
+  `clientes` (compartida con Steel CRM) como si fuera una persona —
+  contaminaba el autocompletado de Cliente en los dos sistemas. Fix
+  previene que vuelva a pasar; **los registros ya contaminados en
+  Supabase no se limpiaron, pendiente de decisión de Gino**. De paso,
+  fix de propagación real: los tratamientos por pieza marcados en
+  Cómputo no llegaban al Anidado (se perdían en el primer salto de la
+  cadena Cómputo→Anidado→Presupuesto).
+- **Steel CRM** (`a5bec97`): el contador local de `nro` nunca chequeaba
+  contra Supabase — un choque con la restricción única de la base
+  dejaba el reintento de sync repitiendo el mismo insert fallido para
+  siempre. Ahora detecta el código de error `23505` y reintenta una
+  vez con un `nro` nuevo.
+
 ---
 
 ## Mantenimiento de este documento
