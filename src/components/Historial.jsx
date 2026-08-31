@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
@@ -7,7 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
-import { useSortable } from "../utils/useSortable";
+import { useSortable, usePaginado, Paginador } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import FiltrosBar from "./FiltrosBar";
 
@@ -492,7 +492,11 @@ export default function Historial({ usuario, usuarios = [], logear }) {
 
   const usdKgDe = (t) => (+t.kg_total > 0) ? (+t.usd_total || 0) / (+t.kg_total) : 0;
 
-  const listaFiltrada = trabajosActivos
+  // Memoizado (2026-08-31, mismo patrón que Presupuesto.jsx — ver
+  // CLAUDE.md): sin esto el array resultante era una referencia nueva en
+  // cada render, así que el useMemo interno de useSortable nunca podía
+  // cachear nada tampoco.
+  const listaFiltrada = useMemo(() => trabajosActivos
     .filter(t => !filt.categoria || t.categoria === filt.categoria)
     .filter(t => !filt.tipo || t.tipo_trabajo === filt.tipo)
     .filter(t => !filt.familia || familiaDe(t.categoria) === filt.familia)
@@ -504,8 +508,12 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .filter(t => !filt.ot      || (t.nro_ot||"").toLowerCase().includes(filt.ot.toLowerCase()))
     .filter(t => !filt.desde || (t.fecha||"") >= filt.desde)
     .filter(t => !filt.hasta || (t.fecha||"") <= filt.hasta)
-    .map(t => ({ ...t, _usd_kg: usdKgDe(t) }));
+    .map(t => ({ ...t, _usd_kg: usdKgDe(t) })),
+    [trabajosActivos, filt]); // eslint-disable-line react-hooks/exhaustive-deps
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
+  // Paginado (2026-08-31): 235 trabajos históricos reales y creciendo —
+  // mismo riesgo de DOM grande que ya causó el cuelgue en Steel CRM.
+  const { pagina: paginaHist, totalPaginas: totalPaginasHist, itemsPagina: listaPagina, setPagina: setPaginaHist } = usePaginado(lista, 50, [filt, sortCampo, sortDir]);
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local. Mismo criterio que el resto de Fase 3.
@@ -640,7 +648,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                   ))}
                 </tr></thead>
                 <tbody>
-                  {lista.map(t => {
+                  {listaPagina.map(t => {
                     const origen = ORIGEN_CFG[t.origen] || ORIGEN_CFG.manual;
                     return (
                       <tr key={t.id} onClick={() => { setSelId(t.id); setVista("detalle"); }}
@@ -666,6 +674,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                   })}
                 </tbody>
               </table>
+              <Paginador pagina={paginaHist} totalPaginas={totalPaginasHist} setPagina={setPaginaHist} />
             </div>
           )}
         </>
