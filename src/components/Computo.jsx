@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
@@ -15,6 +15,7 @@ import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
+import { Combobox, normalizarTexto } from "./Combobox";
 
 const COMPUTO_FILT_DEFAULTS = { nombre: "", cliente: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function computoCampos(usuarios) {
@@ -35,11 +36,6 @@ const TH_R  = { ...TH, textAlign: "right" };
 const TD_R  = { ...TD, textAlign: "right", fontVariantNumeric: "tabular-nums" };
 const n2    = v => (Math.round(v * 100)  / 100).toFixed(2);
 const n3    = v => (Math.round(v * 1000) / 1000).toFixed(3);
-const normStr = s => String(s||"").toLowerCase()
-  .normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"")
-  .replace(/×/g,"x").replace(/²/g,"2").replace(/½/g,"1/2")
-  .replace(/¼/g,"1/4").replace(/¾/g,"3/4").replace(/\s+/g," ").trim();
-
 // Genera el próximo N° de cómputo salteando cualquiera que ya esté en uso
 // (el contador guardado puede haber quedado atrás de cómputos importados o
 // creados manualmente con un N° más alto — encontrado el 24/8: "C-003" se
@@ -68,95 +64,6 @@ function Toggle({ on, onChange, label, color = C.ok }) {
           position:"absolute", top:2, left: on ? 18 : 2, transition:"left .15s" }} />
       </button>
       <span style={{ fontSize:13, color: on ? C.text : C.muted }}>{label}</span>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// COMBOBOX
-// ═══════════════════════════════════════════════════════════════
-// Info de referencia rápida de un material: largo de barra o m² de la hoja, + kg/m o kg/m².
-function infoMaterial(o) {
-  if (o.kg_m2) {
-    const sup = o.sheet_w && o.sheet_h ? `${(o.sheet_w*o.sheet_h/1e6).toFixed(2)}m²` : null;
-    return [sup, o.kg_m2 ? `${o.kg_m2} kg/m²` : null].filter(Boolean).join(" · ");
-  }
-  if (o.kg_m) {
-    const largo = o.largo_mm ? `${(o.largo_mm/1000)}m` : null;
-    return [largo, `${o.kg_m} kg/m`].filter(Boolean).join(" · ");
-  }
-  return null;
-}
-
-function Combobox({ opciones, value, onChange, placeholder = "Buscar…" }) {
-  const [busq, setBusq] = useState("");
-  const [open, setOpen] = useState(false);
-  const [openUp, setOpenUp] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setBusq(""); } };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-  const sel = opciones.find(o => o.id === value) || null;
-  const q = normStr(busq.trim());
-  const tokens = q ? q.split(" ").filter(Boolean) : [];
-  const lista = tokens.length === 0
-    ? opciones.slice(0, 80)
-    : opciones.filter(o => { const hay = normStr(o.nombre+" "+(o.cat||"")); return tokens.every(t=>hay.includes(t)); }).slice(0,80);
-  const abrir = () => {
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setOpenUp(window.innerHeight - r.bottom < 320 && r.top > 320);
-    }
-    setOpen(v=>!v);
-  };
-  return (
-    <div ref={ref} style={{ position:"relative", width:240 }}>
-      <div onClick={abrir}
-        style={{ ...INP, width:"100%", display:"flex", alignItems:"center", gap:6,
-          cursor:"pointer", padding:"6px 8px", border:`1px solid ${open?C.accent:C.border}` }}>
-        {sel ? (
-          <>
-            <span style={{ flex:1,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{sel.nombre}</span>
-            {infoMaterial(sel) && <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{infoMaterial(sel)}</span>}
-            {!sel.precio_kg && <span title="Sin precio cargado en Insumos y Precios" style={{ fontSize:11, color:C.warn }}>⚠ sin precio</span>}
-            <span onMouseDown={e=>{e.stopPropagation();onChange(null);setBusq("");setOpen(false);}}
-              style={{ cursor:"pointer",color:C.muted,fontSize:14,padding:"0 3px" }}>✕</span>
-          </>
-        ) : <span style={{ flex:1,color:C.muted,fontSize:12 }}>{placeholder}</span>}
-        <span style={{ color:C.muted,fontSize:10 }}>{open?"▲":"▼"}</span>
-      </div>
-      {open && (
-        <div style={{ position:"absolute", ...(openUp ? {bottom:"calc(100% + 4px)"} : {top:"calc(100% + 4px)"}), left:0,width:300,zIndex:9999,
-          background:C.card,border:`1px solid ${C.accent}55`,borderRadius:8,
-          boxShadow:"0 8px 24px #00000077",overflow:"hidden" }}>
-          <div style={{ padding:"8px 8px 4px" }}>
-            <input autoFocus type="text" placeholder="Escribí para filtrar…" value={busq}
-              onChange={e=>setBusq(e.target.value)}
-              style={{ ...INP,width:"100%",padding:"6px 8px",fontSize:12 }} />
-          </div>
-          <div style={{ maxHeight:260,overflowY:"auto" }}>
-            {lista.length===0 && <div style={{ padding:"10px 12px",color:C.muted,fontSize:12 }}>Sin resultados para "{busq}"</div>}
-            {lista.map(o=>(
-              <div key={o.id} onMouseDown={()=>{onChange(o);setBusq("");setOpen(false);}}
-                style={{ padding:"7px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontSize:13,
-                  background:value===o.id?C.accent+"22":"transparent",
-                  color:value===o.id?C.accent:C.text,
-                  borderLeft:value===o.id?`3px solid ${C.accent}`:"3px solid transparent" }}
-                onMouseEnter={e=>e.currentTarget.style.background=C.iron}
-                onMouseLeave={e=>e.currentTarget.style.background=value===o.id?C.accent+"22":"transparent"}>
-                <span style={{ flex:1 }}>{o.nombre}</span>
-                {infoMaterial(o) && <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{infoMaterial(o)}</span>}
-                {!o.precio_kg && <span title="Sin precio cargado" style={{ fontSize:10, color:C.warn }}>⚠</span>}
-                {o.cat&&<span style={{ fontSize:10,color:C.muted }}>{o.cat}</span>}
-                {value===o.id&&<span style={{ color:C.accent }}>✓</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1113,6 +1020,15 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       alert(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
       return;
     }
+    // 2026-08-30: dos cómputos con el mismo nombre y fecha quedan idénticos
+    // en cualquier desplegable que los liste ("nombre (fecha)") — no hay
+    // forma de distinguirlos ahí (encontrado en vivo por Gino). Se bloquea
+    // en vez de solo avisar, a pedido explícito.
+    const nombreDup = computos.find(c => normalizarTexto(c.nombre) === normalizarTexto(nuevo.nombre) && c.fecha === nuevo.fecha);
+    if (nombreDup) {
+      alert(`Ya existe un cómputo "${nombreDup.nombre}" con la misma fecha (${nombreDup.nro}) — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
+      return;
+    }
     const nro = nroManual || siguienteNroComputo(computos);
     const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"" };
     setComputos(prev=>[c,...prev]);
@@ -1513,7 +1429,14 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <div style={{ fontSize:20,fontWeight:800,color:C.teal }}>{n2(totalesGlobales?.sup||0)} m²</div>
         </div>
 
-        <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
+        <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
+          {/* 2026-08-30: Gino pidió un botón de guardar — acá (como en el
+              resto de Steel Measurement) cada cambio ya se guarda solo en
+              cuanto lo tipeás, no hay nada que perder al cerrar o navegar.
+              Se deja el indicador en vez de un botón que no haría nada real. */}
+          <span title="Cada cambio se guarda solo, no hace falta apretar nada" style={{ fontSize:12, color:C.ok, display:"flex", alignItems:"center", gap:4 }}>
+            ✓ Guardado
+          </span>
           <button onClick={()=>{saveLS("smeas_anidar_pending",selId);onNidar&&onNidar();}}
             style={{ ...BTN("ghost"),borderColor:C.pur+"66",color:C.pur,display:"flex",alignItems:"center",gap:6,fontWeight:700 }}>
             ✂️ Anidar

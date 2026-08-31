@@ -15,6 +15,7 @@ import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
+import { Combobox, normalizarTexto } from "./Combobox";
 
 const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function anidadoCampos(usuarios) {
@@ -57,91 +58,6 @@ function FichaBadges({ g }) {
   const activos = [ficha.granallado&&"◈",ficha.pintura&&"🎨",ficha.galvanizado&&"🔩"].filter(Boolean);
   if (!activos.length) return null;
   return <span style={{ fontSize:11, color:C.gold }}>{activos.join(" ")}</span>;
-}
-
-// ─── Normalización ────────────────────────────────────────────────
-const norm = s => String(s||"").toLowerCase()
-  .normalize("NFD").replace(new RegExp("[\\u0300-\\u036f]","g"),"")
-  .replace(/×/g,"x").replace(/²/g,"2").replace(/½/g,"1/2")
-  .replace(/¼/g,"1/4").replace(/¾/g,"3/4").replace(/\s+/g," ").trim();
-
-// ─── Combobox ────────────────────────────────────────────────────
-// Info de referencia rápida de un material: largo de barra o m² de la hoja, + kg/m o kg/m².
-function infoMaterial(o) {
-  if (o.kg_m2) {
-    const sup = o.sheet_w && o.sheet_h ? `${(o.sheet_w*o.sheet_h/1e6).toFixed(2)}m²` : null;
-    return [sup, o.kg_m2 ? `${o.kg_m2} kg/m²` : null].filter(Boolean).join(" · ");
-  }
-  if (o.kg_m) {
-    const largo = o.largo_mm ? `${(o.largo_mm/1000)}m` : null;
-    return [largo, `${o.kg_m} kg/m`].filter(Boolean).join(" · ");
-  }
-  return null;
-}
-
-function Combobox({ opciones, value, onChange, placeholder = "Buscar…" }) {
-  const [busq, setBusq] = useState("");
-  const [open, setOpen] = useState(false);
-  const [openUp, setOpenUp] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setBusq(""); } };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
-  const sel = opciones.find(o => o.id === value) || null;
-  const q = norm(busq.trim());
-  const tokens = q ? q.split(" ").filter(Boolean) : [];
-  const lista = tokens.length === 0 ? opciones.slice(0,80)
-    : opciones.filter(o => { const hay = norm(o.nombre + " " + (o.cat||"")); return tokens.every(t=>hay.includes(t)); }).slice(0,80);
-  const abrir = () => {
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setOpenUp(window.innerHeight - r.bottom < 320 && r.top > 320);
-    }
-    setOpen(v=>!v);
-  };
-  return (
-    <div ref={ref} style={{ position:"relative", width:240 }}>
-      <div onClick={abrir}
-        style={{ ...INP, width:"100%", display:"flex", alignItems:"center", gap:6, cursor:"pointer", padding:"6px 8px", border:`1px solid ${open?C.accent:C.border}` }}>
-        {sel ? (
-          <>
-            <span style={{ flex:1, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sel.nombre}</span>
-            {infoMaterial(sel) && <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{infoMaterial(sel)}</span>}
-            {!sel.precio_usd_kg && <span title="Sin precio cargado en Insumos y Precios" style={{fontSize:11,color:C.warn,flexShrink:0}}>⚠ sin precio</span>}
-            <span onMouseDown={e=>{e.stopPropagation();onChange(null);setBusq("");setOpen(false);}} style={{ cursor:"pointer",color:C.muted,fontSize:14,padding:"0 3px",lineHeight:1 }}>✕</span>
-          </>
-        ) : <span style={{ flex:1,color:C.muted,fontSize:12 }}>{placeholder}</span>}
-        <span style={{ color:C.muted,fontSize:10,flexShrink:0 }}>{open?"▲":"▼"}</span>
-      </div>
-      {open && (
-        <div style={{ position:"absolute", ...(openUp ? {bottom:"calc(100% + 4px)"} : {top:"calc(100% + 4px)"}), left:0,minWidth:"100%",width:300,zIndex:9999,background:C.card,border:`1px solid ${C.accent}55`,borderRadius:8,boxShadow:"0 8px 24px #00000077",overflow:"hidden" }}>
-          <div style={{ padding:"8px 8px 4px" }}>
-            <input autoFocus type="text" placeholder="Escribí para filtrar…" value={busq} onChange={e=>setBusq(e.target.value)} style={{ ...INP,width:"100%",padding:"6px 8px",fontSize:12 }} />
-          </div>
-          <div style={{ maxHeight:260,overflowY:"auto" }}>
-            {lista.length===0 && <div style={{ padding:"10px 12px",color:C.muted,fontSize:12 }}>Sin resultados para <strong>"{busq}"</strong></div>}
-            {lista.map(o => (
-              <div key={o.id} onMouseDown={()=>{onChange(o);setBusq("");setOpen(false);}}
-                style={{ padding:"7px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontSize:13,
-                  background:value===o.id?C.accent+"22":"transparent", color:value===o.id?C.accent:C.text,
-                  borderLeft:value===o.id?`3px solid ${C.accent}`:"3px solid transparent" }}
-                onMouseEnter={e=>e.currentTarget.style.background=C.iron}
-                onMouseLeave={e=>e.currentTarget.style.background=value===o.id?C.accent+"22":"transparent"}>
-                <span style={{ flex:1 }}>{o.nombre}</span>
-                {infoMaterial(o) && <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{infoMaterial(o)}</span>}
-                {o.cat && <span style={{ fontSize:10,color:C.muted }}>{o.cat}</span>}
-                {!o.precio_usd_kg && <span title="Sin precio cargado" style={{fontSize:10,color:C.warn}}>⚠</span>}
-                {value===o.id && <span style={{ color:C.accent }}>✓</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ─── Bibliotecas ──────────────────────────────────────────────────
@@ -476,7 +392,7 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
         <input value={g.obs||""} placeholder="Observaciones, proveedor, fecha del precio..." onChange={e=>onChange({...g,obs:e.target.value})} style={{ ...INP, flex:"1 1 220px", padding:"4px 8px", fontSize:11 }} />
       </div>
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap" }}>
-        <Combobox opciones={bib} value={g.material_id||""} onChange={elegir} placeholder="Elegir perfil…" />
+        <Combobox opciones={bib} value={g.material_id||""} onChange={elegir} placeholder="Elegir perfil…" precioField="precio_usd_kg" />
         <div style={{ display:"flex",alignItems:"center",gap:4 }}>
           <span style={{ fontSize:11,color:C.muted }}>Barra:</span>
           <input type="number" value={g.largo_barra_mm} onChange={e=>set("largo_barra_mm",e.target.value)} onFocus={e=>e.target.select()} style={{ ...INP,width:76,padding:"4px 6px",textAlign:"right" }} /><span style={{ fontSize:10,color:C.muted }}>mm</span>
@@ -656,7 +572,7 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
         <input value={g.obs||""} placeholder="Observaciones, proveedor, fecha del precio..." onChange={e=>onChange({...g,obs:e.target.value})} style={{ ...INP, flex:"1 1 220px", padding:"4px 8px", fontSize:11 }} />
       </div>
       <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap" }}>
-        <Combobox opciones={bib} value={g.material_id||""} onChange={elegir} placeholder="Elegir plancha…" />
+        <Combobox opciones={bib} value={g.material_id||""} onChange={elegir} placeholder="Elegir plancha…" precioField="precio_usd_kg" />
         <div style={{ display:"flex",alignItems:"center",gap:4 }}>
           <span style={{ fontSize:11,color:C.muted }}>Plancha:</span>
           <input type="number" value={g.sheet_w} onChange={e=>set("sheet_w",e.target.value)} onFocus={e=>e.target.select()} style={{ ...INP,width:72,padding:"4px 6px",textAlign:"right" }} />
@@ -731,6 +647,23 @@ function importar(computo_id, bib_map, bib_planchas_map) {
   if (!comp) return [];
   const mapaPerf={}, mapaPlanchas={};
   const mult_total=comp.cantidad_total||1;
+  // 2026-08-30: esto armaba cada grupo sin `ficha` en absoluto — lo marcado
+  // pieza por pieza en Cómputo (granallado/pintura/galvanizado/máquina) se
+  // perdía por completo al pasar a Anidado (encontrado por Gino, que
+  // esperaba que sí viajara). Como varias piezas del mismo material pueden
+  // venir con marcas distintas, se combinan por "si alguna pieza lo pide,
+  // el grupo entero lo lleva" (mismo criterio ya usado para kg a
+  // arenar/pintar/galvanizar de un anidado completo) — la máquina de corte
+  // no es booleana, así que se toma la primera que aparezca.
+  const mergearFicha = (destino, pf) => {
+    if (!pf) return destino;
+    const f = { ...destino };
+    if (pf.granallado) f.granallado = true;
+    if (pf.pintura) f.pintura = true;
+    if (pf.galvanizado) f.galvanizado = true;
+    if (pf.corte_maquina && pf.maquina && !f.maquina) f.maquina = pf.maquina;
+    return f;
+  };
   comp.items.forEach(item=>{
     const cant_item=(item.cantidad||1)*mult_total;
     item.piezas.forEach(p=>{
@@ -738,16 +671,18 @@ function importar(computo_id, bib_map, bib_planchas_map) {
         const largo=parseFloat(p.largo_mm_input)||0; if (!largo) return;
         if (!mapaPerf[p.material_id]) {
           const mat=bib_map[p.material_id];
-          mapaPerf[p.material_id]={ id:uid(), tipo:"perfil", material_id:p.material_id, material_nombre:p.material_nombre, kg_m:mat?.kg_m||0, sup_m2m:mat?.sup_m2m||0, largo_barra_mm:mat?.largo_mm||6000, kerf_mm:0, piezas:[], resultado:null };
+          mapaPerf[p.material_id]={ id:uid(), tipo:"perfil", material_id:p.material_id, material_nombre:p.material_nombre, kg_m:mat?.kg_m||0, sup_m2m:mat?.sup_m2m||0, largo_barra_mm:mat?.largo_mm||6000, kerf_mm:0, piezas:[], resultado:null, ficha:{} };
         }
+        mapaPerf[p.material_id].ficha = mergearFicha(mapaPerf[p.material_id].ficha, p.ficha);
         mapaPerf[p.material_id].piezas.push({ id:uid(), largo_mm:largo, cantidad:(parseInt(p.cantidad)||1)*cant_item, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
       } else {
         // plancha
         const largo=parseFloat(p.largo_mm)||0, ancho=parseFloat(p.ancho_mm)||0; if (!largo||!ancho) return;
         if (!mapaPlanchas[p.material_id]) {
           const mat=bib_planchas_map[p.material_id];
-          mapaPlanchas[p.material_id]={ id:uid(), tipo:"plancha", material_id:p.material_id, material_nombre:p.material_nombre, kg_m2:mat?.kg_m2||0, sheet_w:mat?.sheet_w||6000, sheet_h:mat?.sheet_h||1500, piezas:[], resultado:null };
+          mapaPlanchas[p.material_id]={ id:uid(), tipo:"plancha", material_id:p.material_id, material_nombre:p.material_nombre, kg_m2:mat?.kg_m2||0, sheet_w:mat?.sheet_w||6000, sheet_h:mat?.sheet_h||1500, piezas:[], resultado:null, ficha:{} };
         }
+        mapaPlanchas[p.material_id].ficha = mergearFicha(mapaPlanchas[p.material_id].ficha, p.ficha);
         mapaPlanchas[p.material_id].piezas.push({ id:uid(), largo_mm:largo, ancho_mm:ancho, cantidad:(parseInt(p.cantidad)||1)*cant_item, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
       }
     });
@@ -762,9 +697,13 @@ function importar(computo_id, bib_map, bib_planchas_map) {
 // 0.17 desperdicio") y el precio (USD/kg de Biblioteca × kg = total USD).
 function materialesUnificados(anidado) {
   const bibLineales = [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[])];
-  const bibMap = {};
+  // 2026-08-31, a pedido de Gino: esto buscaba el precio por NOMBRE contra
+  // la biblioteca — si el nombre no matcheaba exacto (mismo bug ya
+  // corregido del lado de Presupuesto.jsx) quedaba en "—" sin avisar por
+  // qué. Se resuelve por `material_id`, que es lo que el grupo ya guarda.
+  const bibPorId = {};
   [...bibLineales, ...loadLS("smeas_planchas",[])]
-    .forEach(m => { bibMap[m.nombre] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
+    .forEach(m => { bibPorId[m.id] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
   // Fallback de sup_m2m por si el grupo es de un anidado viejo, creado antes de
   // que se empezara a guardar ese dato al elegir el material (ver Presupuesto.jsx).
   const supFallback = (material_id, material_nombre) => {
@@ -778,6 +717,12 @@ function materialesUnificados(anidado) {
     const kg = g.tipo === "plancha"
       ? (r.area_total_m2 || 0) * (g.kg_m2 || 0)
       : (r.kg_total || 0);
+    // Kg útiles (2026-08-31, a pedido de Gino): antes solo se mostraba el
+    // total comprado, sin distinguir cuánto de eso es material realmente
+    // aprovechado vs. desperdicio de corte.
+    const kg_util = g.tipo === "plancha"
+      ? (r.area_util_m2 || 0) * (g.kg_m2 || 0)
+      : (r.kg_util || 0);
     const sup = g.tipo === "plancha"
       ? (r.area_total_m2 || 0)
       : (r.m_total || 0) * sup_m2m;
@@ -786,8 +731,8 @@ function materialesUnificados(anidado) {
       : { util: r.b_util || 0, desp: r.b_desp || 0, total: r.b_total || 0, label: "barras" };
     if (g.tipo === "plancha") unidades.desp = +(unidades.total - unidades.util).toFixed(2);
     const nombre = g.material_nombre || "Sin material";
-    const precio_usd_kg = bibMap[nombre] || 0;
-    return { id: g.id, tipo: g.tipo, nombre, kg, sup, unidades, precio_usd_kg, precio_total: kg*precio_usd_kg, ficha: g.ficha || {} };
+    const precio_usd_kg = bibPorId[g.material_id] || 0;
+    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total: kg*precio_usd_kg, ficha: g.ficha || {} };
   });
 }
 
@@ -809,7 +754,7 @@ function VistaMaterialesAnidado({ anidado, onClose }) {
         <div style={{ color:C.muted, fontSize:12 }}>Calculá al menos un grupo para ver la lista unificada.</div>
       ) : (
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead><tr>{["Material","Tipo","A comprar","Kg","USD/kg","Total USD","Ficha"].map(h=><th key={h} style={{...TH,fontSize:10}}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Material","Tipo","A comprar","Kg útiles","Kg totales","USD/kg","Total USD","Ficha"].map(h=><th key={h} style={{...TH,fontSize:10}}>{h}</th>)}</tr></thead>
           <tbody>
             {materiales.map(m=>(
               <tr key={m.id}>
@@ -819,6 +764,7 @@ function VistaMaterialesAnidado({ anidado, onClose }) {
                   <span style={{color:C.ok,fontWeight:700}}>{m.unidades.total} {m.unidades.label}</span>
                   <span style={{color:C.muted,fontSize:10}}> ({m.unidades.util} útil + {m.unidades.desp} desp.)</span>
                 </td>
+                <td style={{...TD,textAlign:"right",color:C.muted}}>{n2(m.kg_util)} kg</td>
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>
@@ -873,7 +819,7 @@ function exportarListaCorte(anidado) {
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Anidado({ usuario, usuarios = [], logear }) {
+export default function Anidado({ usuario, usuarios = [], logear, onExportarPresupuesto }) {
   const { show: showUndo, Toast } = useUndoToast();
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(setAnidados);
@@ -965,6 +911,12 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     setComputoSel(pendingId);
     setNombre(comp.nombre);
     setFecha(comp.fecha||new Date().toISOString().split("T")[0]);
+    // 2026-08-30, a pedido de Gino: antes solo se traía nombre/fecha —
+    // Cliente/Empresa/Obra había que volver a tipearlos a mano aunque ya
+    // estaban cargados en el Cómputo de origen.
+    setCliente(comp.cliente||"");
+    setEmpresa(comp.empresa||"");
+    setObra(comp.obra||"");
     setCreando(true);
   },[]);
 
@@ -981,6 +933,16 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
     if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
+    // 2026-08-30: dos anidados con el mismo nombre y fecha quedan idénticos
+    // en el desplegable "Anidado vinculado" de Presupuesto ("nombre (fecha)")
+    // — típicamente pasa al apretar "Anidar" más de una vez desde el mismo
+    // Cómputo, que precarga siempre el mismo nombre/fecha (encontrado en
+    // vivo por Gino). Se bloquea en vez de solo avisar, a pedido explícito.
+    const nombreDup = anidados.find(x => !x.eliminado && normalizarTexto(x.nombre) === normalizarTexto(nombre) && x.fecha === fecha);
+    if (nombreDup) {
+      alert(`Ya existe un anidado "${nombreDup.nombre}" con la misma fecha — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
+      return;
+    }
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];
     // Tipo de trabajo/Categoría se heredan solos del cómputo de origen (si
     // se importó desde uno) — 2026-08-24, pedido de Gino: clasificar desde
@@ -1272,6 +1234,31 @@ export default function Anidado({ usuario, usuarios = [], logear }) {
                 {hayResultados&&(
                   <button onClick={()=>exportarListaCorte(actual)} style={{ ...BTN("ghost"),borderColor:C.gold+"66",color:C.gold,fontSize:12 }}>
                     ⬇ Exportar lista
+                  </button>
+                )}
+                {hayResultados&&(
+                  <button onClick={()=>{
+                      // 2026-08-30, a pedido de Gino: llevar los materiales
+                      // Y los datos (nombre/cliente/empresa/obra/tipo/
+                      // categoría) del anidado a Presupuesto en un solo paso
+                      // — reusa el mismo mecanismo ya armado en Presupuesto
+                      // (smeas_material_export_pending / ImportarMaterialesModal),
+                      // que hasta ahora nadie llenaba del lado de acá.
+                      const mats = materialesUnificados(actual).map(m => ({
+                        nombre: m.nombre, kg: m.kg, sup: m.sup, usd_kg: m.precio_usd_kg || 0,
+                        granallado: !!m.ficha?.granallado, pintura: !!m.ficha?.pintura, galvanizado: !!m.ficha?.galvanizado,
+                      }));
+                      saveLS("smeas_material_export_pending", mats);
+                      // Anidado usa "cliente" para la persona y "empresa" para la
+                      // razón social — en Presupuesto es al revés (cliente=empresa,
+                      // contacto=persona), mismo mapeo que ya usa el resto del sistema.
+                      saveLS("smeas_presupuesto_precarga_pending", {
+                        nombre: actual.nombre, cliente: actual.empresa, contacto: actual.cliente, obra: actual.obra,
+                        tipo_trabajo: actual.tipo_trabajo, categoria: actual.categoria,
+                      });
+                      onExportarPresupuesto?.();
+                    }} style={{ ...BTN("ghost"),borderColor:C.ok+"66",color:C.ok,fontSize:12 }}>
+                    → Pasar a Presupuesto
                   </button>
                 )}
                 <select value={computoSel} onChange={e=>setComputoSel(e.target.value)} style={{ ...INP,width:200,padding:"5px 8px",fontSize:12 }}>

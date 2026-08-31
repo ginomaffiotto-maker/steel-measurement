@@ -1297,6 +1297,11 @@ const mkCat = (prefix, campo, entries) =>
   entries.map(([nombre, valor], i) => ({ id: `${prefix}_${i}`, nombre, [campo]: valor }));
 
 const TARIFARIO_DEFAULT = {
+  // 2026-08-31, a pedido de Gino: horas por día para el cálculo de "días
+  // estimados" de MO — antes era una constante fija (8) sin forma de
+  // tocarla. Este es el default global; cada ítem lo puede pisar solo
+  // para ese presupuesto (ver TabMO en Presupuesto.jsx).
+  horas_por_dia: 8,
   mo_fab: [
     { id: "mo_fab_1", nombre: "OFICIAL FAB",     usd_hora: 34 },
     { id: "mo_fab_2", nombre: "1/2 OFICIAL FAB", usd_hora: 28 },

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -161,6 +161,16 @@ function bibSupM2mFallback(material_id, material_nombre) {
 }
 
 function materialesUnificadosAnidado(anidado) {
+  // 2026-08-30: esta función no traía precio en absoluto (a diferencia de la
+  // misma función en Anidado.jsx, que sí lo resuelve) — "Importar materiales
+  // del anidado" en Presupuesto compensaba buscando el precio por NOMBRE
+  // contra la biblioteca, y si el nombre no matcheaba exacto quedaba en $0
+  // sin avisar (encontrado en vivo por Gino). Se resuelve acá por
+  // `material_id` (más robusto que por nombre) para que ambos casos usen
+  // el mismo dato.
+  const bibPrecioPorId = {};
+  [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[]), ...loadLS("smeas_planchas",[])]
+    .forEach(m => { bibPrecioPorId[m.id] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
   return (anidado?.grupos || []).filter(g => g.resultado).map(g => {
     const r = g.resultado.resumen || {};
     const sup_m2m = g.sup_m2m || (g.tipo!=="plancha" ? bibSupM2mFallback(g.material_id, g.material_nombre) : 0);
@@ -176,7 +186,8 @@ function materialesUnificadosAnidado(anidado) {
     unidades.desp = +((unidades.total||0) - (unidades.util||0)).toFixed(2);
     // % desperdicio de este material (kg_total incluye el desperdicio de corte, kg_util no)
     const pct_desperdicio = g.tipo === "plancha" ? (r.pct_desp || 0) : (r.kg_total>0 ? Math.round((1 - (r.kg_util||0)/r.kg_total)*1000)/10 : 0);
-    return { id: g.id, tipo: g.tipo, nombre: g.material_nombre || "Sin material", kg, sup, unidades, pct_desperdicio, ficha: g.ficha || {} };
+    const precio_usd_kg = bibPrecioPorId[g.material_id] || 0;
+    return { id: g.id, tipo: g.tipo, nombre: g.material_nombre || "Sin material", kg, sup, unidades, pct_desperdicio, precio_usd_kg, ficha: g.ficha || {} };
   });
 }
 
@@ -517,33 +528,233 @@ const TD_R   = { ...TD, textAlign:"right", fontVariantNumeric:"tabular-nums", fo
 const BtnDel = ({ onClick }) => (
   <button onClick={onClick} style={{ background:"none",border:"none",color:C.err,cursor:"pointer",fontSize:15,padding:"2px 6px" }}>🗑</button>
 );
+// 2026-08-31, a pedido de Gino: un click de más en 🗑 no debe poder borrar
+// datos ya cargados por error — una fila todavía vacía se borra directo
+// (no hay nada que perder), una fila con algo cargado pide confirmación.
+// `vacia` la decide cada tabla según sus propios campos "importantes".
+function BtnDelFila({ vacia, onDelete, tipo = "esta fila" }) {
+  const [confirmar, setConfirmar] = useState(false);
+  return (
+    <>
+      <BtnDel onClick={()=> vacia ? onDelete() : setConfirmar(true)} />
+      {confirmar && (
+        <ModalConfirmarBorrado
+          titulo={tipo}
+          verbo="Eliminar"
+          subtitulo="Esta fila ya tiene datos cargados — se van a perder."
+          checkboxLabel="Sí, quiero eliminarla"
+          onConfirm={()=>{ onDelete(); setConfirmar(false); }}
+          onClose={()=>setConfirmar(false)}
+        />
+      )}
+    </>
+  );
+}
 const Subtotal = ({ usd }) => (
   <td style={{ ...TD_R, color:C.ok, fontWeight:600 }}>${n2(usd)}</td>
 );
+// `extra` (opcional): celdas de más al final de la fila — usado cuando la
+// tabla tiene columnas extra después de "Subtotal USD" (ej. la de Ficha).
 const TotRow = ({ cols, label, usd, extra }) => (
   <tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
     <td colSpan={cols} style={{ ...TD, fontSize:13, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.5 }}>{label}</td>
-    {extra}
     <td style={{ ...TD_R, fontWeight:800, color:C.ok, fontSize:15 }}>${n2(usd)}</td>
+    {extra}
     <td style={TD}></td>
   </tr>
 );
 // Selector rápido desde el catálogo del tarifario (Config) — agrega una fila precargada.
+// 2026-08-31, a pedido de Gino: era un <select> nativo — con catálogos
+// largos (Config puede tener decenas de ítems) había que scrollear a mano
+// sin poder filtrar escribiendo. Mismo patrón de portal que Combobox.jsx
+// (evita que el desplegable quede recortado dentro de un contenedor con
+// scroll propio, como la pestaña que lo contiene).
 const QuickPick = ({ catalogo, onPick }) => {
+  const [open, setOpen] = useState(false);
+  const [busq, setBusq] = useState("");
+  const [rect, setRect] = useState(null);
+  const ref = useRef(null);
+  const panelRef = useRef(null);
+
+  const calcularRect = () => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    setRect({ left: r.left, width: Math.max(r.width, 280), top: r.bottom + 4 });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const cerrarSiEsAfuera = e => {
+      if (ref.current?.contains(e.target)) return;
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false); setBusq("");
+    };
+    document.addEventListener("mousedown", cerrarSiEsAfuera);
+    window.addEventListener("scroll", calcularRect, true);
+    window.addEventListener("resize", calcularRect);
+    calcularRect();
+    return () => {
+      document.removeEventListener("mousedown", cerrarSiEsAfuera);
+      window.removeEventListener("scroll", calcularRect, true);
+      window.removeEventListener("resize", calcularRect);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   if (!catalogo || catalogo.length === 0) return null;
+  const q = norm(busq.trim());
+  const lista = q ? catalogo.filter(c => norm(c.nombre).includes(q)) : catalogo;
+
+  const panel = open && rect && createPortal(
+    <div ref={panelRef} style={{ position:"fixed", left:rect.left, top:rect.top, width:rect.width, zIndex:9999,
+      background:C.card, border:`1px solid ${C.accent}55`, borderRadius:8, boxShadow:"0 8px 24px #00000077", overflow:"hidden" }}>
+      <div style={{ padding:"8px 8px 4px" }}>
+        <input autoFocus type="text" placeholder="Escribí para filtrar…" value={busq}
+          onChange={e=>setBusq(e.target.value)} style={{ ...INP, width:"100%", padding:"6px 8px", fontSize:12 }} />
+      </div>
+      <div style={{ maxHeight:280, overflowY:"auto" }}>
+        {lista.length===0 && <div style={{ padding:"10px 12px", color:C.muted, fontSize:12 }}>Sin resultados para "{busq}"</div>}
+        {lista.map(c => (
+          <div key={c.id} onMouseDown={()=>{ onPick(c); setBusq(""); setOpen(false); }}
+            style={{ padding:"7px 12px", cursor:"pointer", display:"flex", justifyContent:"space-between", gap:8, fontSize:13 }}
+            onMouseEnter={e=>e.currentTarget.style.background=C.iron}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span>{c.nombre}</span>
+            <span style={{ color:C.muted }}>${n2(c.usd)}</span>
+          </div>
+        ))}
+      </div>
+    </div>,
+    document.body
+  );
+
   return (
-    <select value="" onChange={e=>{ const it = catalogo.find(c=>c.id===e.target.value); if (it) onPick(it); }}
-      style={{ ...INP_SM, width:240, marginBottom:10 }}>
-      <option value="">+ Desde catálogo (Config)...</option>
-      {catalogo.map(c=><option key={c.id} value={c.id}>{c.nombre} — ${n2(c.usd)}</option>)}
-    </select>
+    <div ref={ref} style={{ position:"relative", width:240, marginBottom:10 }}>
+      <div onClick={()=>setOpen(v=>!v)}
+        style={{ ...INP_SM, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", border:`1px solid ${open?C.accent:C.border}` }}>
+        <span style={{ color:C.muted }}>+ Desde catálogo (Config)...</span>
+        <span style={{ fontSize:10, color:C.muted }}>{open?"▲":"▼"}</span>
+      </div>
+      {panel}
+    </div>
   );
 };
+
+// ─── FICHA DE MATERIAL (fila de Hierros) ──────────────────────────
+// A pedido de Gino (2026-08-30): acceso desde la fila al catálogo real de
+// Insumos y Precios (ver/editar precio, o crear el material si no existe
+// todavía) + el detalle de corte/máquina y % parcial de superficie a tratar
+// que ya tenía Cómputo (FichaDrawer) pero acá no — Proveedor/Fecha/
+// Observaciones/Arena/Pintura/Galvanizado ya eran columnas editables
+// directas en la fila, así que no hacía falta duplicarlas acá.
+const MAQUINAS_OPTS_HIERRO = ["Plasma / Pantógrafo","Láser","Oxicorte","Cizalla","Sierra","Torno","Fresadora","Otro"];
+const CATALOGOS_HIERRO = [["smeas_perfiles","Perfil"],["smeas_planchuelas","Planchuela"],["smeas_planchas","Plancha"]];
+
+function FichaHierroModal({ row, onChange, onClose }) {
+  const [, setTick] = useState(0); // fuerza re-leer el catálogo después de crear/guardar
+  const nombre = (row.nombre || "").trim();
+  let catKey = null, catItem = null;
+  for (const [key] of CATALOGOS_HIERRO) {
+    const found = loadLS(key, []).find(m => (m.nombre || "").trim().toLowerCase() === nombre.toLowerCase());
+    if (found) { catKey = key; catItem = found; break; }
+  }
+  const [tipoCrear, setTipoCrear] = useState("smeas_perfiles");
+  const [precioEdit, setPrecioEdit] = useState(catItem?.precio_usd_kg ?? row.usd_kg ?? 0);
+
+  const guardarPrecioCatalogo = () => {
+    if (!catKey || !catItem) return;
+    saveLS(catKey, loadLS(catKey, []).map(it => it.id === catItem.id ? { ...it, precio_usd_kg: +precioEdit || 0 } : it));
+    setTick(t => t + 1);
+  };
+  const crearEnCatalogo = () => {
+    saveLS(tipoCrear, [...loadLS(tipoCrear, []), { id: uid(), nombre, precio_usd_kg: +precioEdit || row.usd_kg || 0 }]);
+    setTick(t => t + 1);
+  };
+
+  const ficha = row.ficha || {};
+  const setFicha = (k, v) => onChange({ ...row, ficha: { ...ficha, [k]: v } });
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:2000, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}
+      onClick={onClose}>
+      <div style={{ background:C.card, border:`1.5px solid ${C.accent}55`, borderRadius:14, padding:24, width:"100%", maxWidth:420, maxHeight:"85vh", overflowY:"auto" }}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <div style={{ fontWeight:800, color:C.accent, fontSize:15 }}>Ficha — {nombre || "Sin material"}</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:C.muted, fontSize:18, cursor:"pointer" }}>✕</button>
+        </div>
+
+        <div style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, marginBottom:8 }}>Catálogo (Insumos y Precios)</div>
+        {!nombre ? (
+          <div style={{ fontSize:12, color:C.muted, marginBottom:18 }}>Cargá un nombre de material en la fila primero.</div>
+        ) : catItem ? (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontSize:12, color:C.ok, marginBottom:8 }}>✓ Ya existe en el catálogo ({CATALOGOS_HIERRO.find(([k])=>k===catKey)[1]})</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <label style={LBL}>USD/kg</label>
+              <input type="number" value={precioEdit} step="0.01" onChange={e=>setPrecioEdit(e.target.value)} style={{...INP,width:90}} />
+              <button onClick={guardarPrecioCatalogo} style={{...BTN("primary"),padding:"4px 10px",fontSize:12}}>Guardar precio</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom:18 }}>
+            <div style={{ fontSize:12, color:C.warn, marginBottom:8 }}>⚠ No existe todavía en el catálogo</div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+              <select value={tipoCrear} onChange={e=>setTipoCrear(e.target.value)} style={{...INP,width:120}}>
+                {CATALOGOS_HIERRO.map(([k,l])=><option key={k} value={k}>{l}</option>)}
+              </select>
+              <input type="number" value={precioEdit} step="0.01" placeholder="USD/kg" onChange={e=>setPrecioEdit(e.target.value)} style={{...INP,width:90}} />
+              <button onClick={crearEnCatalogo} style={{...BTN("primary"),padding:"4px 10px",fontSize:12}}>+ Crear en catálogo</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, marginBottom:8, borderTop:`1px solid ${C.border}44`, paddingTop:14 }}>% parcial de tratamiento</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {row.arena && (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:C.teal, width:120 }}>% sup. a arenar</span>
+              <input type="number" min="1" max="100" value={ficha.pct_arena ?? 100}
+                onChange={e=>setFicha("pct_arena", Math.min(100,Math.max(1,parseInt(e.target.value)||100)))} style={{...INP,width:60}} />
+              <span style={{ fontSize:11,color:C.muted }}>%</span>
+            </div>
+          )}
+          {row.pintura && (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:C.pur, width:120 }}>% sup. a pintar</span>
+              <input type="number" min="1" max="100" value={ficha.pct_pintura ?? 100}
+                onChange={e=>setFicha("pct_pintura", Math.min(100,Math.max(1,parseInt(e.target.value)||100)))} style={{...INP,width:60}} />
+              <span style={{ fontSize:11,color:C.muted }}>%</span>
+            </div>
+          )}
+          {row.galvanizado && (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:C.gold, width:120 }}>% kg a galvanizar</span>
+              <input type="number" min="1" max="100" value={ficha.pct_galvanizado ?? 100}
+                onChange={e=>setFicha("pct_galvanizado", Math.min(100,Math.max(1,parseInt(e.target.value)||100)))} style={{...INP,width:60}} />
+              <span style={{ fontSize:11,color:C.muted }}>%</span>
+            </div>
+          )}
+          {!row.arena && !row.pintura && !row.galvanizado && (
+            <div style={{ fontSize:12, color:C.muted }}>Marcá Arena/Pintura/Galvanizado en la fila para poder ajustar acá el % parcial de superficie/kg. El maquinado se elige directo en la columna "Maquinado" de la tabla.</div>
+          )}
+        </div>
+
+        <div style={{ display:"flex", justifyContent:"flex-end", marginTop:20 }}>
+          <button onClick={onClose} style={{...BTN("primary")}}>Listo</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── TAB: HIERROS ────────────────────────────────────────────────
 function TabHierros({ item, set, onAnidadoVinculado }) {
   const rows = item.hierros || [];
   const bibMateriales = useBibliotecaHierros();
+  const [fichaAbierta, setFichaAbierta] = useState(null);
+  const [anidadoExpandido, setAnidadoExpandido] = useState(true);
+  const [confirmarReimportar, setConfirmarReimportar] = useState(false);
   const updPatch = (id, patch) => set("hierros", rows.map(r => {
     if (r.id !== id) return r;
     const nr = { ...r, ...patch };
@@ -564,9 +775,12 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
   const kg_con_desp = rows.reduce((s,r) => s + (r.pct_desperdicio>0 ? (+r.subtotal_kg||0) : 0), 0);
   const kg_desp_pond = rows.reduce((s,r) => s + (r.pct_desperdicio>0 ? (+r.subtotal_kg||0)*(+r.pct_desperdicio||0)/100 : 0), 0);
   const tot_pct_desp = kg_con_desp>0 ? (kg_desp_pond/kg_con_desp*100) : 0;
-  const arena_m2   = rows.filter(r => r.arena).reduce((s,r) => s + (+r.subtotal_m2 || 0), 0);
-  const pintura_m2 = rows.filter(r => r.pintura).reduce((s,r) => s + (+r.subtotal_m2 || 0), 0);
-  const galv_kg    = rows.filter(r => r.galvanizado).reduce((s,r) => s + (+r.subtotal_kg || 0), 0);
+  // Ficha (2026-08-30, mismo criterio que Cómputo): si la fila tiene un %
+  // parcial cargado en su ficha, solo esa parte de la sup./kg se traslada a
+  // Trat. Superficie — sin ficha, 100% (mismo comportamiento de siempre).
+  const arena_m2   = rows.filter(r => r.arena).reduce((s,r) => s + (+r.subtotal_m2 || 0) * ((r.ficha?.pct_arena ?? 100) / 100), 0);
+  const pintura_m2 = rows.filter(r => r.pintura).reduce((s,r) => s + (+r.subtotal_m2 || 0) * ((r.ficha?.pct_pintura ?? 100) / 100), 0);
+  const galv_kg    = rows.filter(r => r.galvanizado).reduce((s,r) => s + (+r.subtotal_kg || 0) * ((r.ficha?.pct_galvanizado ?? 100) / 100), 0);
 
   const anidados = loadLS("smeas_anidados", []);
   const anidadoSelId = item.anidado_id || "";
@@ -583,7 +797,12 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
     <div>
       {anidados.length > 0 && (
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:14 }}>
-          <div style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom:8 }}>🔗 Anidado vinculado</div>
+          <div onClick={()=>setAnidadoExpandido(v=>!v)}
+            style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom: anidadoExpandido?8:0, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+            <span>{anidadoExpandido?"▾":"▸"}</span>🔗 Anidado vinculado
+            {!anidadoExpandido && anidadoSel && <span style={{ color:C.muted, fontWeight:400 }}>— {anidadoSel.nombre}</span>}
+          </div>
+          {anidadoExpandido && <>
           <select value={anidadoSelId} onChange={e=>{
               set("anidado_id", e.target.value);
               const a = anidados.find(x => x.id === e.target.value);
@@ -603,30 +822,52 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
               {anidKgGalvanizar>0 && <span>kg a galvanizar: <b style={{color:C.gold}}>{n2(anidKgGalvanizar)}</b></span>}
             </div>
           )}
-          {anidadoSel && (
-            <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
-              <button onClick={()=>{
-                const filas = materialesUnificadosAnidado(anidadoSel);
-                const bibMap = {};
-                [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[]), ...loadLS("smeas_planchas",[])]
-                  .forEach(m => { bibMap[m.nombre] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
-                const nuevasFilas = filas.map(m => {
-                  const usd_kg = bibMap[m.nombre] || 0;
-                  const f = m.ficha || {};
-                  return {
-                    id: uid(), nombre: m.nombre, proveedor: "", fecha_precio: "", obs: "", cantidad: 1,
-                    kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
-                    arena: !!f.granallado, pintura: !!f.pintura, galvanizado: !!f.galvanizado,
-                    pct_desperdicio: m.pct_desperdicio || 0,
-                    subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
-                  };
-                });
-                set("hierros", [...rows, ...nuevasFilas]);
-              }} style={{...BTN("primary"), padding:"4px 12px", fontSize:13}}>
-                ⬇ Importar materiales del anidado
-              </button>
-            </div>
-          )}
+          {anidadoSel && (() => {
+            // 2026-08-30: antes recalculaba el precio buscando por NOMBRE en
+            // la biblioteca de perfiles/planchas — si el nombre no matcheaba
+            // exacto quedaba en $0 sin avisar. `materialesUnificadosAnidado`
+            // ya resuelve el mismo precio (con el mismo criterio que usa la
+            // propia pantalla de Anidado), así que se usa directo.
+            const importarMateriales = () => {
+              const filas = materialesUnificadosAnidado(anidadoSel);
+              const nuevasFilas = filas.map(m => {
+                const usd_kg = m.precio_usd_kg || 0;
+                const f = m.ficha || {};
+                return {
+                  id: uid(), nombre: m.nombre, proveedor: "", fecha_precio: "", obs: "", cantidad: 1,
+                  kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
+                  arena: !!f.granallado, pintura: !!f.pintura, galvanizado: !!f.galvanizado,
+                  ficha: f.maquina ? { maquina: f.maquina } : undefined,
+                  pct_desperdicio: m.pct_desperdicio || 0,
+                  subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
+                  _anidado_id: anidadoSel.id,
+                };
+              });
+              set("hierros", [...rows, ...nuevasFilas]);
+            };
+            const yaImportado = rows.some(r => r._anidado_id === anidadoSel.id);
+            return (
+              <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
+                <button onClick={()=> yaImportado ? setConfirmarReimportar(true) : importarMateriales()}
+                  style={{...BTN("primary"), padding:"4px 12px", fontSize:13}}>
+                  ⬇ Importar materiales del anidado
+                </button>
+                {confirmarReimportar && (
+                  <ModalConfirmarBorrado
+                    titulo="materiales del anidado"
+                    verbo="Reimportar"
+                    color={C.warn}
+                    subtitulo={`Este anidado ya se importó antes a este ítem — volver a traerlo agrega los materiales DE NUEVO, duplicados, sin sacar los que ya están.\n\nSi te equivocaste al importar, es más fácil borrar las filas de más a mano que reimportar.`}
+                    checkboxLabel="Sí, quiero traer los materiales de nuevo (va a duplicar)"
+                    labelBoton="⬇ Reimportar de todos modos"
+                    onConfirm={()=>{ importarMateriales(); setConfirmarReimportar(false); }}
+                    onClose={()=>setConfirmarReimportar(false)}
+                  />
+                )}
+              </div>
+            );
+          })()}
+          </>}
         </div>
       )}
       {arena_m2 > 0 && (
@@ -647,7 +888,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1080 }}>
           <thead><tr>
-            {["Nombre / Descripción","Proveedor","Fecha precio","Observaciones","Cant.","Kg/pieza","m²/pieza","USD/kg","% Desp.","Arena?","Pint.?","Galv.?","Subtotal kg","Subtotal m²","Subtotal USD",""].map(h=>(
+            {["Nombre / Descripción","Proveedor","Fecha precio","Observaciones","Cant.","Kg/pieza","m²/pieza","USD/kg","% Desp.","Arena?","Pint.?","Galv.?","Maquinado","Subtotal kg","Subtotal m²","Subtotal USD","Ficha",""].map(h=>(
               <th key={h} title={TH_TOOLTIPS[h]} style={{ ...TH, fontSize:12 }}>{h}</th>
             ))}
           </tr></thead>
@@ -686,10 +927,22 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
                     {r.galvanizado ? "✓ Sí" : "○ No"}
                   </button>
                 </td>
+                <td style={TD}>
+                  <select value={r.ficha?.maquina||""} onChange={e=>upd(r.id,"ficha",{...(r.ficha||{}),maquina:e.target.value})} style={{...INP_SM,width:140}}>
+                    <option value="">—</option>
+                    {MAQUINAS_OPTS_HIERRO.map(m=><option key={m}>{m}</option>)}
+                  </select>
+                </td>
                 <td style={{...TD_R,color:C.info}}>{n3(r.subtotal_kg||0)} kg</td>
                 <td style={{...TD_R,color:C.teal}}>{n2(r.subtotal_m2||0)} m²</td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={{...TD,textAlign:"center"}}>
+                  <button onClick={()=>setFichaAbierta(r.id)} title="Ver ficha del material / corte y tratamientos"
+                    style={{ background: r.ficha?(C.accent+"22"):"transparent", border:`1px solid ${C.border}`, borderRadius:5, color:C.muted, cursor:"pointer", fontSize:13, padding:"2px 8px" }}>
+                    📋
+                  </button>
+                </td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_kg && !r.subtotal_usd} onDelete={()=>del(r.id)} tipo="este material" /></td>
               </tr>
             ))}
           </tbody>
@@ -697,24 +950,119 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
             <tfoot><tr style={{ background:C.iron+"55", borderTop:`1px solid ${C.border}` }}>
               <td colSpan={8} style={{...TD,fontSize:13,fontWeight:700,color:C.muted}}>TOTALES</td>
               <td style={{...TD_R,fontWeight:700,color:tot_pct_desp>0?C.warn:C.muted}}>{tot_pct_desp>0?`${n2(tot_pct_desp)}%`:"—"}</td>
-              <td colSpan={3} style={TD}></td>
+              <td colSpan={4} style={TD}></td>
               <td style={{...TD_R,fontWeight:700,color:C.info}}>{n3(tot_kg)} kg</td>
               <td style={{...TD_R,fontWeight:700,color:C.teal}}>{n2(tot_m2)} m²</td>
               <td style={{...TD_R,fontWeight:800,color:C.ok,fontSize:15}}>${n2(tot_usd)}</td>
+              <td style={TD}></td>
               <td style={TD}></td>
             </tr></tfoot>
           )}
         </table>
       </div>
       <button style={{...BTN("ghost"),marginTop:10}} onClick={add}>+ Agregar hierro</button>
+      {fichaAbierta && (() => {
+        const row = rows.find(r => r.id === fichaAbierta);
+        if (!row) return null;
+        return (
+          <FichaHierroModal row={row} onClose={()=>setFichaAbierta(null)}
+            onChange={nuevaFila => set("hierros", rows.map(r => r.id === nuevaFila.id ? nuevaFila : r))} />
+        );
+      })()}
     </div>
   );
 }
 
 // ─── TAB: MATERIALES GENERALES ────────────────────────────────────
+// A pedido de Gino (2026-08-30), mismo criterio que la ficha de Hierros:
+// acceso al catálogo real (Config > Insumos y Precios > Materiales
+// Generales) para ver/editar el precio o crear el material si no existe.
+// 2026-08-31, rehecha a pedido de Gino — la v1 (i) solo mostraba/editaba el
+// precio (nada de proveedor/fecha/observaciones, que el catálogo real sí
+// tiene, ver CatalogoEditable en BibliotecaMateriales.jsx), y (ii) guardaba
+// solo en localStorage con `saveTarifario` — nunca en Supabase con
+// `saveDBTarifario`, que es lo que realmente lee "Insumos y Precios"
+// (useTarifarioConNube ahí pisa el estado local con lo que baja de la nube
+// al montar) — por eso el cambio "no se guardaba": quedaba en este
+// dispositivo nomás y el próximo refresh de esa pantalla lo tapaba.
+function FichaMatGeneralModal({ row, onClose }) {
+  const [tarifario, setTarifarioLocal] = useState(() => loadTarifario());
+  const nombre = (row.nombre || "").trim();
+  const catItem = tarifario.mat_generales.find(m => (m.nombre||"").trim().toLowerCase() === nombre.toLowerCase()) || null;
+  const [f, setF] = useState({
+    usd: catItem?.usd ?? row.usd_unit ?? 0,
+    unidad: catItem?.unidad || "",
+    proveedor: catItem?.proveedor || row.proveedor || "",
+    fecha_precio: catItem?.fecha_precio || row.fecha_precio || "",
+    obs: catItem?.obs || row.obs || "",
+  });
+  const setCampo = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+  const [guardando, setGuardando] = useState(false);
+  const [guardado, setGuardado] = useState(false);
+
+  const guardar = async () => {
+    setGuardando(true);
+    setGuardado(false);
+    const datos = { usd: +f.usd || 0, unidad: f.unidad, proveedor: f.proveedor, fecha_precio: f.fecha_precio, obs: f.obs };
+    const mat_generales = catItem
+      ? tarifario.mat_generales.map(m => m.id === catItem.id ? { ...m, ...datos } : m)
+      : [...tarifario.mat_generales, { id: uid(), nombre, ...datos }];
+    const nuevoTarifario = { ...tarifario, mat_generales };
+    saveTarifario(nuevoTarifario);
+    setTarifarioLocal(nuevoTarifario);
+    await saveDBTarifario(nuevoTarifario).catch(e => console.warn("[Fase 3] No se pudo sincronizar el tarifario con el backend:", e.message || e));
+    setGuardando(false);
+    setGuardado(true);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:2000, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}
+      onClick={onClose}>
+      <div style={{ background:C.card, border:`1.5px solid ${C.accent}55`, borderRadius:14, padding:24, width:"100%", maxWidth:420, maxHeight:"85vh", overflowY:"auto" }}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <div style={{ fontWeight:800, color:C.accent, fontSize:15 }}>Ficha — {nombre || "Sin material"}</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:C.muted, fontSize:18, cursor:"pointer" }}>✕</button>
+        </div>
+        {!nombre ? (
+          <div style={{ fontSize:12, color:C.muted }}>Cargá una descripción en la fila primero.</div>
+        ) : (
+          <>
+            <div style={{ fontSize:12, color: catItem?C.ok:C.warn, marginBottom:14 }}>
+              {catItem ? "✓ Ya existe en Insumos y Precios (Materiales Generales)" : "⚠ No existe todavía en Insumos y Precios — se crea al guardar"}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div><label style={LBL}>USD</label>
+                <input type="number" step="0.01" value={f.usd} onChange={e=>setCampo("usd",e.target.value)} style={{...INP,width:"100%"}} /></div>
+              <div><label style={LBL}>Unidad</label>
+                <input value={f.unidad} placeholder="u, kg, m..." onChange={e=>setCampo("unidad",e.target.value)} style={{...INP,width:"100%"}} /></div>
+              <div><label style={LBL}>Proveedor</label>
+                <input value={f.proveedor} placeholder="Proveedor..." onChange={e=>setCampo("proveedor",e.target.value)} style={{...INP,width:"100%"}} /></div>
+              <div><label style={LBL}>Fecha del precio</label>
+                <input type="date" value={f.fecha_precio} onChange={e=>setCampo("fecha_precio",e.target.value)} style={{...INP,width:"100%"}} /></div>
+              <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Observaciones</label>
+                <input value={f.obs} placeholder="Notas..." onChange={e=>setCampo("obs",e.target.value)} style={{...INP,width:"100%"}} /></div>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:14 }}>
+              <button onClick={guardar} disabled={guardando} style={{...BTN("primary"),padding:"6px 14px",fontSize:13,opacity:guardando?0.6:1}}>
+                {guardando ? "Guardando…" : catItem ? "Guardar cambios" : "+ Crear en catálogo"}
+              </button>
+              {guardado && <span style={{ color:C.ok, fontSize:12 }}>✓ Guardado</span>}
+            </div>
+          </>
+        )}
+        <div style={{ display:"flex", justifyContent:"flex-end", marginTop:18 }}>
+          <button onClick={onClose} style={{...BTN("ghost")}}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabMatGenerales({ item, set }) {
   const rows = item.mat_generales || [];
   const tarifario = loadTarifario();
+  const [fichaAbierta, setFichaAbierta] = useState(null);
   const upd = (id, field, val) => set("mat_generales", rows.map(r => {
     if (r.id !== id) return r;
     const nr = { ...r, [field]: val };
@@ -732,7 +1080,7 @@ function TabMatGenerales({ item, set }) {
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead><tr>
-            {["Descripción","Proveedor","Fecha precio","Cantidad","Kg/u","m²/u","USD/u","Observaciones","Subtotal USD",""].map(h=>
+            {["Descripción","Proveedor","Fecha precio","Cantidad","Kg/u","m²/u","USD/u","Observaciones","Subtotal USD","Ficha",""].map(h=>
               <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
           </tr></thead>
           <tbody>
@@ -747,14 +1095,24 @@ function TabMatGenerales({ item, set }) {
                 <td style={TD}><input type="number" value={r.usd_unit} min="0" step="0.01" onChange={e=>upd(r.id,"usd_unit",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
                 <td style={TD}><input value={r.obs||""} placeholder="Notas..." onChange={e=>upd(r.id,"obs",e.target.value)} style={{...INP_SM,width:130}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={{...TD,textAlign:"center"}}>
+                  <button onClick={()=>setFichaAbierta(r.id)} title="Ver/crear en Insumos y Precios"
+                    style={{ background:"transparent", border:`1px solid ${C.border}`, borderRadius:5, color:C.muted, cursor:"pointer", fontSize:13, padding:"2px 8px" }}>
+                    📋
+                  </button>
+                </td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_unit} onDelete={()=>del(r.id)} tipo="este material" /></td>
               </tr>
             ))}
           </tbody>
-          {rows.length > 0 && <tfoot><TotRow cols={8} label="TOTAL" usd={tot}/></tfoot>}
+          {rows.length > 0 && <tfoot><TotRow cols={8} extra={<td style={TD}></td>} label="TOTAL" usd={tot}/></tfoot>}
         </table>
       </div>
       <button style={{...BTN("ghost"),marginTop:10}} onClick={add}>+ Agregar material</button>
+      {fichaAbierta && (() => {
+        const row = rows.find(r => r.id === fichaAbierta);
+        return row ? <FichaMatGeneralModal row={row} onClose={()=>setFichaAbierta(null)} /> : null;
+      })()}
     </div>
   );
 }
@@ -798,7 +1156,14 @@ function TabMO({ item, set, tipo }) {
   const operariosKey = key + "_operarios";
   const operariosRaw = item[operariosKey];
   const operarios = operariosRaw === "" || operariosRaw == null ? 1 : Math.max(1, +operariosRaw || 1);
-  const dias = operarios > 0 ? tot_h / (operarios * HORAS_POR_DIA) : 0;
+  // 2026-08-31, a pedido de Gino: antes 8h/día era fijo en el código. Ahora
+  // el default sale de Insumos y Precios (tarifario.horas_por_dia), pero
+  // cada ítem lo puede pisar solo para este rubro de este presupuesto.
+  const horasDiaGlobal = tarifario.horas_por_dia || HORAS_POR_DIA;
+  const horasDiaKey = key + "_horas_dia";
+  const horasDiaRaw = item[horasDiaKey];
+  const horasPorDia = horasDiaRaw === "" || horasDiaRaw == null ? horasDiaGlobal : Math.max(1, +horasDiaRaw || horasDiaGlobal);
+  const dias = operarios > 0 ? tot_h / (operarios * horasPorDia) : 0;
 
   return (
     <div>
@@ -831,6 +1196,14 @@ function TabMO({ item, set, tipo }) {
             <input type="number" min="1" step="1" value={operariosRaw ?? 1}
               onChange={e=>set(operariosKey, e.target.value)}
               onBlur={e=>set(operariosKey, Math.max(1, parseInt(e.target.value,10) || 1))}
+              style={{ ...INP, width:70, textAlign:"center", padding:"6px 8px", fontSize:15, fontWeight:700 }}/>
+          </div>
+          <div>
+            <label title="Sale de Insumos y Precios por defecto — se puede pisar acá solo para este ítem"
+              style={{ fontSize:11, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:.5, display:"block", marginBottom:3 }}>Horas x día</label>
+            <input type="number" min="1" step="1" value={horasDiaRaw ?? horasDiaGlobal}
+              onChange={e=>set(horasDiaKey, e.target.value)}
+              onBlur={e=>set(horasDiaKey, Math.max(1, parseInt(e.target.value,10) || horasDiaGlobal))}
               style={{ ...INP, width:70, textAlign:"center", padding:"6px 8px", fontSize:15, fontWeight:700 }}/>
           </div>
           <div>
@@ -883,7 +1256,7 @@ function TabMO({ item, set, tipo }) {
                 <td style={TD}><input type="number" value={r.cant_horas} min="0" step="0.5" onChange={e=>upd(r.id,"cant_horas",+e.target.value)} style={{...INP_SM,width:65,textAlign:"right"}}/></td>
                 <td style={TD}><input type="number" value={r.usd_hora} min="0" step="0.01" onChange={e=>upd(r.id,"usd_hora",+e.target.value)} style={{...INP_SM,width:75,textAlign:"right"}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.cant_horas && !r.tarea?.trim() && !r.detalle?.trim()} onDelete={()=>del(r.id)} tipo="esta fila de mano de obra" /></td>
               </tr>
               );
             })}
@@ -947,7 +1320,7 @@ function TabTerc({ item, set, tipo }) {
                 <td style={TD}><input type="number" value={r.usd_unit} min="0" step="0.01" onChange={e=>upd(r.id,"usd_unit",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
                 <td style={TD}><textarea value={r.detalle} placeholder="Detalle..." rows={2} onChange={e=>upd(r.id,"detalle",e.target.value)} style={{...INP_SM,width:280,resize:"vertical",fontFamily:"inherit"}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_unit} onDelete={()=>del(r.id)} tipo="esta tercerización" /></td>
               </tr>
             ))}
           </tbody>
@@ -1094,7 +1467,7 @@ function TabTrat({ item, set }) {
                 <td style={TD}><input value={r.nombre} placeholder="Metalizado, fosfatizado..." onChange={e=>updOtro(r.id,"nombre",e.target.value)} style={{...INP_SM,width:220}}/></td>
                 <td style={TD}><input type="number" value={r.usd_kg} min="0" step="0.01" onChange={e=>updOtro(r.id,"usd_kg",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
                 <Subtotal usd={(+r.usd_kg||0)*hier_kg_item}/>
-                <td style={TD}><BtnDel onClick={()=>delOtro(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_kg} onDelete={()=>delOtro(r.id)} tipo="este tratamiento" /></td>
               </tr>
             ))}
           </tbody>
@@ -1137,7 +1510,7 @@ function TabTrat({ item, set }) {
                 <td style={TD}><input type="number" value={r.cant_lt} min="0" step="0.01" onChange={e=>updPintura(r.id,"cant_lt",+e.target.value)} style={{...INP_SM,width:75,textAlign:"right"}}/></td>
                 <td style={TD}><input type="number" value={r.cant_manos} min="1" onChange={e=>updPintura(r.id,"cant_manos",+e.target.value)} style={{...INP_SM,width:60,textAlign:"right"}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>delPintura(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.cant_lt && !r.usd_lt} onDelete={()=>delPintura(r.id)} tipo="esta pintura" /></td>
               </tr>
             ))}
           </tbody>
@@ -1218,7 +1591,7 @@ function TabTraslados({ item, set }) {
                 <td style={TD}><input type="number" value={r.usd_unit} min="0" step="0.01" onChange={e=>upd(r.id,"usd_unit",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
                 <td style={TD}><input value={r.detalle} placeholder="Obs..." onChange={e=>upd(r.id,"detalle",e.target.value)} style={{...INP_SM,width:130}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_unit} onDelete={()=>del(r.id)} tipo="este traslado" /></td>
               </tr>
             ))}
           </tbody>
@@ -1296,7 +1669,7 @@ function TabPanto({ item, set }) {
                 <td style={TD}><input type="number" value={r.usd_kg} min="0" step="0.01" onChange={e=>upd(r.id,"usd_kg",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
                 <td style={TD}><input value={r.detalle} placeholder="Obs..." onChange={e=>upd(r.id,"detalle",e.target.value)} style={{...INP_SM,width:150}}/></td>
                 <Subtotal usd={r.subtotal_usd||0}/>
-                <td style={TD}><BtnDel onClick={()=>del(r.id)}/></td>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.kg && !r.usd_kg} onDelete={()=>del(r.id)} tipo="este corte" /></td>
               </tr>
             ))}
           </tbody>
@@ -1317,7 +1690,7 @@ function TabPanto({ item, set }) {
 }
 
 // ─── EDITOR DE RUBROS (9 PESTAÑAS) ───────────────────────────────
-function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
+function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, pres }) {
   const TABS = [
     { id:"resumen",          icon:"📊",  label:"Resumen"      },
     { id:"hierros",          icon:"⚙️",  label:"Hierros"      },
@@ -1332,17 +1705,23 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
   ];
 
   const [tab, setTab] = useState("resumen");
-  const set = (k, v) => onChange({ ...item, [k]: v });
+  // 2026-08-31: presupuesto ya no en "borrador" = congelado (ver
+  // DetallePresupuesto). Se recalcula acá con el mismo criterio en vez de
+  // recibirlo como prop porque `pres` ya llega completo de todos modos.
+  const bloqueadoPres = !!(pres?.estado && pres.estado !== "borrador");
+  const set = (k, v) => { if (bloqueadoPres) return; onChange({ ...item, [k]: v }); };
   const c   = calcItem(item);
 
   // rubrosActivos ausente (ítems viejos/históricos) = todo activo, sin romper nada.
   const activo = (id) => (item.rubrosActivos ? item.rubrosActivos[id] !== false : true);
   const setTipo = (t) => {
+    if (bloqueadoPres || item.tipoBloqueado) return;
     const nuevosActivos = { ...PRESET_TIPO_RUBROS[t] };
     onChange({ ...item, tipo: t, rubrosActivos: nuevosActivos });
     if (tab !== "resumen" && nuevosActivos[tab] === false) setTab("resumen");
   };
   const toggleRubro = (id) => {
+    if (bloqueadoPres || item.tipoBloqueado) return;
     const base = item.rubrosActivos || { ...PRESET_TIPO_RUBROS.fab_mont };
     const next = { ...base, [id]: !(base[id] !== false) };
     onChange({ ...item, rubrosActivos: next });
@@ -1383,6 +1762,17 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
             <span style={{...BDG(C.ok,   true),fontSize:15,padding:"4px 12px",fontWeight:800}}>${n2(c.total_usd)}</span>
             {c.usd_kg > 0 && <span style={{...BDG(C.gold, true),fontSize:15,padding:"4px 12px"}}>{n2(c.usd_kg)} USD/kg</span>}
           </div>
+          {/* 2026-08-30: cada cambio ya se guarda solo (mismo autosave de
+              siempre — onChange actualiza el presupuesto en vivo), pero
+              faltaba un cierre explícito que lo confirme, y un clonar a
+              nivel ítem (ya existía a nivel presupuesto completo). */}
+          {onClonar && (
+            <button onClick={onClonar} title="Clonar este ítem dentro del mismo presupuesto"
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6,
+              color:C.muted, cursor:"pointer", fontSize:13, padding:"5px 10px", flexShrink:0 }}>⧉ Clonar ítem</button>
+          )}
+          <button onClick={onClose} title="Los cambios ya están guardados — esto solo cierra la pantalla"
+            style={{ ...BTN("primary"), padding:"5px 12px", fontSize:13, flexShrink:0 }}>💾 Guardar y cerrar</button>
           <button onClick={onClose} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6,
             color:C.muted, cursor:"pointer", fontSize:18, padding:"2px 10px", flexShrink:0 }}>✕</button>
         </div>
@@ -1390,27 +1780,28 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
         {/* Tipo de trabajo + rubros activos */}
         <div style={{ padding:"10px 18px", borderBottom:`1px solid ${C.border}`,
           display:"flex", flexWrap:"wrap", alignItems:"center", gap:14, flexShrink:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, opacity: (item.tipoBloqueado||bloqueadoPres)?0.5:1 }}>
             <span style={{ fontSize:13, color:C.muted, fontWeight:700 }}>TIPO:</span>
             {[["fabricacion","🔨 Fabricación"],["montaje","🏗️ Montaje"],["fab_mont","🔨🏗️ Fab + Mont"]].map(([val,lbl]) => (
-              <button key={val} onClick={() => setTipo(val)} style={{
+              <button key={val} disabled={item.tipoBloqueado||bloqueadoPres} onClick={() => setTipo(val)} style={{
                 ...BTN((item.tipo||"fab_mont")===val ? "primary" : "ghost"), padding:"4px 10px", fontSize:13,
+                cursor: (item.tipoBloqueado||bloqueadoPres) ? "not-allowed" : "pointer",
               }}>{lbl}</button>
             ))}
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", opacity: (item.tipoBloqueado||bloqueadoPres)?0.5:1 }}>
             <span style={{ fontSize:13, color:C.muted, fontWeight:700 }}>RUBROS:</span>
             {TABS.filter(t => t.id !== "resumen").map(t => {
               const on = activo(t.id);
               const cnt = counts[t.id];
               return (
-                <button key={t.id} onClick={() => toggleRubro(t.id)}
+                <button key={t.id} disabled={item.tipoBloqueado||bloqueadoPres} onClick={() => toggleRubro(t.id)}
                   title={(on ? `Ocultar ${t.label}` : `Mostrar ${t.label}`) + (cnt > 0 ? ` — tiene ${cnt} fila(s) cargada(s), ocultar no las borra` : "")}
                   style={{
                     background: on ? C.accent+"18" : "transparent",
                     border: `1px solid ${on ? C.accent+"55" : C.border}`,
                     color: on ? C.text : C.muted, opacity: on ? 1 : 0.55,
-                    borderRadius:5, padding:"3px 8px", fontSize:12, cursor:"pointer",
+                    borderRadius:5, padding:"3px 8px", fontSize:12, cursor: (item.tipoBloqueado||bloqueadoPres) ? "not-allowed" : "pointer",
                     display:"flex", alignItems:"center", gap:3,
                   }}>
                   <span>{on ? "☑" : "☐"}</span><span>{t.icon}</span><span>{t.label}</span>
@@ -1419,6 +1810,16 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
               );
             })}
           </div>
+          {/* 2026-08-30, a pedido de Gino: un click de más en TIPO pisa
+              `rubrosActivos` entero (aunque no borra los datos de las
+              pestañas que oculta) — esto bloquea ambos controles para
+              evitar tocarlos por error una vez que ya están bien armados. */}
+          <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", marginLeft:"auto", fontSize:12, color:C.muted }}
+            title="Bloquea Tipo y Rubros para no tocarlos por error">
+            <input type="checkbox" checked={!!item.tipoBloqueado} onChange={e=>set("tipoBloqueado", e.target.checked)}
+              style={{ width:15, height:15, cursor:"pointer" }} />
+            {item.tipoBloqueado ? "🔒 Bloqueado" : "🔓 Bloquear"}
+          </label>
         </div>
 
         {/* Tabs */}
@@ -1443,8 +1844,10 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
           })}
         </div>
 
-        {/* Contenido de la pestaña */}
-        <div style={{ flex:1, overflowY:"auto", padding:16 }}>
+        {/* Contenido de la pestaña — fieldset nativo: bloquea TODOS los
+            inputs/selects/botones de las 7 pestañas de rubros de una sola
+            vez si el presupuesto ya no está en "borrador" (2026-08-31). */}
+        <fieldset disabled={bloqueadoPres} style={{ flex:1, overflowY:"auto", overflowX:"hidden", padding:16, border:"none", margin:0, minWidth:0, minHeight:0, opacity: bloqueadoPres?0.7:1 }}>
           {tab === "resumen" && (() => {
             const q = +item.cantidad || 1;
             const rubros = { hier:c.hier_usd*q, mat:c.mat_usd*q, moFab:c.moFab_usd*q, moMon:c.moMon_usd*q, hesp:c.hesp_usd*q, tFab:c.tFab_usd*q, tMon:c.tMon_usd*q, trat:c.trat_usd*q, trasl:c.trasl_usd*q, panto:c.panto_usd*q };
@@ -1469,7 +1872,7 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
           {tab === "trat_superficie"  && <TabTrat         item={item} set={set} />}
           {tab === "traslados"        && <TabTraslados    item={item} set={set} />}
           {tab === "corte_pantografo" && <TabPanto        item={item} set={set} />}
-        </div>
+        </fieldset>
 
         {/* Footer */}
         <div style={{ padding:"10px 18px", borderTop:`1px solid ${C.border}`, display:"flex",
@@ -1482,11 +1885,11 @@ function EditorRubros({ item, onChange, onClose, onAnidadoVinculado, pres }) {
 }
 
 // ─── FILA ITEM ────────────────────────────────────────────────────
-function FilaItem({ item, onChange, onDelete, onAnidadoVinculado, pres }) {
+function FilaItem({ item, onChange, onDelete, onClonar, onAnidadoVinculado, pres, bloqueado }) {
   const [editando, setEditando] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const c = calcItem(item);
-  const set = (k, v) => onChange({ ...item, [k]: v });
+  const set = (k, v) => { if (bloqueado) return; onChange({ ...item, [k]: v }); };
 
   return (
     <>
@@ -1494,31 +1897,31 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado, pres }) {
         padding:"12px 16px", marginBottom:10 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
 
-          {editando ? (
+          {editando && !bloqueado ? (
             <input autoFocus value={item.titulo}
               style={{ ...INP, flex:1, minWidth:160, fontSize:15, fontWeight:700 }}
               onChange={e => set("titulo", e.target.value)}
               onBlur={() => setEditando(false)}
               onKeyDown={e => e.key === "Enter" && setEditando(false)} />
           ) : (
-            <div onClick={() => setEditando(true)}
-              style={{ flex:1, minWidth:160, cursor:"text", fontWeight:700, fontSize:15, color:C.text }}>
+            <div onClick={() => !bloqueado && setEditando(true)}
+              style={{ flex:1, minWidth:160, cursor: bloqueado?"default":"text", fontWeight:700, fontSize:15, color:C.text }}>
               {item.titulo}
             </div>
           )}
 
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
             <span style={{ fontSize:13, color:C.muted }}>×</span>
-            <input type="number" value={item.cantidad} min="1"
+            <input type="number" value={item.cantidad} min="1" disabled={bloqueado}
               onChange={e => set("cantidad", +e.target.value)}
               style={{ ...INP, width:55, textAlign:"center", padding:"4px 6px", fontSize:14 }} />
           </div>
 
-          <input value={item.n_plano} placeholder="N° plano"
+          <input value={item.n_plano} placeholder="N° plano" disabled={bloqueado}
             onChange={e => set("n_plano", e.target.value)}
             style={{ ...INP, width:100, padding:"4px 7px", fontSize:13, color:C.muted }} />
 
-          <button onClick={() => set("no_agrega_kg", !item.no_agrega_kg)}
+          <button disabled={bloqueado} onClick={() => set("no_agrega_kg", !item.no_agrega_kg)}
             style={{ ...BTN(item.no_agrega_kg ? "danger" : "ghost"), padding:"3px 8px", fontSize:12 }}>
             {item.no_agrega_kg ? "⚠ No KG" : "KG ✓"}
           </button>
@@ -1531,9 +1934,11 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado, pres }) {
           {c.usd_kg > 0    && <span style={{...BDG(C.gold, true),fontSize:15,padding:"4px 12px"}}>{n2(c.usd_kg)} $/kg</span>}
 
           <button style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:13 }}
-            onClick={() => setEditorOpen(true)}>🔧 Rubros</button>
-          <button style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:15 }}
-            onClick={onDelete}>🗑</button>
+            onClick={() => setEditorOpen(true)}>🔧 {bloqueado ? "Ver rubros" : "Rubros"}</button>
+          {!bloqueado && (
+            <button style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:15 }}
+              onClick={onDelete}>🗑</button>
+          )}
         </div>
 
         {c.total_usd > 0 && (
@@ -1553,7 +1958,7 @@ function FilaItem({ item, onChange, onDelete, onAnidadoVinculado, pres }) {
       </div>
 
       {editorOpen && (
-        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} onAnidadoVinculado={onAnidadoVinculado} pres={pres} />
+        <EditorRubros item={item} onChange={onChange} onClose={() => setEditorOpen(false)} onClonar={onClonar} onAnidadoVinculado={onAnidadoVinculado} pres={pres} />
       )}
     </>
   );
@@ -1804,9 +2209,17 @@ function ModalResumenCompleto({ pres, onClose }) {
 function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, usuarios, onAgregarComentario, onEliminarComentario }) {
   const set = (k, v) => onChange({ ...pres, [k]: v });
   const c   = calcPresupuesto(pres);
-  const updItem = (it) => set("items", pres.items.map(x => x.id === it.id ? it : x));
-  const delItem = (id) => set("items", pres.items.filter(x => x.id !== id));
-  const addItem = ()   => set("items", [...(pres.items||[]), iItem()]);
+  // 2026-08-31, a pedido de Gino: una vez que sale de "borrador" (enviado,
+  // aprobado, rechazado...) el contenido comercial queda congelado — nada
+  // se destraba después, si hay que cambiar algo se usa "Clonar" (ya
+  // existe). Comentarios y el estado mismo son la única excepción (no
+  // pasan por `set`, así que no hace falta filtrarlos acá).
+  const bloqueado = !!(pres.estado && pres.estado !== "borrador");
+  const updItem = (it) => { if (bloqueado) return; set("items", pres.items.map(x => x.id === it.id ? it : x)); };
+  const delItem = (id) => { if (bloqueado) return; set("items", pres.items.filter(x => x.id !== id)); };
+  const addItem = ()   => { if (bloqueado) return; set("items", [...(pres.items||[]), iItem()]); };
+  // A pedido de Gino (2026-08-30): clonar un ítem dentro del mismo presupuesto.
+  const clonarItem = (it) => { if (bloqueado) return; set("items", [...pres.items, { ...it, id: uid(), titulo: `${it.titulo} (copia)` }]); };
   const [confirmarSyncPrecios, setConfirmarSyncPrecios] = useState(null); // {cambios} | null
   // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
   // pantalla para los ítems, que es lo que se edita más seguido.
@@ -1956,6 +2369,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               )}
             </div>
             {datosAbiertos && (
+            <fieldset disabled={bloqueado} style={{ border:"none", margin:0, padding:0, display:"contents" }}>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div>
                 <label style={LBL}>Empresa</label>
@@ -2018,8 +2432,15 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Notas / Cláusulas</label>
                 <input style={INP} value={pres.notas||""} placeholder="Observaciones, condiciones, cláusulas..." onChange={e=>set("notas",e.target.value)}/></div>
             </div>
+            </fieldset>
             )}
           </div>
+
+          {bloqueado && (
+            <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", marginBottom:16, fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8 }}>
+              🔒 Presupuesto {ESTADO_CFG[pres.estado]?.label?.toLowerCase() || pres.estado} — el contenido queda congelado. Para cambiar algo, usá "Clonar" y editá la copia.
+            </div>
+          )}
 
           <ComentariosPanel comentarios={pres.comentarios} usuario={usuario} onAgregar={onAgregarComentario} onEliminar={onEliminarComentario} />
 
@@ -2029,7 +2450,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               <div style={{ fontWeight:700, color:C.steel, fontSize:13, textTransform:"uppercase", letterSpacing:.5 }}>
                 Ítems ({(pres.items||[]).length})
               </div>
-              <button style={BTN("ok")} onClick={addItem}>+ Agregar ítem</button>
+              {!bloqueado && <button style={BTN("ok")} onClick={addItem}>+ Agregar ítem</button>}
             </div>
             {(pres.items||[]).length === 0 && (
               <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:14,
@@ -2038,7 +2459,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               </div>
             )}
             {(pres.items||[]).map(it => (
-              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)} pres={pres}
+              <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)} onClonar={() => clonarItem(it)} bloqueado={bloqueado} pres={pres}
                 onAnidadoVinculado={(categoria, tipo) => {
                   // Traspaso automático desde el Anidado — solo si el
                   // presupuesto todavía no tiene su propia clasificación
@@ -2156,14 +2577,19 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
 }
 
 // ─── MODAL: IMPORTAR MATERIALES AGREGADOS (desde Cómputo) ────────
-function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose }) {
-  const [presId, setPresId] = useState("");
-  const [itemSel, setItemSel] = useState(""); // "" | "__nuevo__" | item.id
-  const pres = presupuestos.find(p => p.id === presId) || null;
+// `precarga` (opcional, 2026-08-30): nombre/cliente/contacto/obra/tipo/
+// categoría que vienen de un Anidado/Cómputo al pasar "→ Pasar a
+// Presupuesto" — habilita la opción "+ Crear presupuesto nuevo" para no
+// tener que volver a tipear esos datos a mano en un presupuesto existente.
+function ImportarMaterialesModal({ materiales, presupuestos, precarga, onImportar, onImportarNuevoPres, onClose }) {
+  const [presId, setPresId] = useState(precarga ? "__nuevo__" : "");
+  const [itemSel, setItemSel] = useState(precarga ? "__nuevo__" : ""); // "" | "__nuevo__" | item.id
+  const pres = presId !== "__nuevo__" ? presupuestos.find(p => p.id === presId) : null;
   const totalKg = (materiales||[]).reduce((s,m)=>s+m.kg,0);
 
   const confirmar = () => {
     if (!presId || !itemSel) return;
+    if (presId === "__nuevo__") { onImportarNuevoPres(); return; }
     if (itemSel === "__nuevo__") onImportar(presId, uid(), true);
     else onImportar(presId, itemSel, false);
   };
@@ -2177,8 +2603,9 @@ function ImportarMaterialesModal({ materiales, presupuestos, onImportar, onClose
         </div>
 
         <label style={LBL}>Presupuesto destino</label>
-        <select style={{...INP,marginBottom:14}} value={presId} onChange={e=>{setPresId(e.target.value);setItemSel("");}}>
+        <select style={{...INP,marginBottom:14}} value={presId} onChange={e=>{setPresId(e.target.value);setItemSel(e.target.value==="__nuevo__"?"__nuevo__":"");}}>
           <option value="">— Elegí un presupuesto —</option>
+          {precarga && <option value="__nuevo__">+ Crear presupuesto nuevo ({precarga.nombre || "sin nombre"})</option>}
           {presupuestos.map(p=><option key={p.id} value={p.id}>{p.nro} — {p.nombre||"Sin nombre"}</option>)}
         </select>
 
@@ -2220,6 +2647,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const [filtEst, setFiltEst] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
+  const [precargaPend, setPrecargaPend] = useState(() => loadLS("smeas_presupuesto_precarga_pending", null));
   const [historicoCargado, setHistoricoCargado] = useState(() => loadLS("smeas_historico_cargado", false));
   const [confirmarHistorico, setConfirmarHistorico] = useState(false);
 
@@ -2236,7 +2664,38 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
 
   const cerrarImportMateriales = () => {
     saveLS("smeas_material_export_pending", null);
+    saveLS("smeas_presupuesto_precarga_pending", null);
     setMaterialesPend(null);
+    setPrecargaPend(null);
+  };
+  // "+ Crear presupuesto nuevo" desde Anidado/Cómputo (2026-08-30) — mismo
+  // mecanismo que crearPres, pero con los datos que trajo la precarga y
+  // el ítem con los materiales ya cargados en un solo paso.
+  const importarMaterialesComoPresNuevo = () => {
+    const nuevo = { ...iPresupuesto(), ...(precargaPend||{}) };
+    nuevo.nro = newNroPresupuesto();
+    nuevo.codigo_calculo = newCodigoCalculo();
+    if (!nuevo.vendedor) nuevo.vendedor = usuario?.id || "";
+    const materiales = materialesPend || [];
+    const bibMap = {};
+    [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[]), ...loadLS("smeas_planchas",[])]
+      .forEach(m => { bibMap[m.nombre] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
+    const hierros = materiales.map(m => {
+      const usd_kg = m.usd_kg || bibMap[m.nombre] || 0;
+      return {
+        id: uid(), nombre: m.nombre, proveedor: m.proveedor || "", fecha_precio: "", obs: "", cantidad: 1,
+        kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
+        arena: !!m.granallado, pintura: !!m.pintura, galvanizado: !!m.galvanizado,
+        subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
+      };
+    });
+    nuevo.items = [{ ...iItem(), hierros }];
+    setPres(prev => [nuevo, ...prev]);
+    dualWritePresupuesto(nuevo);
+    logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
+    cerrarImportMateriales();
+    setSelId(nuevo.id);
+    setVista("detalle");
   };
   const importarMateriales = (presupuestoId, itemId, itemEsNuevo) => {
     const materiales = materialesPend || [];
@@ -2315,12 +2774,15 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     try {
       // A diferencia de Cómputo/Anidado/Historial, acá "cliente" siempre fue
       // la razón social (empresa) y "contacto" el nombre de la persona —
-      // mapeo corregido 2026-08-23 (antes se invertía sin querer). Si no
-      // hay contacto cargado, se resuelve igual usando el nombre de la
-      // empresa como si fuera el "nombre" del cliente (mismo criterio de
-      // respaldo que ya usan los otros módulos sin este segundo campo).
-      const nombreParaClientes = (p.contacto || p.cliente || "").trim();
-      const empresaParaClientes = p.contacto ? p.cliente : null;
+      // mapeo corregido 2026-08-23 (antes se invertía sin querer).
+      // 2026-08-31, a pedido de Gino: se sacó el respaldo que antes usaba el
+      // nombre de la Empresa como "nombre" del cliente cuando no había
+      // contacto cargado — eso escribía razones sociales (ej. "Saceem") en
+      // la tabla de personas, compartida con Steel CRM, y contaminaba el
+      // autocompletado de Cliente con nombres de empresa. Un presupuesto sin
+      // contacto ahora simplemente no crea/actualiza ningún cliente.
+      const nombreParaClientes = (p.contacto || "").trim();
+      const empresaParaClientes = p.cliente || null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
       const obra_id = p.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === p.obra.trim().toLowerCase())?.id || null) : null;
       const empresa_id = p.cliente ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === p.cliente.trim().toLowerCase())?.id || null) : null;
@@ -2448,7 +2910,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       <>
         <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} usuarios={usuarios} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} />
         {materialesPend && (
-          <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} onImportar={importarMateriales} onClose={cerrarImportMateriales} />
+          <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} precarga={precargaPend} onImportar={importarMateriales} onImportarNuevoPres={importarMaterialesComoPresNuevo} onClose={cerrarImportMateriales} />
         )}
       </>
     );
@@ -2593,7 +3055,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
 
       {nuevoOpen && <ModalNuevo onSave={crearPres} onClose={() => setNuevoOpen(false)} />}
       {materialesPend && (
-        <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} onImportar={importarMateriales} onClose={cerrarImportMateriales} />
+        <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} precarga={precargaPend} onImportar={importarMateriales} onImportarNuevoPres={importarMaterialesComoPresNuevo} onClose={cerrarImportMateriales} />
       )}
     </div>
   );
