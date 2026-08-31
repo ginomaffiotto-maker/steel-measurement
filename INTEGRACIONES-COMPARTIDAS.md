@@ -110,7 +110,11 @@ descuido:
   Google Identity Services, scope `drive.file`, sube/baja
   `steelcrm_backup.json`. Requiere un Client ID de Google Cloud Console
   propio por instalación. Frecuencia configurable (manual/hora/día/semana)
-  o botón manual.
+  o botón manual. **Fix real (2026-08-29)**: el campo Client ID fallaba
+  con `401 invalid_client` si se pegaba con un espacio de sobra al
+  principio/final (copiar desde la consola de Google es una fuente común
+  de esto) — el valor nunca se sanitizaba antes de usarse. Corregido con
+  `.trim()` al guardar.
 
 **Steel Measurement no tiene ninguno de los dos mecanismos de arriba.**
 Su "Backup y Datos" (Config) es enteramente del lado del browser:

@@ -116,12 +116,16 @@ Solicitudes, Obras, Aceptados, Competencia, Forecast, Bonificaciones,
 CerebroNegocio, Calculadora, Config, Importar, `shared.jsx` (componentes
 compartidos entre módulos: `BudgetModal`, `ComentariosThread`, `ExportModal`, etc.).
 
-**Módulos de Steel Measurement** (`src/components/`, 15 archivos):
+**Módulos de Steel Measurement** (`src/components/`, 20 archivos):
 BibliotecaMateriales, Computo, Anidado, Presupuesto, Historial, Dashboard,
 Config, Buscador, FiltrosBar, ComentariosPanel, Toast, ConfirmarEliminar,
-AutocompleteCliente, AutocompleteEmpresa, SolicitudesAsignadas (nuevo,
-2026-08-26 — lee `solicitudes` directo de Steel CRM, ver
-`ENTIDADES-COMPARTIDAS.md` §6).
+AutocompleteCliente, AutocompleteEmpresa, SolicitudesAsignadas (2026-08-26
+— lee `solicitudes` directo de Steel CRM, ver `ENTIDADES-COMPARTIDAS.md`
+§6), y 5 más agregados 2026-08-29/30 junto con Empresa como entidad real:
+AutocompleteObra, ClienteRapidoModal, ObraRapidaModal, EmpresaRapidaModal
+(los 3 modales "alta rápida" — mismo patrón que ya usaba Cliente, ahora
+también para Obra y Empresa) y Combobox (extraído como componente
+compartido durante ese mismo trabajo).
 
 ---
 
