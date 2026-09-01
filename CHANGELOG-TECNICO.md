@@ -253,6 +253,22 @@ directamente ausentes en una, un tercero con estado desactualizado).
   siempre. Ahora detecta el código de error `23505` y reintenta una
   vez con un `nro` nuevo.
 
+## 2026-09-01 — Fix real: guardado sin debounce creaba clientes basura en cada tecla
+
+- **Steel Measurement** (`7cdbe6a`): `updPres` (detalle de Presupuesto)
+  disparaba `dualWritePresupuesto()` en cada `onChange` de cualquier
+  campo, sin debounce — escribir en Cliente llamaba `resolverClienteId()`
+  en cada tecla y creaba una fila real en `clientes` (compartida con
+  Steel CRM) por cada valor intermedio sin terminar de tipear. Distinto
+  del bug ya corregido en `ff7d9bc` (que solo cubría el caso sin
+  Contacto) — este pasaba con cualquier valor, Contacto cargado o no.
+  Gino ya había limpiado a mano las filas contaminadas encontradas por
+  el bug anterior en Supabase antes de que apareciera este segundo caso.
+  Fix: debounce de 800ms antes del dual-write (mismo patrón que
+  `fichas_aceptados` en Steel CRM) — el guardado local sigue siendo
+  instantáneo, solo el envío a Supabase espera a que el usuario deje de
+  tocar el campo.
+
 ---
 
 ## Mantenimiento de este documento
