@@ -2636,6 +2636,14 @@ function ImportarMaterialesModal({ materiales, presupuestos, precarga, onImporta
 export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(setPres);
+  // Debounce del dual-write al editar campos del detalle (2026-09-01, bug
+  // real reportado por Gino): updPres corre en cada tecla — sin esto,
+  // escribir en Cliente disparaba resolverClienteId() en cada tecla y
+  // creaba una fila de `clientes` por cada valor intermedio sin terminar
+  // de tipear (ej. "S", "Sa", "Sac"...). El guardado local (setPres) sigue
+  // siendo instantáneo como siempre; solo el envío a Supabase espera a que
+  // el usuario deje de tocar el campo.
+  const dualWriteTimer = useRef(null);
   const listaObras = useListaObras();
   const listaEmpresas = useListaEmpresas();
   const { show: showUndo, Toast } = useUndoToast();
@@ -2839,7 +2847,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const updPres = (p) => {
     const actualizado = touch(p);
     setPres(prev => prev.map(x => x.id===p.id ? actualizado : x));
-    dualWritePresupuesto(actualizado);
+    clearTimeout(dualWriteTimer.current);
+    dualWriteTimer.current = setTimeout(() => dualWritePresupuesto(actualizado), 800);
   };
 
   // Comentarios internos (2026-08-24): guardado directo, no depende del
