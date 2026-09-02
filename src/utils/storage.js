@@ -283,6 +283,18 @@ export const resolverNombreCliente = async (id) => {
   return data.nombre || "";
 };
 
+// Cuentas reales del tenant (Supabase Auth + profiles) — a diferencia de
+// `usuarios` (estado local por dispositivo, solo conoce a quien ya logueó
+// en ESE navegador), esto trae a todo el equipo real. RLS ya permite ver a
+// cualquier compañero del mismo tenant (profiles_select_tenant). Mismo
+// patrón que steelcrm (loadProfilesDB en su storage.js).
+export const loadDBProfiles = async () => {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("profiles").select("*");
+  if (error) { console.error("loadDBProfiles", error); return []; }
+  return data || [];
+};
+
 // ─── EMPRESAS — capa de acceso al backend (2026-08-29) ─────────────
 // Tabla `empresas`, compartida con steelCRM — hasta esta fecha "empresa"
 // era texto libre derivado de `clientes.empresa`, sin ninguna tabla

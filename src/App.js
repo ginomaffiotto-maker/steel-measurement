@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { C } from "./styles/colors";
-import { saveLS, loadLS, iUsuarios } from "./utils/storage";
+import { saveLS, loadLS, iUsuarios, loadDBProfiles } from "./utils/storage";
 import { supabase } from "./utils/supabaseClient";
 import BibliotecaMateriales from "./components/BibliotecaMateriales";
 import Computo from "./components/Computo";
@@ -58,7 +58,8 @@ const GRUPOS = [
 // perfil ni registro local previo — ahí quien llama decide si eso es un
 // error (login manual) o simplemente "no hay sesión que restaurar".
 async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
-  const existente = usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
+  const existente = usuarios.find(u => u.profileId === authUser.id)
+    || usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
   const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
   if (profileError || !profile) return existente || null;
   if (existente) {
@@ -75,6 +76,25 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
   };
   setUsuarios(prev => [...prev, nuevo]);
   return nuevo;
+}
+
+// Completa `usuarios` (local por dispositivo) con cualquier cuenta real del
+// tenant que este navegador todavía no conozca — sin esto, selectores como
+// "Vendedor" en Presupuesto quedaban vacíos o incompletos en cualquier
+// dispositivo donde esa persona nunca había iniciado sesión (bug real
+// reportado por Gino, 2026-09-02, mismo fix del lado de steelCRM). Nunca
+// pisa un usuario ya conocido acá.
+async function sincronizarUsuariosDesdeProfiles(usuarios, setUsuarios) {
+  if (!supabase) return;
+  const profiles = await loadDBProfiles();
+  setUsuarios(prev => {
+    const faltantes = profiles.filter(p => !prev.some(u => u.profileId === p.id));
+    if (faltantes.length === 0) return prev;
+    return [...prev, ...faltantes.map((p, i) => ({
+      id: Date.now() + i, profileId: p.id, nombre: p.nombre, rol: p.rol,
+      emoji: p.emoji || "👤", foto: p.foto || "", clave: "", email: "",
+    }))];
+  });
 }
 
 // ─── PANTALLA LOGIN ──────────────────────────────────────────────
@@ -355,6 +375,15 @@ export default function App() {
       clearInterval(chequeo);
     };
   }, []); // eslint-disable-line
+  // Trae al resto del equipo real (profiles) apenas hay sesión — antes
+  // `usuarios` solo se enteraba de alguien cuando esa persona logueaba en
+  // ESE dispositivo puntual, dejando selectores como "Vendedor" vacíos o
+  // incompletos en cualquier otro (bug real reportado por Gino, 2026-09-02,
+  // mismo fix del lado de steelCRM).
+  useEffect(() => {
+    if (usuario) sincronizarUsuariosDesdeProfiles(usuarios, setUsuarios);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario?.id]);
   // Recupera la última pestaña activa tras una recarga (ej. al cambiar el
   // tema en Config, que fuerza un reload) — antes siempre volvía a Cómputo.
   const tabGuardado = (() => {
