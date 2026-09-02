@@ -13,6 +13,7 @@ import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarElimin
 import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
+import { MAQUINAS_OPTS } from "./Computo";
 import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import { Combobox, normalizarTexto } from "./Combobox";
@@ -41,7 +42,7 @@ const PALETTE = ["#e85d04","#3b82f6","#10b981","#f59e0b","#8b5cf6",
   "#ec4899","#06b6d4","#84cc16","#f97316","#6366f1","#14b8a6","#a855f7"];
 
 // Terminaciones/tratamiento por material del grupo (no invalida el resultado calculado).
-const fichaVacia = () => ({ granallado:false, pintura:false, galvanizado:false });
+const fichaVacia = () => ({ granallado:false, pintura:false, galvanizado:false, corte_maquina:false, maquina:"", plegado:false, cilindrado:false });
 function FichaToggles({ g, onChange }) {
   const ficha = g.ficha || fichaVacia();
   const toggle = (k) => onChange({ ...g, ficha: { ...ficha, [k]: !ficha[k] } });
@@ -50,12 +51,22 @@ function FichaToggles({ g, onChange }) {
       <button onClick={()=>toggle("granallado")} style={{...BTN(ficha.granallado?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>◈ Granallado</button>
       <button onClick={()=>toggle("pintura")} style={{...BTN(ficha.pintura?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>🎨 Pintura</button>
       <button onClick={()=>toggle("galvanizado")} style={{...BTN(ficha.galvanizado?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>🔩 Galvanizado</button>
+      <button onClick={()=>toggle("corte_maquina")} style={{...BTN(ficha.corte_maquina?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>⚙ Corte máquina</button>
+      {ficha.corte_maquina && (
+        <select value={ficha.maquina||""} onChange={e=>onChange({ ...g, ficha:{ ...ficha, maquina:e.target.value } })}
+          style={{ ...INP, padding:"3px 6px", fontSize:10, width:150 }}>
+          <option value="">— Máquina —</option>
+          {MAQUINAS_OPTS.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+      )}
+      <button onClick={()=>toggle("plegado")} style={{...BTN(ficha.plegado?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>🗜️ Plegado</button>
+      <button onClick={()=>toggle("cilindrado")} style={{...BTN(ficha.cilindrado?"ok":"ghost"),padding:"3px 8px",fontSize:10}}>🌀 Cilindrado</button>
     </div>
   );
 }
 function FichaBadges({ g }) {
   const ficha = g.ficha || {};
-  const activos = [ficha.granallado&&"◈",ficha.pintura&&"🎨",ficha.galvanizado&&"🔩"].filter(Boolean);
+  const activos = [ficha.granallado&&"◈",ficha.pintura&&"🎨",ficha.galvanizado&&"🔩",ficha.corte_maquina&&"⚙",ficha.plegado&&"🗜️",ficha.cilindrado&&"🌀"].filter(Boolean);
   if (!activos.length) return null;
   return <span style={{ fontSize:11, color:C.gold }}>{activos.join(" ")}</span>;
 }
@@ -661,7 +672,16 @@ function importar(computo_id, bib_map, bib_planchas_map) {
     if (pf.granallado) f.granallado = true;
     if (pf.pintura) f.pintura = true;
     if (pf.galvanizado) f.galvanizado = true;
-    if (pf.corte_maquina && pf.maquina && !f.maquina) f.maquina = pf.maquina;
+    // Bug real (2026-09-02, reportado por Gino con captura): solo se
+    // copiaba el NOMBRE de la máquina, nunca el flag corte_maquina en sí —
+    // por eso el resumen de Anidado nunca mostraba "Corte de máquina"
+    // aunque la pieza sí lo tuviera marcado en Cómputo.
+    if (pf.corte_maquina) {
+      f.corte_maquina = true;
+      if (pf.maquina && !f.maquina) f.maquina = pf.maquina;
+    }
+    if (pf.plegado) f.plegado = true;
+    if (pf.cilindrado) f.cilindrado = true;
     // Precio manual cargado en la ficha de la pieza (Cómputo) — mismo
     // criterio que `maquina`: ambiguo si dos piezas del grupo tienen precios
     // distintos, se toma el primero que aparece en vez de pisarlo o sumarlo.
@@ -800,7 +820,7 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>
-                <td style={TD}>{[m.ficha.granallado&&"◈ Granallado",m.ficha.pintura&&"🎨 Pintura",m.ficha.galvanizado&&"🔩 Galvanizado",m.precio_manual&&"$ Precio manual"].filter(Boolean).join(" · ")||"—"}</td>
+                <td style={TD}>{[m.ficha.granallado&&"◈ Granallado",m.ficha.pintura&&"🎨 Pintura",m.ficha.galvanizado&&"🔩 Galvanizado",m.ficha.corte_maquina&&("⚙ "+(m.ficha.maquina||"Corte máq.")),m.ficha.plegado&&"🗜️ Plegado",m.ficha.cilindrado&&"🌀 Cilindrado",m.precio_manual&&"$ Precio manual"].filter(Boolean).join(" · ")||"—"}</td>
               </tr>
             ))}
           </tbody>
@@ -1279,6 +1299,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                       const mats = materialesUnificados(actual, tcGlobal).map(m => ({
                         nombre: m.nombre, kg: m.kg, sup: m.sup, usd_kg: m.precio_usd_kg || 0,
                         granallado: !!m.ficha?.granallado, pintura: !!m.ficha?.pintura, galvanizado: !!m.ficha?.galvanizado,
+                        corte_maquina: !!m.ficha?.corte_maquina, maquina: m.ficha?.maquina||"",
+                        plegado: !!m.ficha?.plegado, cilindrado: !!m.ficha?.cilindrado,
                       }));
                       saveLS("smeas_material_export_pending", mats);
                       // Anidado usa "cliente" para la persona y "empresa" para la

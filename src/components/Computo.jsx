@@ -74,6 +74,7 @@ const fichaVacia = () => ({
   pintura: false, pct_pintura: 100,
   galvanizado: false, pct_galvanizado: 100,
   corte_maquina: false, maquina: "",
+  plegado: false, cilindrado: false,
   precio_raw: "",
   precio_por: "kg",   // "kg" | "m" | "m2"
   moneda: "USD",
@@ -183,7 +184,7 @@ function useBiblioteca() {
 // ═══════════════════════════════════════════════════════════════
 // FICHA DRAWER — panel lateral por pieza
 // ═══════════════════════════════════════════════════════════════
-const MAQUINAS_OPTS = ["Plasma / Pantógrafo","Láser","Oxicorte","Cizalla","Sierra","Torno","Fresadora","Otro"];
+export const MAQUINAS_OPTS = ["Plasma / Pantógrafo","Láser","Oxicorte","Cizalla","Sierra","Torno","Fresadora","Otro"];
 
 function FichaDrawer({ pieza, tc, bib, onClose, onChange }) {
   // Backward compat: migrar arenado → granallado si vienen datos viejos
@@ -342,6 +343,12 @@ function FichaDrawer({ pieza, tc, bib, onClose, onChange }) {
               </select>
             </div>
           )}
+
+          {/* Plegado / Cilindrado — 2026-09-02, a pedido de Gino: mismas
+              operaciones de maquinado que Corte de máquina, con costo propio
+              en Insumos y Precios > Maquinado. */}
+          <Toggle on={ficha.plegado} onChange={v=>setF("plegado",v)} label="Plegado" color={C.info} />
+          <Toggle on={ficha.cilindrado} onChange={v=>setF("cilindrado",v)} label="Cilindrado" color={C.info} />
         </div>
 
         {/* ─── PRECIO ─── */}
@@ -457,6 +464,8 @@ function FichaDrawer({ pieza, tc, bib, onClose, onChange }) {
           {ficha.pintura       && <span style={BDG(C.info,  true)}>🎨 Pintura {ficha.pct_pintura}%</span>}
           {ficha.galvanizado   && <span style={BDG(C.gold,  true)}>🔩 Galvanizado {ficha.pct_galvanizado}%</span>}
           {ficha.corte_maquina && <span style={BDG(C.pur,   true)}>⚙ {ficha.maquina||"Corte máq."}</span>}
+          {ficha.plegado       && <span style={BDG(C.info,  true)}>🗜️ Plegado</span>}
+          {ficha.cilindrado    && <span style={BDG(C.info,  true)}>🌀 Cilindrado</span>}
           {ficha.precio_raw    && <span style={BDG(C.ok,    true)}>$ {ficha.precio_raw} {ficha.moneda}{sufijo}</span>}
           {ficha.proveedor     && <span style={BDG(C.steel, true)}>🏭 {ficha.proveedor}</span>}
         </div>
@@ -612,7 +621,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
   const fichaIcono = (p) => {
     const f = p.ficha || fichaVacia();
     const granallado = f.granallado ?? f.arenado ?? false;
-    const activos = [granallado&&"◈",f.pintura&&"🎨",f.galvanizado&&"🔩",f.corte_maquina&&"⚙",f.precio_raw&&"$"].filter(Boolean);
+    const activos = [granallado&&"◈",f.pintura&&"🎨",f.galvanizado&&"🔩",f.corte_maquina&&"⚙",f.plegado&&"🗜️",f.cilindrado&&"🌀",f.precio_raw&&"$"].filter(Boolean);
     return activos;
   };
 

@@ -502,6 +502,7 @@ const RUBROS_ITEM = [
   ["terc_montajes", "item_terc_montajes"],
   ["traslados", "item_traslados"],
   ["corte_pantografo", "item_corte_pantografo"],
+  ["maquinado", "item_maquinado"],
 ];
 
 export const loadDBItems = async (presupuestoId) => {
@@ -975,10 +976,11 @@ const TARIFARIO_TABLAS = [
   ["terceros", "tarifario_terceros"],
   ["traslados", "tarifario_traslados"],
   ["pinturas", "tarifario_pinturas"],
+  ["maquinado", "tarifario_maquinado"],
   ["interes_financiero", "tarifario_interes_financiero"],
 ];
 
-const obtenerTenantId = async () => {
+export const obtenerTenantId = async () => {
   // Sin filtrar por el usuario actual, esto seleccionaba TODOS los
   // profiles visibles por RLS (cualquier cuenta del mismo tenant) —
   // con más de una cuenta real (ej. la de prueba compartida), .single()
@@ -1003,9 +1005,21 @@ export const loadDBTarifario = async () => {
   return {
     ...resultado,
     arenado_usd_m2: config?.arenado_usd_m2 ?? 0,
+    arenado_proveedor: config?.arenado_proveedor ?? "",
+    arenado_fecha_precio: config?.arenado_fecha_precio ?? "",
+    arenado_obs: config?.arenado_obs ?? "",
     galvanizado_usd_kg: config?.galvanizado_usd_kg ?? 0,
+    galvanizado_proveedor: config?.galvanizado_proveedor ?? "",
+    galvanizado_fecha_precio: config?.galvanizado_fecha_precio ?? "",
+    galvanizado_obs: config?.galvanizado_obs ?? "",
     panto_usd_kg_2d: config?.panto_usd_kg_2d ?? 0,
+    panto_2d_proveedor: config?.panto_2d_proveedor ?? "",
+    panto_2d_fecha_precio: config?.panto_2d_fecha_precio ?? "",
+    panto_2d_obs: config?.panto_2d_obs ?? "",
     panto_usd_kg_3d: config?.panto_usd_kg_3d ?? 0,
+    panto_3d_proveedor: config?.panto_3d_proveedor ?? "",
+    panto_3d_fecha_precio: config?.panto_3d_fecha_precio ?? "",
+    panto_3d_obs: config?.panto_3d_obs ?? "",
   };
 };
 
@@ -1021,10 +1035,20 @@ export const saveDBTarifario = async (tarifario) => {
     }
   }
   const tenantId = await obtenerTenantId();
-  const { arenado_usd_m2, galvanizado_usd_kg, panto_usd_kg_2d, panto_usd_kg_3d } = tarifario;
+  const {
+    arenado_usd_m2, arenado_proveedor, arenado_fecha_precio, arenado_obs,
+    galvanizado_usd_kg, galvanizado_proveedor, galvanizado_fecha_precio, galvanizado_obs,
+    panto_usd_kg_2d, panto_2d_proveedor, panto_2d_fecha_precio, panto_2d_obs,
+    panto_usd_kg_3d, panto_3d_proveedor, panto_3d_fecha_precio, panto_3d_obs,
+  } = tarifario;
   const { error: eCfg } = await supabase
     .from("tarifario_config")
-    .upsert({ tenant_id: tenantId, arenado_usd_m2, galvanizado_usd_kg, panto_usd_kg_2d, panto_usd_kg_3d });
+    .upsert(saneado({
+      tenant_id: tenantId, arenado_usd_m2, arenado_proveedor, arenado_fecha_precio, arenado_obs,
+      galvanizado_usd_kg, galvanizado_proveedor, galvanizado_fecha_precio, galvanizado_obs,
+      panto_usd_kg_2d, panto_2d_proveedor, panto_2d_fecha_precio, panto_2d_obs,
+      panto_usd_kg_3d, panto_3d_proveedor, panto_3d_fecha_precio, panto_3d_obs,
+    }));
   if (eCfg) throw eCfg;
 };
 

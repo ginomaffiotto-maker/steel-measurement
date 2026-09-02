@@ -244,10 +244,39 @@ export const iPresupuesto = () => ({
 // controla qué pestañas se muestran en el editor (no borra datos ni
 // afecta calcItem: un rubro oculto con filas cargadas sigue sumando).
 const PRESET_TIPO_RUBROS = {
-  fabricacion: { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:false, terc_fabricacion:true,  terc_montajes:false, trat_superficie:true, traslados:false, corte_pantografo:true  },
-  montaje:     { hierros:false, mat_generales:true, mo_fabricacion:false, mo_montajes:true,  terc_fabricacion:false, terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:false },
-  fab_mont:    { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:true,  terc_fabricacion:true,  terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:true  },
+  fabricacion: { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:false, terc_fabricacion:true,  terc_montajes:false, trat_superficie:true, traslados:false, corte_pantografo:true,  maquinado:true  },
+  montaje:     { hierros:false, mat_generales:true, mo_fabricacion:false, mo_montajes:true,  terc_fabricacion:false, terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:false, maquinado:false },
+  fab_mont:    { hierros:true,  mat_generales:true, mo_fabricacion:true,  mo_montajes:true,  terc_fabricacion:true,  terc_montajes:true,  trat_superficie:true, traslados:true,  corte_pantografo:true,  maquinado:true  },
 };
+
+// Arma las filas del rubro "Maquinado" a partir de las piezas importadas de
+// Anidado que llegan con corte_maquina/plegado/cilindrado marcado — así el
+// costo de esas operaciones "se arrastra" solo desde Cómputo/Anidado sin
+// que el vendedor tenga que repetir el trabajo acá (a pedido de Gino,
+// 2026-09-02). El precio de cada operación sale del catálogo de Maquinado
+// (Insumos y Precios), buscado por nombre — "Plegado"/"Cilindrado" o el
+// nombre de la máquina elegida en Corte de máquina (Láser, Plasma, etc.).
+function filasMaquinadoDesdeMateriales(materiales, tarifario) {
+  const catalogo = tarifario.maquinado || [];
+  const precioDe = (nombre) => parseFloat(catalogo.find(c => c.nombre === nombre)?.usd) || 0;
+  const filas = [];
+  (materiales || []).forEach(m => {
+    const kg = +(m.kg || 0).toFixed(3);
+    if (m.corte_maquina && m.maquina) {
+      const usd_unit = precioDe(m.maquina);
+      filas.push({ id: uid(), nombre: m.maquina, cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
+    }
+    if (m.plegado) {
+      const usd_unit = precioDe("Plegado");
+      filas.push({ id: uid(), nombre: "Plegado", cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
+    }
+    if (m.cilindrado) {
+      const usd_unit = precioDe("Cilindrado");
+      filas.push({ id: uid(), nombre: "Cilindrado", cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
+    }
+  });
+  return filas;
+}
 
 export const iItem = () => ({
   id: uid(), titulo: "Ítem nuevo", cantidad: 1, n_plano: "",
@@ -257,7 +286,7 @@ export const iItem = () => ({
   mo_fabricacion: [], mo_montajes: [], horas_especiales: [],
   terc_fabricacion: [], terc_montajes: [],
   trat_superficie: { pinturas: [], arenado_m2: 0, arenado_usd_m2: loadTarifario().arenado_usd_m2, galvanizado: false },
-  traslados: [], corte_pantografo: [],
+  traslados: [], corte_pantografo: [], maquinado: [],
 });
 
 // ─── CÁLCULOS ────────────────────────────────────────────────────
@@ -286,6 +315,7 @@ export function calcItem(it) {
                   + (ts.otros || []).reduce((s, o) => s + (+o.usd_kg || 0), 0) * hier_kg;
   const trasl_usd = (it.traslados || []).reduce((s, t) => s + (+t.subtotal_usd || 0), 0);
   const panto_usd = (it.corte_pantografo || []).reduce((s, c) => s + (+c.subtotal_usd || 0), 0);
+  const maquinado_usd = (it.maquinado || []).reduce((s, m) => s + (+m.subtotal_usd || 0), 0);
 
   // Detalle para el desplegable de "Ver detalle completo" del resumen —
   // horas por tipo (Común/Nocturna/Extra/Lluvia) y litros/superficie de
@@ -314,7 +344,7 @@ export function calcItem(it) {
   const galvanizado_kg = ts.galvanizado ? (+ts.galvanizado_kg || 0) : 0;
 
   const total_unit = hier_usd + mat_usd + moFab_usd + moMon_usd + hesp_usd
-                   + tFab_usd + tMon_usd + trat_usd + trasl_usd + panto_usd;
+                   + tFab_usd + tMon_usd + trat_usd + trasl_usd + panto_usd + maquinado_usd;
   const total_usd  = total_unit * cant;
   const total_kg   = it.no_agrega_kg ? 0 : hier_kg * cant;
   const usd_kg     = total_kg > 0 ? total_usd / total_kg : 0;
@@ -324,7 +354,7 @@ export function calcItem(it) {
 
   return {
     hier_usd, hier_kg, mat_usd, moFab_usd, moFab_h, moMon_usd, moMon_h,
-    hesp_usd, tFab_usd, tMon_usd, trat_usd, trasl_usd, panto_usd,
+    hesp_usd, tFab_usd, tMon_usd, trat_usd, trasl_usd, panto_usd, maquinado_usd,
     total_unit, total_usd, total_kg, usd_kg, kg_con_desp, kg_desp_pond, desperdicio_usd,
     pct_desperdicio: kg_con_desp>0 ? kg_desp_pond/kg_con_desp*100 : 0,
     pct_desperdicio_total: total_kg>0 ? kg_desp_pond/total_kg*100 : 0,
@@ -336,7 +366,7 @@ export function calcItem(it) {
 }
 
 export function calcPresupuesto(p) {
-  const rubros = { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0 };
+  const rubros = { hier:0, mat:0, moFab:0, moMon:0, hesp:0, tFab:0, tMon:0, trat:0, trasl:0, panto:0, maquinado:0 };
   let total_usd = 0, total_kg = 0, kg_con_desp = 0, kg_desp_pond = 0, desperdicio_usd = 0;
   let moFab_h = 0, moMon_h = 0, hesp_h = 0, trat_lt = 0, arenado_m2 = 0, galvanizado_kg = 0;
   const horasPorTipoFab = { Común:0, Nocturna:0, Extra:0, Lluvia:0 };
@@ -351,6 +381,7 @@ export function calcPresupuesto(p) {
     rubros.hesp  += c.hesp_usd  * q; rubros.tFab  += c.tFab_usd  * q;
     rubros.tMon  += c.tMon_usd  * q; rubros.trat  += c.trat_usd  * q;
     rubros.trasl += c.trasl_usd * q; rubros.panto += c.panto_usd * q;
+    rubros.maquinado += c.maquinado_usd * q;
     total_usd += c.total_usd;
     total_kg  += c.total_kg;
     kg_con_desp  += c.kg_con_desp  * q;
@@ -1117,6 +1148,57 @@ function TabMatGenerales({ item, set }) {
   );
 }
 
+// ─── TAB: MAQUINADO (Corte de máquina / Plegado / Cilindrado) ───────
+// 2026-09-02, a pedido de Gino: mismo patrón que Mat. Generales — filas
+// que se agregan a mano o "Desde catálogo (Maquinado)". Las filas que
+// vienen de Anidado (pieza con corte_maquina/plegado/cilindrado marcado)
+// se auto-agregan acá al importar materiales (ver importarMateriales/
+// importarMaterialesComoPresNuevo más abajo), sin que el usuario tenga
+// que repetir el trabajo hecho en Cómputo/Anidado.
+function TabMaquinado({ item, set }) {
+  const rows = item.maquinado || [];
+  const tarifario = loadTarifario();
+  const upd = (id, field, val) => set("maquinado", rows.map(r => {
+    if (r.id !== id) return r;
+    const nr = { ...r, [field]: val };
+    nr.subtotal_usd = (+nr.cantidad || 0) * (+nr.usd_unit || 0);
+    return nr;
+  }));
+  const add = () => set("maquinado", [...rows, { id:uid(), nombre:"", cantidad:1, kg_unit:0, usd_unit:0, obs:"", subtotal_usd:0, orden:rows.length }]);
+  const addDesdeCatalogo = (it) => set("maquinado", [...rows, { id:uid(), nombre:it.nombre, cantidad:1, kg_unit:0, usd_unit:it.usd||0, obs:it.obs||"", subtotal_usd:it.usd||0, orden:rows.length }]);
+  const del = (id) => set("maquinado", rows.filter(r => r.id !== id));
+  const tot = rows.reduce((s,r) => s + (+r.subtotal_usd || 0), 0);
+
+  return (
+    <div>
+      <QuickPick catalogo={tarifario.maquinado} onPick={addDesdeCatalogo} />
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead><tr>
+            {["Operación","Cantidad","Kg","USD/u","Observaciones","Subtotal USD",""].map(h=>
+              <th key={h} style={{...TH,fontSize:12}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td style={TD}><input value={r.nombre} placeholder="Plegado, Cilindrado, Corte láser..." onChange={e=>upd(r.id,"nombre",e.target.value)} style={{...INP_SM,width:200}}/></td>
+                <td style={TD}><input type="number" value={r.cantidad} min="0" step="0.01" onChange={e=>upd(r.id,"cantidad",+e.target.value)} style={{...INP_SM,width:70,textAlign:"right"}}/></td>
+                <td style={TD}><input type="number" value={r.kg_unit} min="0" step="0.01" onChange={e=>upd(r.id,"kg_unit",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
+                <td style={TD}><input type="number" value={r.usd_unit} min="0" step="0.01" onChange={e=>upd(r.id,"usd_unit",+e.target.value)} style={{...INP_SM,width:80,textAlign:"right"}}/></td>
+                <td style={TD}><input value={r.obs||""} placeholder="Notas..." onChange={e=>upd(r.id,"obs",e.target.value)} style={{...INP_SM,width:150}}/></td>
+                <Subtotal usd={r.subtotal_usd||0}/>
+                <td style={TD}><BtnDelFila vacia={!r.nombre?.trim() && !r.usd_unit} onDelete={()=>del(r.id)} tipo="esta operación" /></td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && <tfoot><TotRow cols={5} label="TOTAL" usd={tot}/></tfoot>}
+        </table>
+      </div>
+      <button style={{...BTN("ghost"),marginTop:10}} onClick={add}>+ Agregar operación</button>
+    </div>
+  );
+}
+
 // ─── TAB: MO FABRICACIÓN / MONTAJE ───────────────────────────────
 const HORAS_POR_DIA = 8;
 
@@ -1702,6 +1784,7 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
     { id:"trat_superficie",  icon:"🎨",  label:"Trat. Sup."   },
     { id:"traslados",        icon:"🚚",  label:"Traslados"    },
     { id:"corte_pantografo", icon:"✂️",  label:"Pantógrafo"   },
+    { id:"maquinado",        icon:"🔧",  label:"Maquinado"    },
   ];
 
   const [tab, setTab] = useState("resumen");
@@ -1740,6 +1823,7 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
     trat_superficie:  ((item.trat_superficie?.pinturas||[]).length + (item.trat_superficie?.arenado_m2 > 0 ? 1 : 0)),
     traslados:        (item.traslados||[]).length,
     corte_pantografo: (item.corte_pantografo||[]).length,
+    maquinado:        (item.maquinado||[]).length,
   };
 
   return (
@@ -1850,7 +1934,7 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
         <fieldset disabled={bloqueadoPres} style={{ flex:1, overflowY:"auto", overflowX:"hidden", padding:16, border:"none", margin:0, minWidth:0, minHeight:0, opacity: bloqueadoPres?0.7:1 }}>
           {tab === "resumen" && (() => {
             const q = +item.cantidad || 1;
-            const rubros = { hier:c.hier_usd*q, mat:c.mat_usd*q, moFab:c.moFab_usd*q, moMon:c.moMon_usd*q, hesp:c.hesp_usd*q, tFab:c.tFab_usd*q, tMon:c.tMon_usd*q, trat:c.trat_usd*q, trasl:c.trasl_usd*q, panto:c.panto_usd*q };
+            const rubros = { hier:c.hier_usd*q, mat:c.mat_usd*q, moFab:c.moFab_usd*q, moMon:c.moMon_usd*q, hesp:c.hesp_usd*q, tFab:c.tFab_usd*q, tMon:c.tMon_usd*q, trat:c.trat_usd*q, trasl:c.trasl_usd*q, panto:c.panto_usd*q, maquinado:c.maquinado_usd*q };
             return (
               <div style={{ maxWidth:480 }}>
                 <ResumenConDetalle rubros={rubros} total_usd={c.total_usd} total_kg={c.total_kg} pres={pres} />
@@ -1872,6 +1956,7 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
           {tab === "trat_superficie"  && <TabTrat         item={item} set={set} />}
           {tab === "traslados"        && <TabTraslados    item={item} set={set} />}
           {tab === "corte_pantografo" && <TabPanto        item={item} set={set} />}
+          {tab === "maquinado"        && <TabMaquinado    item={item} set={set} />}
         </fieldset>
 
         {/* Footer */}
@@ -2105,6 +2190,7 @@ function ResumenRubros({ rubros, total_usd, total_kg, extra }) {
       <BarraRubro label="🎨 Tratamiento Sup."      usd={rubros.trat}   total={total_usd} kg={total_kg} color={C.ok} />
       <BarraRubro label="🚚 Traslados"             usd={rubros.trasl}  total={total_usd} kg={total_kg} color={C.muted} />
       <BarraRubro label="✂️ Pantógrafo"            usd={rubros.panto}  total={total_usd} kg={total_kg} color={C.gold} />
+      <BarraRubro label="🔧 Maquinado"             usd={rubros.maquinado} total={total_usd} kg={total_kg} color={C.pur} />
       {(extra || []).map(e => (
         <BarraRubro key={e.label} label={e.label} usd={e.usd} total={total_usd} kg={total_kg} color={e.color} />
       ))}
@@ -2185,7 +2271,7 @@ function ModalResumenCompleto({ pres, onClose }) {
               const rubrosIt = {
                 hier:ic.hier_usd*q, mat:ic.mat_usd*q, moFab:ic.moFab_usd*q, moMon:ic.moMon_usd*q,
                 hesp:ic.hesp_usd*q, tFab:ic.tFab_usd*q, tMon:ic.tMon_usd*q, trat:ic.trat_usd*q,
-                trasl:ic.trasl_usd*q, panto:ic.panto_usd*q,
+                trasl:ic.trasl_usd*q, panto:ic.panto_usd*q, maquinado:ic.maquinado_usd*q,
               };
               return (
                 <div key={it.id} style={{ marginBottom:16, padding:14, background:C.card, border:`1px solid ${C.border}`, borderRadius:10 }}>
@@ -2694,10 +2780,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         id: uid(), nombre: m.nombre, proveedor: m.proveedor || "", fecha_precio: "", obs: "", cantidad: 1,
         kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
         arena: !!m.granallado, pintura: !!m.pintura, galvanizado: !!m.galvanizado,
+        corte_maquina: !!m.corte_maquina, maquina: m.maquina||"", plegado: !!m.plegado, cilindrado: !!m.cilindrado,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });
-    nuevo.items = [{ ...iItem(), hierros }];
+    const maquinado = filasMaquinadoDesdeMateriales(materiales, loadTarifario());
+    nuevo.items = [{ ...iItem(), hierros, maquinado }];
     setPres(prev => [nuevo, ...prev]);
     dualWritePresupuesto(nuevo);
     logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
@@ -2716,14 +2804,19 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         id: uid(), nombre: m.nombre, proveedor: m.proveedor || "", cantidad: 1,
         kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
         arena: !!m.granallado, pintura: !!m.pintura, galvanizado: !!m.galvanizado,
+        corte_maquina: !!m.corte_maquina, maquina: m.maquina||"", plegado: !!m.plegado, cilindrado: !!m.cilindrado,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });
+    const nuevasFilasMaquinado = filasMaquinadoDesdeMateriales(materiales, loadTarifario());
     setPres(prev => prev.map(p => {
       if (p.id !== presupuestoId) return p;
       const items = itemEsNuevo
-        ? [...p.items, { ...iItem(), id: itemId, hierros: nuevasFilas }]
-        : p.items.map(it => it.id === itemId ? { ...it, hierros: [...(it.hierros||[]), ...nuevasFilas] } : it);
+        ? [...p.items, { ...iItem(), id: itemId, hierros: nuevasFilas, maquinado: nuevasFilasMaquinado }]
+        : p.items.map(it => it.id === itemId ? { ...it,
+            hierros: [...(it.hierros||[]), ...nuevasFilas],
+            maquinado: [...(it.maquinado||[]), ...nuevasFilasMaquinado],
+          } : it);
       return touch({ ...p, items });
     }));
     cerrarImportMateriales();

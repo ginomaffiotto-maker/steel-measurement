@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, saveDBTarifario, useTarifarioConNube, useMergeBibliotecaNube } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, loadDBHistorialPrecios, saveDBTarifario, useTarifarioConNube, useMergeBibliotecaNube, obtenerTenantId } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
 
@@ -1754,11 +1754,83 @@ function SeccionRejillas() {
 // ═══════════════════════════════════════════════════════════════════
 
 // ─── CATÁLOGO EDITABLE (usado para MO Fab/Mon, Mat. Generales, Terc., Traslados) ─
-function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, onChange }) {
+// Historial de precios genérico — botón "📜" por fila, mismo backend que ya
+// usaba Biblioteca de perfiles/planchuelas/planchas/rejillas
+// (material_historial_precios), ampliado 2026-09-02 a pedido de Gino para
+// cubrir también los catálogos de tarifario y ganar "quién" hizo el cambio.
+function HistorialPrecioModal({ tipo, materialId, nombre, labelValor, onClose }) {
+  const [filas, setFilas] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let vivo = true;
+    loadDBHistorialPrecios(tipo, materialId)
+      .then(d => { if (vivo) setFilas(d); })
+      .catch(e => { if (vivo) setError(e.message || String(e)); });
+    return () => { vivo = false; };
+  }, [tipo, materialId]);
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:1200, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:20, width:420, maxHeight:"70vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={{ fontWeight:800, fontSize:14, color:C.text }}>📜 Historial de precios — {nombre || "ítem"}</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:16 }}>✕</button>
+        </div>
+        {error && <div style={{ color:C.err, fontSize:12 }}>No se pudo cargar: {error}</div>}
+        {!error && filas === null && <div style={{ color:C.muted, fontSize:12 }}>Cargando…</div>}
+        {!error && filas && filas.length === 0 && <div style={{ color:C.muted, fontSize:12 }}>Todavía no hay cambios de precio registrados para este ítem.</div>}
+        {!error && filas && filas.length > 0 && (
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead><tr>
+              <th style={{...TH,fontSize:10}}>Fecha</th>
+              <th style={{...TH,fontSize:10}}>{labelValor||"Precio"}</th>
+              <th style={{...TH,fontSize:10}}>Proveedor</th>
+              <th style={{...TH,fontSize:10}}>Cambiado por</th>
+            </tr></thead>
+            <tbody>
+              {filas.map(f => (
+                <tr key={f.id}>
+                  <td style={TD}>{f.fecha||"—"}</td>
+                  <td style={{...TD,fontWeight:700}}>{f.precio}</td>
+                  <td style={TD}>{f.proveedor||"—"}</td>
+                  <td style={TD}>{f.cambiado_por||"—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, onChange, usuario, tipoHistorial, camposExtra }) {
+  items = items || [];
   const [busq, setBusq] = useState("");
-  const upd = (id, field, val) => onChange(items.map(it => it.id === id ? { ...it, [field]: val } : it));
+  const [historialDe, setHistorialDe] = useState(null);
+  const upd = (id, field, val) => {
+    onChange(items.map(it => it.id === id ? { ...it, [field]: val } : it));
+    // Cada cambio de precio queda registrado — a pedido de Gino (2026-09-02),
+    // "debe guardarse un registro de todas las veces que a un material se le
+    // cambie el precio". No bloquea el guardado si falla (mismo criterio de
+    // dual-write de siempre).
+    if (tipoHistorial && field === campoValor) {
+      const item = items.find(it => it.id === id);
+      const precioViejo = parseFloat(item?.[campoValor]) || 0;
+      const precioNuevo = parseFloat(val) || 0;
+      if (precioNuevo !== precioViejo) {
+        addDBHistorialPrecio(tipoHistorial, id, {
+          fecha: hoy(), proveedor: item?.proveedor || "", precio: precioNuevo, cambiado_por: usuario?.nombre || "",
+        }).catch(e => console.warn(`[Fase 3] No se pudo registrar el historial de precio (${tipoHistorial}):`, e.message || e));
+      }
+    }
+  };
   const del = (id) => onChange(items.filter(it => it.id !== id));
-  const add = () => onChange([...items, { id: uid(), nombre: "", [campoValor]: 0, unidad: unidad || "", proveedor:"", fecha_precio:"", obs:"" }]);
+  const add = () => {
+    const base = { id: uid(), nombre: "", [campoValor]: 0, unidad: unidad || "", proveedor:"", fecha_precio:"", obs:"" };
+    (camposExtra||[]).forEach(c => { base[c.key] = ""; });
+    onChange([...items, base]);
+  };
   const lista = items.filter(it => norm(it.nombre).includes(norm(busq)));
 
   return (
@@ -1777,6 +1849,8 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
           <div style={{ flex:"1 1 140px" }}>Proveedor</div>
           <div style={{ width:150 }}>Fecha del precio</div>
           <div style={{ flex:"2 1 200px" }}>Observaciones</div>
+          {(camposExtra||[]).map(c => <div key={c.key} style={{ width:c.width||140 }}>{c.label}</div>)}
+          <div style={{ width:22 }}></div>
           <div style={{ width:22 }}></div>
         </div>
       )}
@@ -1803,6 +1877,15 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
           <input value={it.obs||""} placeholder="Observaciones" disabled={soloLectura}
             onChange={e=>upd(it.id,"obs",e.target.value)}
             style={{ ...INP, flex:"2 1 200px", opacity: soloLectura?0.6:1 }} />
+          {(camposExtra||[]).map(c => (
+            <input key={c.key} type={c.type||"text"} value={it[c.key]||""} placeholder={c.placeholder||c.label} disabled={soloLectura}
+              onChange={e=>upd(it.id,c.key,e.target.value)}
+              style={{ ...INP, width:c.width||140, opacity: soloLectura?0.6:1 }} />
+          ))}
+          {tipoHistorial && (
+            <button onClick={()=>setHistorialDe(it.id)} title="Ver historial de precios"
+              style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:13, flexShrink:0 }}>📜</button>
+          )}
           {!soloLectura && (
             <button onClick={()=>del(it.id)} style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14, flexShrink:0 }}>🗑</button>
           )}
@@ -1811,6 +1894,10 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
       {!soloLectura && (
         <button onClick={add} style={{ ...BTN("ghost"), marginTop:4, fontSize:11, padding:"5px 12px" }}>+ Agregar ítem</button>
       )}
+      {historialDe && (() => {
+        const it = items.find(x => x.id === historialDe);
+        return <HistorialPrecioModal tipo={tipoHistorial} materialId={historialDe} nombre={it?.nombre} labelValor={labelValor} onClose={()=>setHistorialDe(null)} />;
+      })()}
     </div>
   );
 }
@@ -1869,10 +1956,24 @@ function AvisoSoloLectura() {
 }
 
 // Rubro genérico basado en catálogo de lista (MO, Materiales Generales, Terc., Traslados, Pinturas)
-function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, titulo, descripcion }) {
+// Nombres de arranque de "Maquinado" — las 8 máquinas que ya existían
+// sueltas en Corte de máquina (Cómputo) + Plegado/Cilindrado (pedido de
+// Gino, 2026-09-02). Se precargan a $0 la primera vez que se abre esta
+// pestaña, para no obligar a tipear los 10 nombres a mano.
+const MAQUINADO_SEED = ["Plasma / Pantógrafo","Láser","Oxicorte","Cizalla","Sierra","Torno","Fresadora","Otro","Plegado","Cilindrado"];
+
+function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, titulo, descripcion, camposExtra }) {
   const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
   const onChange = (items) => { const t = { ...tarifario, [campo]: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
+  const yaSembrado = useRef(false);
+  useEffect(() => {
+    if (campo !== "maquinado" || yaSembrado.current || soloLectura) return;
+    if ((tarifario.maquinado || []).length > 0) { yaSembrado.current = true; return; }
+    yaSembrado.current = true;
+    onChange(MAQUINADO_SEED.map(nombre => ({ id: uid(), nombre, usd: 0, unidad: "", proveedor:"", fecha_precio:"", obs:"" })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campo, tarifario.maquinado]);
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
@@ -1880,7 +1981,7 @@ function SeccionCatalogoRubro({ usuario, campo, campoValor, labelValor, unidad, 
         <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:C.text }}>{titulo}</h3>
       </div>
       {descripcion && <div style={{ fontSize:12, color:C.muted, marginBottom:16, maxWidth:900 }}>{descripcion}</div>}
-      <CatalogoEditable items={tarifario[campo]} campoValor={campoValor} labelValor={labelValor} unidad={unidad} soloLectura={soloLectura} onChange={onChange} />
+      <CatalogoEditable items={tarifario[campo]} campoValor={campoValor} labelValor={labelValor} unidad={unidad} soloLectura={soloLectura} onChange={onChange} usuario={usuario} tipoHistorial={campo} camposExtra={camposExtra} />
     </div>
   );
 }
@@ -1898,28 +1999,70 @@ function SeccionInteresFinanciero({ usuario }) {
   );
 }
 
+// Fila de un valor "pineado" (Arenado/Galvanizado/Corte 2D/Corte 3D) con la
+// misma ficha que cualquier ítem de catálogo (proveedor/fecha del precio/
+// observaciones) + historial de precios — a pedido de Gino (2026-09-02):
+// "no es consistente con las demás, les falta información". materialId
+// usa el tenant_id (un solo valor por tenant, no tiene id propio real) —
+// alcanza para identificarlo sin ambigüedad junto con `tipo`.
+function FilaValorFijo({ label, unidadLabel, soloLectura, valor, proveedor, fechaPrecio, obs, onValor, onProveedor, onFecha, onObs, tipo, usuario }) {
+  const [historial, setHistorial] = useState(false);
+  const [tenantId, setTenantId] = useState(null);
+  useEffect(() => { obtenerTenantId().then(setTenantId).catch(()=>{}); }, []);
+  const cambiarValor = (val) => {
+    onValor(val);
+    const nuevo = +val || 0;
+    if (nuevo !== (+valor || 0) && tenantId) {
+      addDBHistorialPrecio(tipo, tenantId, { fecha: hoy(), proveedor: proveedor||"", precio: nuevo, cambiado_por: usuario?.nombre||"" })
+        .catch(e => console.warn(`[Fase 3] No se pudo registrar el historial de precio (${tipo}):`, e.message || e));
+    }
+  };
+  return (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:12 }}>
+        <label style={{ fontSize:12, color:C.text }}>{label}</label>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <input type="number" min="0" step="0.01" disabled={soloLectura}
+            value={valor||0} onChange={e=>cambiarValor(e.target.value)}
+            style={{ ...INP, width:90, opacity: soloLectura?0.6:1 }} />
+          {tenantId && (
+            <button onClick={()=>setHistorial(true)} title="Ver historial de precios"
+              style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:13 }}>📜</button>
+          )}
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <input value={proveedor||""} placeholder="Proveedor" disabled={soloLectura}
+          onChange={e=>onProveedor(e.target.value)}
+          style={{ ...INP, flex:"1 1 140px", fontSize:12, padding:"5px 8px", opacity: soloLectura?0.6:1 }} />
+        <input type="date" value={fechaPrecio||""} disabled={soloLectura}
+          onChange={e=>onFecha(e.target.value)}
+          style={{ ...INP, width:150, fontSize:12, padding:"5px 8px", opacity: soloLectura?0.6:1 }} />
+        <input value={obs||""} placeholder="Observaciones" disabled={soloLectura}
+          onChange={e=>onObs(e.target.value)}
+          style={{ ...INP, flex:"2 1 200px", fontSize:12, padding:"5px 8px", opacity: soloLectura?0.6:1 }} />
+      </div>
+      {historial && <HistorialPrecioModal tipo={tipo} materialId={tenantId} nombre={label} labelValor={unidadLabel} onClose={()=>setHistorial(false)} />}
+    </div>
+  );
+}
+
 function SeccionTratSuperficie({ usuario }) {
   const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
-  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
+  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: val }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   const onChangeExtra = (items) => { const t = { ...tarifario, trat_superficie_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
       <h3 style={{ margin:"0 0 16px", fontSize:15, fontWeight:800, color:C.text }}>🎨 Tratamiento de Superficie</h3>
-      <div style={{ maxWidth:460, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:24 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, gap:12 }}>
-          <label style={{ fontSize:12, color:C.text }}>Arenado / Granallado (USD/m²)</label>
-          <input type="number" min="0" step="0.01" disabled={soloLectura}
-            value={tarifario.arenado_usd_m2||0} onChange={e=>setCampo("arenado_usd_m2",e.target.value)}
-            style={{ ...INP, width:90, opacity: soloLectura?0.6:1 }} />
-        </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <label style={{ fontSize:12, color:C.text }}>Galvanizado (USD/kg)</label>
-          <input type="number" min="0" step="0.01" disabled={soloLectura}
-            value={tarifario.galvanizado_usd_kg||0} onChange={e=>setCampo("galvanizado_usd_kg",e.target.value)}
-            style={{ ...INP, width:90, opacity: soloLectura?0.6:1 }} />
-        </div>
+      <div style={{ maxWidth:520, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:24 }}>
+        <FilaValorFijo label="Arenado / Granallado (USD/m²)" unidadLabel="USD/m²" soloLectura={soloLectura} usuario={usuario} tipo="arenado"
+          valor={tarifario.arenado_usd_m2} proveedor={tarifario.arenado_proveedor} fechaPrecio={tarifario.arenado_fecha_precio} obs={tarifario.arenado_obs}
+          onValor={v=>setCampo("arenado_usd_m2",+v||0)} onProveedor={v=>setCampo("arenado_proveedor",v)} onFecha={v=>setCampo("arenado_fecha_precio",v)} onObs={v=>setCampo("arenado_obs",v)} />
+        <FilaValorFijo label="Galvanizado (USD/kg)" unidadLabel="USD/kg" soloLectura={soloLectura} usuario={usuario} tipo="galvanizado"
+          valor={tarifario.galvanizado_usd_kg} proveedor={tarifario.galvanizado_proveedor} fechaPrecio={tarifario.galvanizado_fecha_precio} obs={tarifario.galvanizado_obs}
+          onValor={v=>setCampo("galvanizado_usd_kg",+v||0)} onProveedor={v=>setCampo("galvanizado_proveedor",v)} onFecha={v=>setCampo("galvanizado_fecha_precio",v)} onObs={v=>setCampo("galvanizado_obs",v)} />
       </div>
       <h3 style={{ margin:"0 0 4px", fontSize:13, fontWeight:800, color:C.muted }}>Otros tratamientos</h3>
       <div style={{ fontSize:12, color:C.muted, marginBottom:14, maxWidth:900 }}>
@@ -1928,7 +2071,7 @@ function SeccionTratSuperficie({ usuario }) {
         ítem de Presupuesto (pestaña Trat. Superficie → "Otros tratamientos") y
         se cobran USD/kg sobre el peso total del ítem.
       </div>
-      <CatalogoEditable items={tarifario.trat_superficie_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} />
+      <CatalogoEditable items={tarifario.trat_superficie_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} usuario={usuario} tipoHistorial="trat_superficie_extra" />
     </div>
   );
 }
@@ -1936,25 +2079,19 @@ function SeccionTratSuperficie({ usuario }) {
 function SeccionPantografo({ usuario }) {
   const [tarifario, setTarifario] = useTarifarioConNube();
   const soloLectura = usuario?.rol !== "admin";
-  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: +val || 0 }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
+  const setCampo = (campo, val) => { const t = { ...tarifario, [campo]: val }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   const onChangeExtra = (items) => { const t = { ...tarifario, pantografo_extra: items }; setTarifario(t); saveTarifario(t); dualWriteTarifario(t); };
   return (
     <div>
       {soloLectura && <AvisoSoloLectura/>}
       <h3 style={{ margin:"0 0 16px", fontSize:15, fontWeight:800, color:C.text }}>✂️ Corte Pantógrafo</h3>
-      <div style={{ maxWidth:460, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:24 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, gap:12 }}>
-          <label style={{ fontSize:12, color:C.text }}>Corte 2D — planchas (USD/kg)</label>
-          <input type="number" min="0" step="0.01" disabled={soloLectura}
-            value={tarifario.panto_usd_kg_2d||0} onChange={e=>setCampo("panto_usd_kg_2d",e.target.value)}
-            style={{ ...INP, width:90, opacity: soloLectura?0.6:1 }} />
-        </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <label style={{ fontSize:12, color:C.text }}>Corte 3D — perfiles (USD/kg)</label>
-          <input type="number" min="0" step="0.01" disabled={soloLectura}
-            value={tarifario.panto_usd_kg_3d||0} onChange={e=>setCampo("panto_usd_kg_3d",e.target.value)}
-            style={{ ...INP, width:90, opacity: soloLectura?0.6:1 }} />
-        </div>
+      <div style={{ maxWidth:520, background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:24 }}>
+        <FilaValorFijo label="Corte 2D — planchas (USD/kg)" unidadLabel="USD/kg" soloLectura={soloLectura} usuario={usuario} tipo="panto_2d"
+          valor={tarifario.panto_usd_kg_2d} proveedor={tarifario.panto_2d_proveedor} fechaPrecio={tarifario.panto_2d_fecha_precio} obs={tarifario.panto_2d_obs}
+          onValor={v=>setCampo("panto_usd_kg_2d",+v||0)} onProveedor={v=>setCampo("panto_2d_proveedor",v)} onFecha={v=>setCampo("panto_2d_fecha_precio",v)} onObs={v=>setCampo("panto_2d_obs",v)} />
+        <FilaValorFijo label="Corte 3D — perfiles (USD/kg)" unidadLabel="USD/kg" soloLectura={soloLectura} usuario={usuario} tipo="panto_3d"
+          valor={tarifario.panto_usd_kg_3d} proveedor={tarifario.panto_3d_proveedor} fechaPrecio={tarifario.panto_3d_fecha_precio} obs={tarifario.panto_3d_obs}
+          onValor={v=>setCampo("panto_usd_kg_3d",+v||0)} onProveedor={v=>setCampo("panto_3d_proveedor",v)} onFecha={v=>setCampo("panto_3d_fecha_precio",v)} onObs={v=>setCampo("panto_3d_obs",v)} />
       </div>
       <h3 style={{ margin:"0 0 4px", fontSize:13, fontWeight:800, color:C.muted }}>Otros cortes</h3>
       <div style={{ fontSize:12, color:C.muted, marginBottom:14, maxWidth:900 }}>
@@ -1963,7 +2100,7 @@ function SeccionPantografo({ usuario }) {
         en cualquier ítem de Presupuesto (pestaña Pantógrafo) — el kg queda
         pre-cargado con el peso del ítem y es editable.
       </div>
-      <CatalogoEditable items={tarifario.pantografo_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} />
+      <CatalogoEditable items={tarifario.pantografo_extra||[]} campoValor="usd" labelValor="USD/unidad" unidad="" soloLectura={soloLectura} onChange={onChangeExtra} usuario={usuario} tipoHistorial="pantografo_extra" />
     </div>
   );
 }
@@ -2008,6 +2145,7 @@ const SECCIONES = [
   { id:"interes",        label:"Interés Fin.",     icon:"📅" },
   { id:"trat_sup",       label:"Trat. Superficie", icon:"🎨" },
   { id:"pantografo",     label:"Pantógrafo",       icon:"✂️" },
+  { id:"maquinado",      label:"Maquinado",        icon:"🔧" },
 ];
 
 // ─── Buscador propio de Insumos y Precios (busca en TODOS los rubros a la vez) ─
@@ -2026,6 +2164,7 @@ const TARIFARIO_BUSQUEDA = [
   { campo:"pinturas",             rubro:"Pintura",                 sec:"pinturas",      precioField:"usd",      unidad:"USD/L" },
   { campo:"trat_superficie_extra",rubro:"Trat. Superficie (otro)", sec:"trat_sup",      precioField:"usd",      unidad:"USD" },
   { campo:"pantografo_extra",     rubro:"Pantógrafo (otro)",       sec:"pantografo",    precioField:"usd",      unidad:"USD" },
+  { campo:"maquinado",            rubro:"Maquinado",               sec:"maquinado",     precioField:"usd",      unidad:"USD/kg" },
 ];
 function useBusquedaGlobalInsumos(query) {
   return useMemo(() => {
@@ -2100,7 +2239,14 @@ export default function BibliotecaMateriales({ usuario }) {
       {sec === "mat_generales" && <SeccionCatalogoRubro usuario={usuario} campo="mat_generales" campoValor="usd" labelValor="USD/unidad" unidad="" titulo="🔩 Materiales Generales" descripcion="Consumibles, bulonería, insumos varios reutilizables en cualquier presupuesto." />}
       {sec === "terceros"      && <SeccionCatalogoRubro usuario={usuario} campo="terceros" campoValor="usd" labelValor="USD/unidad" unidad="" titulo="🏭 Tercerización" descripcion="Un solo catálogo para Fabricación y Montajes — se elige el mismo ítem desde cualquiera de las dos pestañas del presupuesto." />}
       {sec === "traslados"     && <SeccionCatalogoRubro usuario={usuario} campo="traslados" campoValor="usd" labelValor="USD/unidad" unidad="" titulo="🚚 Traslados" />}
-      {sec === "pinturas"      && <SeccionCatalogoRubro usuario={usuario} campo="pinturas" campoValor="usd" labelValor="USD/litro" titulo="🖌 Pinturas (USD/litro)" />}
+      {sec === "pinturas"      && <SeccionCatalogoRubro usuario={usuario} campo="pinturas" campoValor="usd" labelValor="USD/litro" titulo="🖌 Pinturas (USD/litro)"
+        camposExtra={[
+          { key:"rendimiento", label:"Rendimiento (m²/L)", type:"number", width:110 },
+          { key:"volumen_solidos", label:"Vol. sólidos (%)", type:"number", width:110 },
+          { key:"ficha_tecnica_link", label:"Ficha técnica (link)", type:"text", width:200, placeholder:"Link a la carpeta/archivo" },
+        ]} />}
+      {sec === "maquinado"     && <SeccionCatalogoRubro usuario={usuario} campo="maquinado" campoValor="usd" labelValor="USD/kg" unidad="" titulo="🔧 Maquinado"
+        descripcion="Plegado, cilindrado y las máquinas de Corte de máquina (Cómputo) — se eligen desde cualquier ítem de Presupuesto (pestaña Maquinado)." />}
       {sec === "interes"       && <SeccionInteresFinanciero usuario={usuario} />}
       {sec === "trat_sup"      && <SeccionTratSuperficie usuario={usuario} />}
       {sec === "pantografo"    && <SeccionPantografo usuario={usuario} />}
