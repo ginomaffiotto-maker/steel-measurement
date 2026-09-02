@@ -662,6 +662,17 @@ function importar(computo_id, bib_map, bib_planchas_map) {
     if (pf.pintura) f.pintura = true;
     if (pf.galvanizado) f.galvanizado = true;
     if (pf.corte_maquina && pf.maquina && !f.maquina) f.maquina = pf.maquina;
+    // Precio manual cargado en la ficha de la pieza (Cómputo) — mismo
+    // criterio que `maquina`: ambiguo si dos piezas del grupo tienen precios
+    // distintos, se toma el primero que aparece en vez de pisarlo o sumarlo.
+    // Reportado por Gino (2026-09-02): el resumen de Materiales unificados
+    // mostraba "—" en Total USD/Ficha aunque la pieza sí tenía precio
+    // cargado, porque este merge nunca lo traía.
+    if (pf.precio_raw && !f.precio_raw) {
+      f.precio_raw = pf.precio_raw;
+      f.moneda = pf.moneda;
+      f.precio_por = pf.precio_por;
+    }
     return f;
   };
   comp.items.forEach(item=>{
@@ -695,7 +706,7 @@ function importar(computo_id, bib_map, bib_planchas_map) {
 // (kg reales post-anidado, con desperdicio), con las selecciones de ficha,
 // las unidades a comprar (útiles + desperdicio, ej. "5 barras: 4.83 útiles,
 // 0.17 desperdicio") y el precio (USD/kg de Biblioteca × kg = total USD).
-function materialesUnificados(anidado) {
+function materialesUnificados(anidado, tc) {
   const bibLineales = [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[])];
   // 2026-08-31, a pedido de Gino: esto buscaba el precio por NOMBRE contra
   // la biblioteca — si el nombre no matcheaba exacto (mismo bug ya
@@ -731,13 +742,34 @@ function materialesUnificados(anidado) {
       : { util: r.b_util || 0, desp: r.b_desp || 0, total: r.b_total || 0, label: "barras" };
     if (g.tipo === "plancha") unidades.desp = +(unidades.total - unidades.util).toFixed(2);
     const nombre = g.material_nombre || "Sin material";
-    const precio_usd_kg = bibPorId[g.material_id] || 0;
-    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total: kg*precio_usd_kg, ficha: g.ficha || {} };
+    const ficha = g.ficha || {};
+    // Precio manual cargado en la ficha de alguna pieza del grupo (Cómputo)
+    // tiene prioridad sobre el precio de Biblioteca — mismo criterio que
+    // calcPiezaUSD (Computo.jsx), reimplementado acá porque este resumen
+    // trabaja con totales ya agregados del grupo, no pieza por pieza.
+    // Reportado por Gino (2026-09-02): esta sección mostraba "—" en Total
+    // USD/Ficha aunque la pieza sí tenía un precio manual cargado, porque
+    // solo miraba el precio de Biblioteca.
+    const precioRaw = parseFloat(ficha.precio_raw) || 0;
+    let precioManualTotal = 0;
+    if (precioRaw > 0) {
+      const tcNum = parseFloat(tc) || 40;
+      const precioUSD = ficha.moneda === "UYU" ? precioRaw / tcNum : precioRaw;
+      const por = ficha.precio_por || "kg";
+      const m_total = g.tipo !== "plancha" ? (r.m_total || 0) : 0;
+      if (por === "kg") precioManualTotal = precioUSD * kg;
+      else if (por === "m") precioManualTotal = precioUSD * m_total;
+      else if (por === "m2") precioManualTotal = precioUSD * sup;
+    }
+    const precioBib = bibPorId[g.material_id] || 0;
+    const precio_total = precioManualTotal > 0 ? precioManualTotal : kg * precioBib;
+    const precio_usd_kg = precioManualTotal > 0 ? (kg > 0 ? precio_total / kg : 0) : precioBib;
+    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha };
   });
 }
 
-function VistaMaterialesAnidado({ anidado, onClose }) {
-  const materiales = materialesUnificados(anidado);
+function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
+  const materiales = materialesUnificados(anidado, tcGlobal);
   const totalKg = materiales.reduce((s,m)=>s+m.kg,0);
   const totalUsd = materiales.reduce((s,m)=>s+m.precio_total,0);
   const sinCalcular = (anidado?.grupos||[]).length - materiales.length;
@@ -768,7 +800,7 @@ function VistaMaterialesAnidado({ anidado, onClose }) {
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>
-                <td style={TD}>{[m.ficha.granallado&&"◈ Granallado",m.ficha.pintura&&"🎨 Pintura",m.ficha.galvanizado&&"🔩 Galvanizado"].filter(Boolean).join(" · ")||"—"}</td>
+                <td style={TD}>{[m.ficha.granallado&&"◈ Granallado",m.ficha.pintura&&"🎨 Pintura",m.ficha.galvanizado&&"🔩 Galvanizado",m.precio_manual&&"$ Precio manual"].filter(Boolean).join(" · ")||"—"}</td>
               </tr>
             ))}
           </tbody>
@@ -819,7 +851,7 @@ function exportarListaCorte(anidado) {
 // ═══════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
-export default function Anidado({ usuario, usuarios = [], logear, onExportarPresupuesto }) {
+export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onExportarPresupuesto }) {
   const { show: showUndo, Toast } = useUndoToast();
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(setAnidados);
@@ -1147,7 +1179,7 @@ export default function Anidado({ usuario, usuarios = [], logear, onExportarPres
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {anidadosFiltrados.map(a=>{
             const nG=a.grupos?.length||0;
-            const materiales = materialesUnificados(a);
+            const materiales = materialesUnificados(a, tcGlobal);
             const kg = materiales.reduce((s,m)=>s+m.kg,0);
             const monto = materiales.reduce((s,m)=>s+m.precio_total,0);
             const vendedorNombre = usuarios.find(u=>u.id===a.vendedor)?.nombre;
@@ -1244,7 +1276,7 @@ export default function Anidado({ usuario, usuarios = [], logear, onExportarPres
                       // — reusa el mismo mecanismo ya armado en Presupuesto
                       // (smeas_material_export_pending / ImportarMaterialesModal),
                       // que hasta ahora nadie llenaba del lado de acá.
-                      const mats = materialesUnificados(actual).map(m => ({
+                      const mats = materialesUnificados(actual, tcGlobal).map(m => ({
                         nombre: m.nombre, kg: m.kg, sup: m.sup, usd_kg: m.precio_usd_kg || 0,
                         granallado: !!m.ficha?.granallado, pintura: !!m.ficha?.pintura, galvanizado: !!m.ficha?.galvanizado,
                       }));
@@ -1275,7 +1307,7 @@ export default function Anidado({ usuario, usuarios = [], logear, onExportarPres
               onAgregar={(c) => agregarComentarioAnidado(actual, c)}
               onEliminar={(c) => eliminarComentarioAnidado(actual, c)} />
 
-            {verMateriales && <VistaMaterialesAnidado anidado={actual} onClose={()=>setVerMateriales(false)} />}
+            {verMateriales && <VistaMaterialesAnidado anidado={actual} onClose={()=>setVerMateriales(false)} tcGlobal={tcGlobal} />}
 
             {actual.grupos.length===0&&(
               <div style={{ color:C.muted,fontSize:13,padding:"20px 0" }}>Importá desde un cómputo o agregá grupos manuales.</div>
