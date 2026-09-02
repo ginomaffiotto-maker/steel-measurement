@@ -269,6 +269,11 @@ directamente ausentes en una, un tercero con estado desactualizado).
   instantáneo, solo el envío a Supabase espera a que el usuario deje de
   tocar el campo.
 
+## 2026-09-02 — Dos bugs reales de sync silencioso en Insumos y Precios / Presupuesto
+
+- **`tarifario_mo_fab`/`tarifario_mo_mon`/`tarifario_mat_generales`/`tarifario_terceros`/`tarifario_traslados`/`tarifario_pinturas`** (`steel-backend` `20260902100000`): les faltaban `unidad`/`proveedor`/`fecha_precio`/`obs` desde la migración original (`20260822120200`) — el editor real (`CatalogoEditable`) siempre mandó esos 4 campos. Cada guardado de cualquiera de estos 6 catálogos fallaba en silencio (`console.warn`, "Could not find the 'fecha_precio' column ... in the schema cache") y, en la siguiente recarga, Fase 5 (que prefiere la nube en tarifario) pisaba el catálogo local correcto con la versión vacía/vieja de la nube. Confirmado en vivo, sin fix de código necesario — solo la migración.
+- **Steel Measurement** (`4a8f635`): `item_mat_generales`/`item_mo_fabricacion`/`item_mo_montajes`/`item_terc_fabricacion`/`item_terc_montajes`/`item_traslados`/`item_corte_pantografo` tienen `orden int not null default 0`, pero los `add()`/`addDesdeCatalogo()` de esos 6 rubros en `Presupuesto.jsx` nunca seteaban `orden` en la fila nueva — al guardar un ítem con una fila vieja (con `orden`) y una nueva (sin `orden`) mezcladas, el insert múltiple de PostgREST manda `NULL` explícito para la que no lo tiene en vez de aplicar el default, violando la restricción. Confirmado en vivo ("null value in column \"orden\" ... violates not-null constraint"). Fix: `orden: rows.length` en cada alta.
+
 ---
 
 ## Mantenimiento de este documento
