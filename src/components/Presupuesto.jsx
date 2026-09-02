@@ -1069,8 +1069,8 @@ function TabMatGenerales({ item, set }) {
     nr.subtotal_usd = (+nr.cantidad || 0) * (+nr.usd_unit || 0);
     return nr;
   }));
-  const add = () => set("mat_generales", [...rows, { id:uid(), nombre:"", proveedor:"", fecha_precio:"", cantidad:1, kg_unit:0, m2_unit:0, usd_unit:0, obs:"", subtotal_usd:0 }]);
-  const addDesdeCatalogo = (it) => set("mat_generales", [...rows, { id:uid(), nombre:it.nombre, proveedor:it.proveedor||"", fecha_precio:it.fecha_precio||"", cantidad:1, kg_unit:0, m2_unit:0, usd_unit:it.usd||0, obs:it.obs||"", subtotal_usd:it.usd||0 }]);
+  const add = () => set("mat_generales", [...rows, { id:uid(), nombre:"", proveedor:"", fecha_precio:"", cantidad:1, kg_unit:0, m2_unit:0, usd_unit:0, obs:"", subtotal_usd:0, orden:rows.length }]);
+  const addDesdeCatalogo = (it) => set("mat_generales", [...rows, { id:uid(), nombre:it.nombre, proveedor:it.proveedor||"", fecha_precio:it.fecha_precio||"", cantidad:1, kg_unit:0, m2_unit:0, usd_unit:it.usd||0, obs:it.obs||"", subtotal_usd:it.usd||0, orden:rows.length }]);
   const del = (id) => set("mat_generales", rows.filter(r => r.id !== id));
   const tot = rows.reduce((s,r) => s + (+r.subtotal_usd || 0), 0);
 
@@ -1135,7 +1135,7 @@ function TabMO({ item, set, tipo }) {
   }));
   const add = () => {
     const primera = catalogo[0];
-    set(key, [...rows, { id:uid(), categoria:primera?.nombre||"", tipo_hora:"Común", pct_adicional:0, tarea:"", detalle:"", cant_horas:0, usd_hora:primera?.usd_hora||0, subtotal_usd:0 }]);
+    set(key, [...rows, { id:uid(), categoria:primera?.nombre||"", tipo_hora:"Común", pct_adicional:0, tarea:"", detalle:"", cant_horas:0, usd_hora:primera?.usd_hora||0, subtotal_usd:0, orden:rows.length }]);
   };
   const del = (id) => set(key, rows.filter(r => r.id !== id));
 
@@ -1291,8 +1291,8 @@ function TabTerc({ item, set, tipo }) {
     nr.subtotal_usd = (+nr.cantidad||0) * (+nr.usd_unit||0);
     return nr;
   }));
-  const add = () => set(key, [...rows, { id:uid(), nombre:"", empresa:"", fecha_precio:"", cantidad:1, unidad:"u", usd_unit:0, subtotal_usd:0, detalle:"" }]);
-  const addDesdeCatalogo = (it) => set(key, [...rows, { id:uid(), nombre:it.nombre, empresa:"", fecha_precio:"", cantidad:1, unidad:it.unidad||"u", usd_unit:it.usd||0, subtotal_usd:it.usd||0, detalle:"" }]);
+  const add = () => set(key, [...rows, { id:uid(), nombre:"", empresa:"", fecha_precio:"", cantidad:1, unidad:"u", usd_unit:0, subtotal_usd:0, detalle:"", orden:rows.length }]);
+  const addDesdeCatalogo = (it) => set(key, [...rows, { id:uid(), nombre:it.nombre, empresa:"", fecha_precio:"", cantidad:1, unidad:it.unidad||"u", usd_unit:it.usd||0, subtotal_usd:it.usd||0, detalle:"", orden:rows.length }]);
   const del = (id) => set(key, rows.filter(r => r.id !== id));
   const tot = rows.reduce((s,r) => s + (+r.subtotal_usd||0), 0);
 
@@ -1564,8 +1564,8 @@ function TabTraslados({ item, set }) {
     nr.subtotal_usd = (+nr.cantidad||0) * (+nr.usd_unit||0);
     return nr;
   }));
-  const add = () => set("traslados", [...rows, { id:uid(), nombre:"", proveedor:"", fecha_precio:"", cantidad:1, unidad:"u", usd_unit:0, detalle:"", subtotal_usd:0 }]);
-  const addDesdeCatalogo = (it) => set("traslados", [...rows, { id:uid(), nombre:it.nombre, proveedor:"", fecha_precio:"", cantidad:1, unidad:it.unidad||"u", usd_unit:it.usd||0, detalle:"", subtotal_usd:it.usd||0 }]);
+  const add = () => set("traslados", [...rows, { id:uid(), nombre:"", proveedor:"", fecha_precio:"", cantidad:1, unidad:"u", usd_unit:0, detalle:"", subtotal_usd:0, orden:rows.length }]);
+  const addDesdeCatalogo = (it) => set("traslados", [...rows, { id:uid(), nombre:it.nombre, proveedor:"", fecha_precio:"", cantidad:1, unidad:it.unidad||"u", usd_unit:it.usd||0, detalle:"", subtotal_usd:it.usd||0, orden:rows.length }]);
   const del = (id) => set("traslados", rows.filter(r => r.id !== id));
   const tot = rows.reduce((s,r) => s+(+r.subtotal_usd||0), 0);
 
@@ -1612,7 +1612,7 @@ function TabPanto({ item, set }) {
     nr.subtotal_usd = (+nr.kg||0) * (+nr.usd_kg||0);
     return nr;
   }));
-  const add = (tipo, nombre, kg, usd_kg) => set("corte_pantografo", [...rows, { id:uid(), nombre:nombre||"", tipo:tipo||"", usd_kg:usd_kg||0, kg:kg||0, subtotal_usd:(kg||0)*(usd_kg||0), detalle:"" }]);
+  const add = (tipo, nombre, kg, usd_kg) => set("corte_pantografo", [...rows, { id:uid(), nombre:nombre||"", tipo:tipo||"", usd_kg:usd_kg||0, kg:kg||0, subtotal_usd:(kg||0)*(usd_kg||0), detalle:"", orden:rows.length }]);
   const del = (id) => set("corte_pantografo", rows.filter(r => r.id !== id));
 
   const tot_kg  = rows.reduce((s,r)=>s+(+r.kg||0),0);
