@@ -274,6 +274,14 @@ directamente ausentes en una, un tercero con estado desactualizado).
 - **`tarifario_mo_fab`/`tarifario_mo_mon`/`tarifario_mat_generales`/`tarifario_terceros`/`tarifario_traslados`/`tarifario_pinturas`** (`steel-backend` `20260902100000`): les faltaban `unidad`/`proveedor`/`fecha_precio`/`obs` desde la migración original (`20260822120200`) — el editor real (`CatalogoEditable`) siempre mandó esos 4 campos. Cada guardado de cualquiera de estos 6 catálogos fallaba en silencio (`console.warn`, "Could not find the 'fecha_precio' column ... in the schema cache") y, en la siguiente recarga, Fase 5 (que prefiere la nube en tarifario) pisaba el catálogo local correcto con la versión vacía/vieja de la nube. Confirmado en vivo, sin fix de código necesario — solo la migración.
 - **Steel Measurement** (`4a8f635`): `item_mat_generales`/`item_mo_fabricacion`/`item_mo_montajes`/`item_terc_fabricacion`/`item_terc_montajes`/`item_traslados`/`item_corte_pantografo` tienen `orden int not null default 0`, pero los `add()`/`addDesdeCatalogo()` de esos 6 rubros en `Presupuesto.jsx` nunca seteaban `orden` en la fila nueva — al guardar un ítem con una fila vieja (con `orden`) y una nueva (sin `orden`) mezcladas, el insert múltiple de PostgREST manda `NULL` explícito para la que no lo tiene en vez de aplicar el default, violando la restricción. Confirmado en vivo ("null value in column \"orden\" ... violates not-null constraint"). Fix: `orden: rows.length` en cada alta.
 
+## 2026-09-02 (continuación) — Maquinado (Plegado/Cilindrado) + ficha consistente + historial de precios
+
+- **Steel Measurement** (`ededf06`) + **steel-backend** (`8e68fec`, migración `20260902110000`): nueva operación "Maquinado" — Plegado y Cilindrado, más las 8 máquinas de "Corte de máquina" (antes sueltas en la ficha de Cómputo, sin costo propio) — con catálogo de precios propio (`tarifario_maquinado`), toggles en Cómputo/Anidado, y nuevo rubro "Maquinado" en Presupuesto (`item_maquinado`) que se auto-completa al importar materiales de Anidado si la pieza tenía alguna marcada.
+- Fix real encontrado en el camino: `mergearFicha` (Anidado) solo copiaba el nombre de la máquina de Corte de máquina, nunca el flag `corte_maquina` en sí — nunca se veía en el resumen de Anidado aunque la pieza lo tuviera marcado.
+- Ficha consistente en los 4 valores "pineados" de tarifario (Arenado, Galvanizado, Corte 2D, Corte 3D): ganan proveedor/fecha del precio/observaciones, igual que cualquier fila de catálogo.
+- Historial de precios genérico: `material_historial_precios` se amplía a los 7 catálogos de tarifario + Maquinado + los 4 valores pineados, con `cambiado_por`. Botón "📜" por fila/valor.
+- Pinturas suma info técnica: `rendimiento`, `volumen_solidos`, `ficha_tecnica_link`.
+
 ---
 
 ## Mantenimiento de este documento

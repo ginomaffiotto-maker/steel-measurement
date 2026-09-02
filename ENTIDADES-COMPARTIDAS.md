@@ -103,14 +103,14 @@ flowchart TB
     subgraph SM["Steel Measurement"]
         PSM[presupuestos_sm]
         ITEM[items_presupuesto_sm]
-        RUBROS["9 tablas de rubro de costo<br/>(item_hierros, item_mat_generales,<br/>item_mo_fabricacion/montajes,<br/>item_terc_fabricacion/montajes,<br/>item_traslados, item_corte_pantografo,<br/>item_trat_superficie → pinturas/otros)"]
+        RUBROS["10 tablas de rubro de costo<br/>(item_hierros, item_mat_generales,<br/>item_mo_fabricacion/montajes,<br/>item_terc_fabricacion/montajes,<br/>item_traslados, item_corte_pantografo,<br/>item_maquinado,<br/>item_trat_superficie → pinturas/otros)"]
         COMPU[computos]
         COMPUI[computo_items → computo_piezas]
         ANID[anidados]
         ANIDG[anidado_grupos → anidado_piezas]
         HTRAB[historial_trabajos]
         BIB["biblioteca_perfiles/planchuelas/<br/>planchas/rejillas +<br/>material_historial_precios"]
-        TARIF["tarifario_mo_fab/mon,<br/>mat_generales, terceros,<br/>traslados, pinturas,<br/>interes_financiero, config"]
+        TARIF["tarifario_mo_fab/mon,<br/>mat_generales, terceros,<br/>traslados, pinturas, maquinado,<br/>interes_financiero, config"]
         COMPSM[comentarios_computo /<br/>comentarios_anidado /<br/>comentarios_presupuesto_sm]
     end
 
@@ -204,7 +204,7 @@ el resto del diagrama.
 |---|---|---|---|---|---|
 | `presupuestos_sm` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. `obra` (texto) convive con `obra_id` (real, resuelto contra la lista ya cargada — sin auto-creación silenciosa, a diferencia de `cliente_id`/`resolverClienteId`; la única forma de crear una obra nueva es `ObraRapidaModal`). `empresa` (texto, razón social — el campo local se llama `cliente`, no `empresa`) tenía columna real en la base pero **nunca se sincronizaba** (bug real, cerrado 2026-08-29 junto con `empresa_id`): quedaba explícitamente descartado antes del insert. |
 | `items_presupuesto_sm` | `id` | `presupuesto_id→presupuestos_sm`, `computo_id→computos` (opcional), `anidado_id→anidados` (opcional) | `loadDBItems`/`saveDBItem` | — | Un ítem puede traer material de un cómputo o de un anidado, no ambos a la vez en general. |
-| `item_hierros`, `item_mat_generales`, `item_mo_fabricacion`, `item_mo_montajes`, `item_terc_fabricacion`, `item_terc_montajes`, `item_traslados`, `item_corte_pantografo` | `id` c/u | `item_id→items_presupuesto_sm` | dentro de `saveDBItem` | — | Los 9 rubros de costo por ítem (8 tablas de línea + 1 de tratamiento). |
+| `item_hierros`, `item_mat_generales`, `item_mo_fabricacion`, `item_mo_montajes`, `item_terc_fabricacion`, `item_terc_montajes`, `item_traslados`, `item_corte_pantografo`, `item_maquinado` | `id` c/u | `item_id→items_presupuesto_sm` | dentro de `saveDBItem` | — | Los 10 rubros de costo por ítem (9 tablas de línea + 1 de tratamiento). `item_maquinado` (2026-09-02): Plegado/Cilindrado/Corte de máquina, se auto-completa al importar materiales de Anidado si la pieza tenía alguna marcada. |
 | `item_trat_superficie` | `id` (unique por item) | `item_id→items_presupuesto_sm` (1:1) | dentro de `saveDBItem` | — | `item_trat_pinturas`/`item_trat_otros` cuelgan de esta, no directo del ítem. |
 | `item_trat_pinturas`, `item_trat_otros` | `id` c/u | `trat_id→item_trat_superficie` | dentro de `saveDBItem` | — | |
 | `computos` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles` | `loadDBComputos`/`saveDBComputo` | ✅ | `categoria`/`tipo_trabajo` viajan de acá hacia Anidado y Presupuesto (traspaso automático, no piso lo ya cargado a mano). `obra`/`obra_id` y `empresa`/`empresa_id` son campos nuevos (2026-08-29) — antes Cómputo no distinguía "obra" de su propio `nombre`, y no tenía ninguna columna de empresa (el valor sólo viajaba embebido en el cliente vía `resolverClienteId`). |
@@ -216,7 +216,7 @@ el resto del diagrama.
 | `historial_trabajos` | `id` | `cliente_id→clientes`, `vendedor→profiles` | `loadDBHistorialTrabajos`/`saveDBTrabajoHistorico` | ✅ | Benchmark: % de cada rubro sobre el total (`pct_hier`, `pct_mat`, `pct_mo_fab`, etc.) — insumo de Predictor Eq. |
 | `biblioteca_perfiles`, `biblioteca_planchuelas`, `biblioteca_planchas`, `biblioteca_rejillas` | `id` **text**, no uuid | — | `loadDBBiblioteca`/`saveDBMaterial` | — | Únicas 4 tablas de todo el esquema con `id` no-uuid: usan el código de catálogo legible (`"HEB100"`) como identidad estable a propósito, para poder matchear contra el catálogo semilla en cualquier instalación. |
 | `material_historial_precios` | `id` | `material_id` (text, sin FK real — referencia lógica a una de las 4 tablas de arriba según `material_tipo`) | `loadDBHistorialPrecios` | — | |
-| `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`, `tarifario_interes_financiero` | `id` c/u | — | `loadDBTarifario`/`saveDBTarifario` | — | |
+| `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`, `tarifario_maquinado`, `tarifario_interes_financiero` | `id` c/u | — | `loadDBTarifario`/`saveDBTarifario` | — | `tarifario_maquinado` (2026-09-02): Plegado/Cilindrado + las 8 máquinas de "Corte de máquina", sembrado con esos 10 nombres la primera vez que se abre la pestaña. |
 | `tarifario_config` | `tenant_id` (PK directa) | `tenant_id→tenants` | `loadDBTarifario`/`saveDBTarifario` | — | Única fila por tenant (no lista): `arenado_usd_m2`, `galvanizado_usd_kg`, `panto_usd_kg_2d/3d`. |
 | `comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm` | `id` c/u | `computo_id→computos` / `anidado_id→anidados` / `presupuesto_id→presupuestos_sm` | `saveDBComentario` (genérica) | — | Guardado directo al comentar (diseño original de Steel Measurement, luego replicado a Steel CRM). |
 
