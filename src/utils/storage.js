@@ -1028,7 +1028,13 @@ export const saveDBTarifario = async (tarifario) => {
   for (const [campo, tabla] of TARIFARIO_TABLAS) {
     const { error: eDel } = await supabase.from(tabla).delete().not("id", "is", null);
     if (eDel) throw eDel;
-    const filas = (tarifario[campo] || []).map((f) => sinId(f));
+    // Conserva el id del cliente en vez de dejar que Postgres genere uno
+    // nuevo en cada guardado (2026-09-02, bug real encontrado en vivo): el
+    // historial de precios referencia material_id, y con sinId() cada
+    // guardado completo del catálogo (delete + insert de todo el array)
+    // le daba un id NUEVO a cada fila — el historial quedaba huérfano al
+    // toque, "Todavía no hay cambios" aunque el precio sí hubiera cambiado.
+    const filas = (tarifario[campo] || []).map((f) => saneado(conIdValido(f)));
     if (filas.length) {
       const { error: eIns } = await supabase.from(tabla).insert(filas);
       if (eIns) throw eIns;
