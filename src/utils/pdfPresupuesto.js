@@ -1,10 +1,12 @@
-// Plantilla compartida del PDF de presupuesto.
-// Esta misma función vive, copiada igual, en steelCRM y en Steel Measurement
-// — es lo que garantiza que los dos PDFs se vean exactamente iguales aunque
-// el presupuesto de origen tenga un solo precio (steelCRM) o un cálculo de
-// 9 rubros por detrás (Steel Measurement). El PDF nunca expone ese desglose
-// interno de costos al cliente — solo kg, USD/kg y el monto total.
-// Si se toca el HTML/CSS acá, replicar el cambio en la copia del otro repo.
+// Plantilla del PDF comercial de presupuesto — el documento que se le
+// manda al cliente. Hasta el 2026-09-03 vivía copiada igual en steelCRM y
+// en Steel Measurement; desde ese día, Steel Measurement dejó de usarla
+// (reemplazada ahí por utils/resumenInterno.js, de uso interno, con el
+// desglose real de costos — este documento comercial nunca lo expone,
+// solo kg, USD/kg y el monto total). Steel Measurement ya no le manda
+// nada al cliente directamente, esa función quedó centralizada en Steel
+// CRM (botón "☁️ Enviar a Steel CRM"). Este archivo pasa a ser exclusivo
+// de steelCRM — no hace falta replicar cambios en ningún otro repo.
 
 const _sepM = n => Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 const fmtN = v => (v ? _sepM(v) : "—");

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, loadBloquesPDF, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -13,7 +13,7 @@ import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
-import { abrirPDFPresupuesto } from "../utils/pdfPresupuesto";
+import { abrirResumenInterno } from "../utils/resumenInterno";
 import { useSortable } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 import { useUndoToast } from "./Toast";
@@ -424,27 +424,18 @@ export function calcPresupuesto(p) {
 // costos interna al cliente) — solo el resumen: kg totales, USD/kg promedio
 // y el monto final. Los rubros siguen calculándose y quedan asociados al
 // presupuesto (calcPresupuesto), simplemente no se imprimen fila por fila.
-function generarPDFPresupuesto(pres) {
+function generarResumenInterno(pres, usuarios) {
   const c = calcPresupuesto(pres);
 
-  abrirPDFPresupuesto({
+  abrirResumenInterno({
     empresa: loadLS("smeas_empresa", ""),
-    empresaDatos: JSON.parse(localStorage.getItem("smeas_empresa_datos") || "{}"),
     nro: pres.nro,
     fecha: pres.fecha,
-    cliente: { empresa: pres.cliente, contacto: pres.contacto },
-    proyecto: { descripcion: pres.detalle || pres.nombre, obra: pres.obra, tipo: pres.tipo_trabajo },
-    items: [{
-      label: pres.detalle || pres.nombre || "—",
-      sub: pres.obra,
-      kg: c.total_kg,
-      usdKg: c.usd_kg,
-      totalUSD: c.gran_total,
-    }],
-    totalUSD: c.gran_total,
-    condiciones: { moneda: pres.moneda || "USD", formaPago: pres.forma_pago },
-    notas: pres.notas,
-    bloques: loadBloquesPDF(),
+    cliente: pres.contacto || pres.cliente,
+    obra: pres.obra,
+    vendedor: (usuarios || []).find(u => String(u.id) === String(pres.vendedor))?.nombre,
+    calc: c,
+    comentarios: pres.comentarios,
   });
 }
 
@@ -2431,7 +2422,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           </div>
         </div>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-          <button style={BTN("ghost")} onClick={() => generarPDFPresupuesto(pres)} title="Generar PDF del presupuesto">🖨️ PDF</button>
+          <button style={BTN("ghost")} onClick={() => generarResumenInterno(pres, usuarios)} title="Resumen de uso interno con desglose de costos — no se envía al cliente">📊 Resumen interno</button>
           {vinculoCRM ? (
             <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
           ) : (
