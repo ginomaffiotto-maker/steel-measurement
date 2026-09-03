@@ -439,7 +439,16 @@ const camposDesdeRemoto = (r, cliente, items) => ({
 // Límite conocido y aceptado: si dos dispositivos editan lo mismo antes de
 // que cualquiera sincronice, gana el que se guardó más tarde en el reloj
 // del servidor — no hay resolución de conflictos real.
-export const useMergePresupuestosNube = (setPresupuestos) => {
+// `usuarios` (2026-09-03, fix real encontrado al probar el candado de
+// dueño): camposDesdeRemoto nunca mapeaba `vendedor` -- un presupuesto
+// traído de la nube (creado/editado desde otro dispositivo) quedaba sin
+// dueño local, así que la restricción "solo el dueño edita" (RLS +
+// esDeOtro en Presupuesto.jsx) nunca se activaba para él. `r.vendedor` es
+// el profileId real (uuid); acá se traduce al id local de `usuarios` --
+// mismo sentido inverso que ya usa el guardado (vendedor local -> profileId).
+const vendedorLocalDesdeRemoto = (r, usuarios) => usuarios.find((u) => u.profileId === r.vendedor)?.id ?? null;
+
+export const useMergePresupuestosNube = (setPresupuestos, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -463,7 +472,7 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
           if (!vivo) return;
           try {
             const [cliente, items] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBItems(r.id)]);
-            if (vivo) setPresupuestos((prev) => prev.map((p) => p.id === r.id ? { ...p, ...camposDesdeRemoto(r, cliente, items) } : p));
+            if (vivo) setPresupuestos((prev) => prev.map((p) => p.id === r.id ? { ...p, ...camposDesdeRemoto(r, cliente, items), vendedor: vendedorLocalDesdeRemoto(r, usuarios) } : p));
           } catch (e) {
             console.warn(`[Fase 5] No se pudo actualizar el presupuesto ${r.nro || r.id} desde la nube:`, e.message || e);
           }
@@ -472,7 +481,7 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
           if (!vivo) return;
           try {
             const [cliente, items] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBItems(r.id)]);
-            const nuevo = { id: r.id, created_at: r.created_at, ...camposDesdeRemoto(r, cliente, items) };
+            const nuevo = { id: r.id, created_at: r.created_at, ...camposDesdeRemoto(r, cliente, items), vendedor: vendedorLocalDesdeRemoto(r, usuarios) };
             if (vivo) setPresupuestos((prev) => (prev.some((p) => p.id === nuevo.id) ? prev : [...prev, nuevo]));
           } catch (e) {
             console.warn(`[Fase 5] No se pudo traer el presupuesto ${r.nro || r.id} de la nube:`, e.message || e);
@@ -679,7 +688,7 @@ export const loadDBComputoCompleto = async (computoId) => {
 // los campos de ficha (granallado/pintura/etc.) planos en vez de anidados
 // bajo `.ficha` como espera la UI — indiferente en la práctica porque este
 // camino solo corre para cómputos que nunca pasaron por este navegador.
-export const useMergeComputosNube = (setComputos) => {
+export const useMergeComputosNube = (setComputos, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -698,7 +707,13 @@ export const useMergeComputosNube = (setComputos) => {
           try {
             const [cliente, completo] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBComputoCompleto(r.id)]);
             const { cliente_id, ...resto } = completo;
-            const nuevo = { ...resto, cliente };
+            // `vendedor` de la fila remota es el profileId real (uuid) --
+            // se traduce al id local, mismo motivo que en presupuestos
+            // (ver vendedorLocalDesdeRemoto) — sin esto, un cómputo traído
+            // de la nube quedaba con un vendedor "de otro" siempre, sin
+            // importar quién fuera de verdad, y el candado de dueño nunca
+            // lo reconocía como propio.
+            const nuevo = { ...resto, cliente, vendedor: vendedorLocalDesdeRemoto(r, usuarios) };
             if (vivo) setComputos((prev) => (prev.some((c) => c.id === nuevo.id) ? prev : [...prev, nuevo]));
           } catch (e) {
             console.warn(`[Fase 5] No se pudo traer el cómputo ${r.nro || r.id} de la nube:`, e.message || e);
@@ -809,7 +824,7 @@ export const saveDBAnidado = async (anidado) => {
 
 // Fase 5 (piloto, 2026-08-23): fusiona por id, mismo criterio que
 // presupuestos/cómputos — solo trae de la nube lo que no exista local.
-export const useMergeAnidadosNube = (setAnidados) => {
+export const useMergeAnidadosNube = (setAnidados, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -828,7 +843,8 @@ export const useMergeAnidadosNube = (setAnidados) => {
           try {
             const [cliente, completo] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBAnidadoCompleto(r.id)]);
             const { cliente_id, ...resto } = completo;
-            const nuevo = { ...resto, cliente };
+            // Mismo motivo que en Cómputo/Presupuesto — ver vendedorLocalDesdeRemoto.
+            const nuevo = { ...resto, cliente, vendedor: vendedorLocalDesdeRemoto(r, usuarios) };
             if (vivo) setAnidados((prev) => (prev.some((a) => a.id === nuevo.id) ? prev : [...prev, nuevo]));
           } catch (e) {
             console.warn(`[Fase 5] No se pudo traer el anidado ${r.nombre || r.id} de la nube:`, e.message || e);

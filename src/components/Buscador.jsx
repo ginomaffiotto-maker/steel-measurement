@@ -67,11 +67,11 @@ export default function Buscador({ onIrA, usuarios = [] }) {
   const [tipoFiltro, setTipoFiltro] = useState("");
 
   const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
-  useMergeComputosNube(setComputos);
+  useMergeComputosNube(setComputos, usuarios);
   const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
-  useMergeAnidadosNube(setAnidados);
+  useMergeAnidadosNube(setAnidados, usuarios);
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
-  useMergePresupuestosNube(setPresupuestos);
+  useMergePresupuestosNube(setPresupuestos, usuarios);
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
   useMergeHistorialNube(setHistorial);
 
