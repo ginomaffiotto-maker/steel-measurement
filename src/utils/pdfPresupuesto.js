@@ -23,9 +23,9 @@ function filaDetalle(label, val) {
 export const BLOQUES_DEFAULT = [
   { tipo: "header", activo: true },
   { tipo: "cliente_proyecto", activo: true },
+  { tipo: "notas", activo: true },
   { tipo: "detalle", activo: true },
   { tipo: "condiciones", activo: true },
-  { tipo: "notas", activo: true },
   { tipo: "footer", activo: true },
 ];
 export const BLOQUES_LABELS = {
@@ -117,41 +117,38 @@ const RENDER_BLOQUE = {
   </table>`;
   },
 
+  // "Estado de obra" e "Información del proyecto" sacados del PDF a pedido
+  // de Gino (2026-09-03) — son datos internos, no para el cliente.
+  // "ID de cálculo" no se borra, se muda al pie de página (ver footer).
   condiciones: (data) => {
     const cond = data.condiciones || {};
-    const info = data.infoProyecto || {};
-    const hayAlgo = cond.acabadoSuperficial || (cond.plazoPago !== undefined && cond.plazoPago !== "") || cond.formaPago || cond.moneda || info.estadoObra || info.idCalculo;
+    const hayAlgo = cond.acabadoSuperficial || (cond.plazoPago !== undefined && cond.plazoPago !== "") || cond.formaPago || cond.moneda || cond.descuentoPct;
     if (!hayAlgo) return "";
     return `
-  <div class="detail-grid">
-    <div class="detail-box">
-      <div class="section-title">Condiciones comerciales</div>
-      <table class="info-table">
-        ${filaDetalle("Moneda", cond.moneda)}
-        ${filaDetalle("Forma de pago", cond.plazoPago === 0 ? "Contado" : cond.plazoPago ? cond.plazoPago + " días" : (cond.formaPago || null))}
-        ${filaDetalle("Acabado superficial", cond.acabadoSuperficial)}
-        ${cond.descuentoPct ? filaDetalle("Descuento aplicado", cond.descuentoPct + "%") : ""}
-      </table>
-    </div>
-    <div class="detail-box">
-      <div class="section-title">Información del proyecto</div>
-      <table class="info-table">
-        ${filaDetalle("Estado de obra", info.estadoObra)}
-        ${filaDetalle("ID de cálculo", info.idCalculo)}
-      </table>
-    </div>
+  <div class="detail-box" style="max-width:320px">
+    <div class="section-title">Condiciones comerciales</div>
+    <table class="info-table">
+      ${filaDetalle("Moneda", cond.moneda)}
+      ${filaDetalle("Forma de pago", cond.plazoPago === 0 ? "Contado" : cond.plazoPago ? cond.plazoPago + " días" : (cond.formaPago || null))}
+      ${filaDetalle("Acabado superficial", cond.acabadoSuperficial)}
+      ${cond.descuentoPct ? filaDetalle("Descuento aplicado", cond.descuentoPct + "%") : ""}
+    </table>
   </div>`;
   },
 
+  // Sin el rótulo "📝 Notas / Cláusulas:" (a pedido de Gino) — el texto
+  // solo, más grande (14px, antes 11.5px) para que se lea como la
+  // propuesta comercial que es, no como una nota al margen.
   notas: (data) => data.notas
-    ? `<div class="notas"><strong style="color:#92400e">📝 Notas / Cláusulas:</strong> ${data.notas.replace(/\n/g, "<br>")}</div>`
+    ? `<div class="notas">${data.notas.replace(/\n/g, "<br>")}</div>`
     : "",
 
   footer: (data) => {
     const hoy = new Date().toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const idCalc = data.infoProyecto?.idCalculo;
     return `
   <div class="footer">
-    <span>${data.empresa || ""} — Generado el ${hoy}</span>
+    <span>${data.empresa || ""} — Generado el ${hoy}${idCalc ? " · Ref. cálculo " + idCalc : ""}</span>
     <span>Generado con Steel Platform</span>
   </div>`;
   },
@@ -202,8 +199,8 @@ export function buildPresupuestoHTML(data) {
     .total-row td{background:#eef2ff;font-weight:900;font-size:13px;border-top:2px solid #1a2a4a;border-bottom:none}
     .total-row td:last-child{color:#1a2a4a;font-size:15px}
     .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
-    .detail-box{background:#f8f9fc;border-radius:6px;padding:14px}
-    .notas{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:14px;margin-bottom:20px;font-size:11.5px;line-height:1.6;color:#555}
+    .detail-box{background:#f8f9fc;border-radius:6px;padding:14px;margin-bottom:20px}
+    .notas{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:16px;margin-bottom:20px;font-size:14px;line-height:1.7;color:#444}
     .footer{margin-top:32px;padding-top:12px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:10px;color:#aaa}
     @media print{body{padding:16px}@page{margin:1.2cm}}
   </style></head><body>
