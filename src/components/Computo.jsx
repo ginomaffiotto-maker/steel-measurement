@@ -799,7 +799,12 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
                             border:`1px solid ${tieneFicha?C.accent:C.border}44`,
                             borderRadius:6, padding:"3px 7px", cursor:"pointer",
                             color: tieneFicha ? C.accent : C.muted, fontSize:12, fontWeight:700 }}>
-                          {tieneFicha ? iconos.join("") : "⚙"}
+                          {/* 2026-09-02, a pedido de Gino: el "sin ficha"
+                              usaba el mismo ⚙ que "Corte de máquina" cuando
+                              SÍ hay ficha — a simple vista, una pieza recién
+                              marcada con Corte de máquina (única marca) se
+                              confundía con una sin ficha todavía. */}
+                          {tieneFicha ? iconos.join("") : "➕"}
                         </button>
                       </td>
                       <td style={{ ...TD,textAlign:"center" }}>
