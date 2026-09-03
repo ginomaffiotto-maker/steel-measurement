@@ -1299,6 +1299,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                     style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
                     ⧉ Clonar
                   </button>
+                  {/* 2026-09-02, a pedido de Gino: "Eliminar" vivía solo
+                      adentro del detalle — lo movió acá para borrar sin
+                      tener que entrar al anidado primero. */}
+                  <button onClick={()=>setConfirmarDelId(a.id)} title="Eliminar este anidado"
+                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, color:C.err, borderColor:C.err+"66" }}>
+                    🗑 Eliminar
+                  </button>
                 </div>
               </div>
             );
@@ -1335,7 +1342,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 </select>
               </div>
               <div style={{ marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
-                <button onClick={()=>setConfirmarDelId(actual.id)} style={{ ...BTN("danger"),fontSize:12 }}>Eliminar</button>
+                {/* "Eliminar" se movió a la lista de anidados (2026-09-02,
+                    a pedido de Gino) — ya no vive acá adentro. */}
                 {actual.grupos.length>0&&(
                   <button onClick={calcularTodo} style={{ ...BTN("primary"),fontSize:12 }}>
                     ⚡ Calcular todo ({actual.grupos.length})
