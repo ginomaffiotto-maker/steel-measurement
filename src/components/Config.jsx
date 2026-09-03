@@ -50,8 +50,6 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
   const [editId, setEditId] = useState(null);
   const [rolEdit, setRolEdit] = useState("vendedor");
   const [nombreEdit, setNombreEdit] = useState("");
-  const [comandoEliminar, setComandoEliminar] = useState("");
-  const [comandoEliminarCopiado, setComandoEliminarCopiado] = useState(false);
   const objDel = usuarios.find(u => u.id === confirmarDelId);
   const admins = usuarios.filter(u => u.rol === "admin");
 
@@ -65,17 +63,38 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
     }
     setEditId(null);
   };
-  // Borrar acá solo saca a la persona de la lista local — no alcanza para
-  // impedirle loguearse de nuevo, porque revocar la cuenta real de Supabase
-  // Auth necesita la service_role key (nunca puede tocar el navegador). Si
-  // tenía cuenta real (profileId), arma el comando para eliminar-usuario.mjs.
-  const del = (id) => {
+  // Revoca la cuenta real vía api/eliminar-usuario.js (2026-09-03, mismo
+  // patrón que la invitación) antes de sacarla de la lista local — si la
+  // revocación falla, devuelve el error (el modal lo muestra y se queda
+  // abierto) en vez de mostrar como "borrado" algo que no se borró de
+  // verdad. Reemplaza el flujo viejo de "generar comando para la
+  // terminal" (scripts/eliminar-usuario.mjs). Si nunca tuvo cuenta real
+  // (sin profileId), alcanza con sacarla de la lista, no hay nada que
+  // revocar en Supabase Auth.
+  const del = async (id) => {
     const u = usuarios.find(x => x.id === id);
-    setUsuarios(prev => prev.filter(x => x.id !== id));
-    setConfirmarDelId(null);
-    if (u?.profileId && u?.email) setComandoEliminar(`$env:EMAIL_ELIMINAR = "${u.email}"\nnode scripts/eliminar-usuario.mjs`);
+    if (!u?.profileId) {
+      setUsuarios(prev => prev.filter(x => x.id !== id));
+      setConfirmarDelId(null);
+      return;
+    }
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) return "Tu sesión no tiene token real — volvé a iniciar sesión.";
+      const r = await fetch("https://steel-measurement.vercel.app/api/eliminar-usuario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ userId: u.profileId }),
+      });
+      const d = await r.json();
+      if (!r.ok) return d.error || "No se pudo eliminar.";
+      setUsuarios(prev => prev.filter(x => x.id !== id));
+      setConfirmarDelId(null);
+    } catch (e) {
+      return "No se pudo eliminar: " + e.message;
+    }
   };
-  const copiarComandoEliminar = () => { navigator.clipboard.writeText(comandoEliminar).then(() => { setComandoEliminarCopiado(true); setTimeout(() => setComandoEliminarCopiado(false), 2000); }); };
 
   return (
     <div>
@@ -100,18 +119,6 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
         );
       })}
 
-      {comandoEliminar && (
-        <div style={{ background:C.err+"0e", borderRadius:8, padding:"10px 12px", border:`1px solid ${C.err}44`, marginTop:8 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:C.err, marginBottom:6 }}>⚠ Falta revocar el acceso real</div>
-          <pre style={{ margin:0, fontFamily:"monospace", fontSize:11, color:C.muted, whiteSpace:"pre-wrap" }}>{comandoEliminar}</pre>
-          <div style={{ display:"flex", gap:12, marginTop:8, alignItems:"center" }}>
-            <button onClick={copiarComandoEliminar} style={{ fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>{comandoEliminarCopiado ? "✅ Copiado" : "📋 Copiar"}</button>
-            <button onClick={() => setComandoEliminar("")} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", padding:0 }}>Ya lo corrí, cerrar</button>
-          </div>
-          <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Pegalo en tu terminal, en steel-backend — sin esto, la persona sigue pudiendo loguearse.</div>
-        </div>
-      )}
-
       {editId && (
         <div style={{ marginTop:12, padding:12, background:C.bg, borderRadius:8, border:`1px solid ${C.border}44` }}>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -132,7 +139,7 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
       {confirmarDelId && objDel && (
         <ModalConfirmarEliminar titulo={`a ${objDel.nombre || "este usuario"}`}
           subtitulo={objDel.profileId
-            ? "Se borra de esta lista — su cuenta real va a seguir pudiendo loguearse hasta que corras el comando de revocación que va a aparecer después."
+            ? "Se revoca su cuenta real — no va a poder loguearse nunca más, ni acá ni en Steel CRM (mismo backend)."
             : "Se borra de esta lista local."}
           onConfirm={() => del(confirmarDelId)} onClose={() => setConfirmarDelId(null)} />
       )}

@@ -32,6 +32,12 @@ export function puedeEliminar(usuario) {
 // comporta como antes: pide email + contraseña de CUALQUIER Administrador
 // y valida el rol server-side (mismo criterio que steelCRM,
 // ConfirmModalPassword modo="propia"/"admin").
+// `onConfirm` puede ser sync (nada) o async devolviendo un string de error
+// — si devuelve un string, el modal se queda abierto mostrándolo (ej.
+// eliminar-usuario.js respondiendo un error real) en vez de cerrarse como
+// si hubiera funcionado. Si no devuelve nada, el caller ya sabe que salió
+// bien (típicamente sacando el `id` del estado que controla si el modal
+// sigue montado).
 export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, onConfirm, onClose, usuarioPropio }) {
   const [email, setEmail] = useState(usuarioPropio?.email || "");
   const [pass, setPass] = useState("");
@@ -48,8 +54,9 @@ export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, o
       const { data: profile, error: pErr } = await supabase.from("profiles").select("rol").eq("id", r.userId).single();
       if (pErr || profile?.rol !== "admin") { setCargando(false); setErr("Esa cuenta no es Administrador."); setPass(""); return; }
     }
+    const errorMsg = await onConfirm();
     setCargando(false);
-    onConfirm();
+    if (errorMsg) { setErr(errorMsg); setPass(""); }
   };
 
   return (
