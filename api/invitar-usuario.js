@@ -90,7 +90,12 @@ module.exports = async (req, res) => {
     redirectTo: `https://${req.headers.host}`,
   });
   if (eCreate) {
-    res.status(400).json({ error: 'No se pudo enviar la invitación: ' + eCreate.message });
+    const yaRegistrado = /already.*registered|already exists/i.test(eCreate.message || '');
+    res.status(400).json({
+      error: yaRegistrado
+        ? 'Ese email ya tiene una cuenta creada en el sistema.'
+        : 'No se pudo enviar la invitación: ' + eCreate.message,
+    });
     return;
   }
 
