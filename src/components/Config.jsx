@@ -140,25 +140,44 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
   );
 }
 
+// Invitar usuario nuevo (2026-09-03) — manda el mail real desde acá, vía
+// api/invitar-usuario.js (función serverless de Vercel de ESTE proyecto,
+// la única que tiene la service_role key). Siempre le pega a la URL de
+// producción de Steel Measurement, corra la sesión local o no — esa key
+// nunca vive en la máquina de nadie. Mismo patrón ya en producción en
+// Steel CRM (api/invitar-usuario.js de ese repo) — reemplaza el flujo
+// viejo de "generar comando y pegarlo en la terminal" (crear-usuario.mjs).
 function InvitarUsuario() {
   const [form, setForm] = useState({ nombre:"", email:"", rol:"vendedor" });
-  const [comando, setComando] = useState("");
-  const [copiado, setCopiado] = useState(false);
-  const generar = () => {
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const invitar = async () => {
     if (!form.nombre.trim() || !form.email.trim()) { alert("Ingresá nombre y email"); return; }
-    const cmd = [
-      `$env:NUEVO_EMAIL = "${form.email.trim()}"`,
-      `$env:NUEVO_NOMBRE = "${form.nombre.trim()}"`,
-      `$env:NUEVO_ROL = "${form.rol}"`,
-      `node scripts/crear-usuario.mjs`,
-    ].join("\n");
-    setComando(cmd); setCopiado(false);
+    if (!supabase) { setErr("Backend no configurado"); return; }
+    setCargando(true); setErr(""); setMsg("");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) { setErr("Tu sesión no tiene token real — volvé a iniciar sesión."); setCargando(false); return; }
+      const r = await fetch("https://steel-measurement.vercel.app/api/invitar-usuario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+        body: JSON.stringify({ nombre: form.nombre.trim(), email: form.email.trim(), rol: form.rol }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setErr(d.error || "No se pudo invitar."); setCargando(false); return; }
+      setMsg(`✅ Invitación enviada a ${form.email.trim()} — le va a llegar un correo para elegir su propia contraseña. Sirve para entrar acá y a Steel CRM (mismo backend), si el tenant también lo usa.`);
+      setForm({ nombre:"", email:"", rol:"vendedor" });
+    } catch (e) {
+      setErr("No se pudo invitar: " + e.message);
+    }
+    setCargando(false);
   };
-  const copiar = () => { navigator.clipboard.writeText(comando).then(() => { setCopiado(true); setTimeout(()=>setCopiado(false), 2000); }); };
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginTop:16 }}>
       <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>✉️ Invitar usuario nuevo</div>
-      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>La persona recibe un mail para elegir su propia contraseña — sirve para entrar acá y a steelCRM (mismo backend), si el tenant también lo usa.</div>
+      <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>La persona recibe un mail para elegir su propia contraseña — vos no la inventás.</div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12 }}>
         <div><label style={LBL}>Nombre</label><input style={INP} value={form.nombre} onChange={e=>setForm(f=>({...f, nombre:e.target.value}))} placeholder="Nombre completo" /></div>
         <div><label style={LBL}>Email</label><input type="email" style={INP} value={form.email} onChange={e=>setForm(f=>({...f, email:e.target.value}))} placeholder="persona@ejemplo.com" /></div>
@@ -170,14 +189,9 @@ function InvitarUsuario() {
           </select>
         </div>
       </div>
-      <button onClick={generar} style={{ ...BTN("ghost"), marginTop:10, fontSize:12, padding:"6px 14px" }}>Generar comando de invitación</button>
-      {comando && (
-        <div style={{ marginTop:12, background:C.bg, borderRadius:8, padding:"10px 12px", border:`1px solid ${C.border}44` }}>
-          <pre style={{ margin:0, fontFamily:"monospace", fontSize:11, color:C.muted, whiteSpace:"pre-wrap" }}>{comando}</pre>
-          <button onClick={copiar} style={{ marginTop:8, fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>{copiado ? "✅ Copiado" : "📋 Copiar"}</button>
-          <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Pegalo en tu terminal, en la carpeta steel-backend (con SUPABASE_SERVICE_ROLE_KEY ya configurada ahí).</div>
-        </div>
-      )}
+      <button onClick={invitar} disabled={cargando} style={{ ...BTN("ghost"), marginTop:10, fontSize:12, padding:"6px 14px", opacity: cargando?0.6:1 }}>{cargando ? "Enviando..." : "✉️ Enviar invitación"}</button>
+      {msg && <div style={{ marginTop:10, fontSize:12, color:C.ok || C.accent }}>{msg}</div>}
+      {err && <div style={{ marginTop:10, fontSize:12, color:C.err || "#e33" }}>❌ {err}</div>}
     </div>
   );
 }
