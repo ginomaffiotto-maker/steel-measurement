@@ -67,15 +67,19 @@ export default function FiltrosBar({ campos, valores, setValores, abierto, setAb
         <span>{abierto ? "▾" : "▸"}</span> 🔍 Filtros
       </div>
       {abierto && (
+        // 2026-09-02, a pedido de Gino: los campos quedaban apretados a la
+        // izquierda con espacio libre sin usar a la derecha — cada campo
+        // ahora crece para ocupar el ancho real de la tarjeta (respetando
+        // su minWidth), y "✕ Todo" se empuja al margen derecho.
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           {campos.map(campo => (
-            <div key={campo.key} style={{ minWidth: campo.minWidth || 150, flex: campo.flex }}>
+            <div key={campo.key} style={{ minWidth: campo.minWidth || 150, flex: campo.flex ?? 1 }}>
               <label style={LBL}>{campo.label}</label>
               {renderCampo(campo)}
             </div>
           ))}
           {extra}
-          <button style={{ ...BTN("ghost"), padding: "9px 14px" }} onClick={limpiar}>✕ Todo</button>
+          <button style={{ ...BTN("ghost"), padding: "9px 14px", marginLeft: "auto" }} onClick={limpiar}>✕ Todo</button>
         </div>
       )}
     </div>
