@@ -974,6 +974,10 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
 
   const save = list => { setAnidados(list); saveLS("smeas_anidados",list); };
   const actual = anidados.find(a=>a.id===selId)||null;
+  // Anidado de otro vendedor (2026-09-03, a pedido de Gino): se puede ver
+  // y clonar, pero no editar — la restricción real está en RLS (Supabase,
+  // anidados), esto es la señal visual. admin/supervisor no la tienen.
+  const esDeOtro = !!(actual && usuario?.rol === "vendedor" && actual.vendedor && String(actual.vendedor) !== String(usuario.id));
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local. Mismo criterio que Presupuesto/Cómputo.
@@ -1302,10 +1306,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   {/* 2026-09-02, a pedido de Gino: "Eliminar" vivía solo
                       adentro del detalle — lo movió acá para borrar sin
                       tener que entrar al anidado primero. */}
-                  <button onClick={()=>setConfirmarDelId(a.id)} title="Eliminar este anidado"
-                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, color:C.err, borderColor:C.err+"66" }}>
-                    🗑 Eliminar
-                  </button>
+                  {(usuario?.rol !== "vendedor" || !a.vendedor || String(a.vendedor) === String(usuario.id)) && (
+                    <button onClick={()=>setConfirmarDelId(a.id)} title="Eliminar este anidado"
+                      style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, color:C.err, borderColor:C.err+"66" }}>
+                      🗑 Eliminar
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1317,7 +1323,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       {actual && (
         <div>
           <button style={BTN("ghost")} onClick={()=>setSelId(null)}>← Anidados</button>
+          {esDeOtro && (
+            <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", margin:"12px 0", fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8 }}>
+              🔒 Este anidado es de {usuarios.find(u=>String(u.id)===String(actual.vendedor))?.nombre||"otro vendedor"} — solo lo podés ver. Usá "Clonar" si querés armar el tuyo a partir de este.
+            </div>
+          )}
           <div>
+            <fieldset disabled={esDeOtro} style={{ border:"none", margin:0, padding:0 }}>
             <div style={{ display:"flex",alignItems:"center",gap:12,marginTop:16,marginBottom:16,flexWrap:"wrap" }}>
               <div>
                 <div style={{ fontSize:18,fontWeight:800,color:C.text }}>{actual.nombre}</div>
@@ -1399,11 +1411,16 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 <button onClick={addGrupoPlancha} style={{ ...BTN("ghost"),fontSize:12,borderColor:C.teal+"66",color:C.teal }}>+ Plancha</button>
               </div>
             </div>
+            </fieldset>
 
+            {/* Comentarios: los ve y los agrega cualquiera, sin importar de
+                quién es el anidado (a pedido de Gino, 2026-09-03) — a
+                propósito fuera del fieldset. */}
             <ComentariosPanel comentarios={actual.comentarios} usuario={usuario}
               onAgregar={(c) => agregarComentarioAnidado(actual, c)}
               onEliminar={(c) => eliminarComentarioAnidado(actual, c)} />
 
+            <fieldset disabled={esDeOtro} style={{ border:"none", margin:0, padding:0 }}>
             {verMateriales && <VistaMaterialesAnidado anidado={actual} onClose={()=>setVerMateriales(false)} tcGlobal={tcGlobal} />}
 
             {actual.grupos.length===0&&(
@@ -1426,6 +1443,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 onClose={()=>setConfirmarGrupoId(null)}
               />
             )}
+            </fieldset>
           </div>
         </div>
       )}

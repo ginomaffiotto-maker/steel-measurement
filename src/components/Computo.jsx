@@ -1339,10 +1339,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>
                     ✂️ Anidar
                   </button>
-                  <button onClick={()=>setConfirmarDelId(c.id)}
-                    style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
-                    Eliminar
-                  </button>
+                  {(usuario?.rol !== "vendedor" || !c.vendedor || String(c.vendedor) === String(usuario.id)) && (
+                    <button onClick={()=>setConfirmarDelId(c.id)}
+                      style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
+                      Eliminar
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1358,6 +1360,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const tc = computo.tc ?? tcGlobal;
 
   const itemAEliminar = confirmarItemDelId ? computo.items.find(it=>it.id===confirmarItemDelId) : null;
+  // Cómputo de otro vendedor (2026-09-03, a pedido de Gino): se puede ver
+  // y clonar, pero no editar — la restricción real está en RLS (Supabase,
+  // computos), esto es la señal visual. admin/supervisor no la tienen.
+  const esDeOtro = usuario?.rol === "vendedor" && computo.vendedor && String(computo.vendedor) !== String(usuario.id);
 
   return (
     <div>
@@ -1383,6 +1389,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         </span>
       </div>
 
+      {esDeOtro && (
+        <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", marginBottom:16, fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8 }}>
+          🔒 Este cómputo es de {usuarios.find(u=>String(u.id)===String(computo.vendedor))?.nombre||"otro vendedor"} — solo lo podés ver. Usá "Clonar" si querés armar el tuyo a partir de este.
+        </div>
+      )}
+      <fieldset disabled={esDeOtro} style={{ border:"none", margin:0, padding:0 }}>
       {/* Encabezado obra */}
       <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12,
         padding:"16px 20px", marginBottom:20, display:"flex", alignItems:"center",
@@ -1457,11 +1469,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           </button>
         </div>
       </div>
+      </fieldset>
 
+      {/* Comentarios: los ve y los agrega cualquiera, sin importar de quién
+          es el cómputo (a pedido de Gino, 2026-09-03) — a propósito fuera
+          del fieldset de arriba. */}
       <ComentariosPanel comentarios={computo.comentarios} usuario={usuario}
         onAgregar={(c) => agregarComentarioComputo(computo, c)}
         onEliminar={(c) => eliminarComentarioComputo(computo, c)} />
 
+      <fieldset disabled={esDeOtro} style={{ border:"none", margin:0, padding:0 }}>
       {/* Ítems accordion */}
       <div style={{ marginBottom:12 }}>
         {computo.items.map(item => (
@@ -1484,6 +1501,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         style={{ ...BTN("ghost"), padding:"7px 18px", fontSize:12, borderColor:C.accent+"66", color:C.accent }}>
         + Ítem
       </button>
+      </fieldset>
     </div>
   );
 }

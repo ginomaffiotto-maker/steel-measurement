@@ -2307,7 +2307,12 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // se destraba después, si hay que cambiar algo se usa "Clonar" (ya
   // existe). Comentarios y el estado mismo son la única excepción (no
   // pasan por `set`, así que no hace falta filtrarlos acá).
-  const bloqueado = !!(pres.estado && pres.estado !== "borrador");
+  // Presupuesto de otro vendedor (2026-09-03, a pedido de Gino): se puede
+  // ver y clonar, pero no editar — la restricción real está en RLS
+  // (Supabase, presupuestos_sm), esto es la señal visual. admin/supervisor
+  // no tienen esta restricción.
+  const esDeOtro = usuario?.rol === "vendedor" && pres.vendedor && String(pres.vendedor) !== String(usuario.id);
+  const bloqueado = !!(pres.estado && pres.estado !== "borrador") || esDeOtro;
   const updItem = (it) => { if (bloqueado) return; set("items", pres.items.map(x => x.id === it.id ? it : x)); };
   const delItem = (id) => { if (bloqueado) return; set("items", pres.items.filter(x => x.id !== id)); };
   const addItem = ()   => { if (bloqueado) return; set("items", [...(pres.items||[]), iItem()]); };
@@ -2531,7 +2536,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
 
           {bloqueado && (
             <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", marginBottom:16, fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8 }}>
-              🔒 Presupuesto {ESTADO_CFG[pres.estado]?.label?.toLowerCase() || pres.estado} — el contenido queda congelado. Para cambiar algo, usá "Clonar" y editá la copia.
+              {esDeOtro
+                ? <>🔒 Este presupuesto es de {usuarios.find(u => String(u.id) === String(pres.vendedor))?.nombre || "otro vendedor"} — solo lo podés ver. Usá "Clonar" si querés armar el tuyo a partir de este.</>
+                : <>🔒 Presupuesto {ESTADO_CFG[pres.estado]?.label?.toLowerCase() || pres.estado} — el contenido queda congelado. Para cambiar algo, usá "Clonar" y editá la copia.</>}
             </div>
           )}
 
@@ -3163,8 +3170,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     <td style={TD} onClick={e=>e.stopPropagation()}>
                       <button onClick={() => clonarPres(p)} title="Clonar presupuesto"
                         style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:14, marginRight:8 }}>📋</button>
-                      <button onClick={() => setConfirmarDelId(p.id)}
-                        style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
+                      {(usuario?.rol !== "vendedor" || !p.vendedor || String(p.vendedor) === String(usuario.id)) && (
+                        <button onClick={() => setConfirmarDelId(p.id)}
+                          style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
+                      )}
                     </td>
                   </tr>
                 );
