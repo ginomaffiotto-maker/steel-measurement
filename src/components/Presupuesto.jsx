@@ -2906,7 +2906,15 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       const empresa_id = p.cliente ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === p.cliente.trim().toLowerCase())?.id || null) : null;
       const vendedor = usuarios.find(u => String(u.id) === String(p.vendedor))?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = p;
+      // costo_real_usd (2026-09-03, pedido de Gino): el subtotal de rubros
+      // ANTES de negociación/interés — es el costo real de producción, sin
+      // ningún markup propio de Measurement. Steel CRM lo lee tal cual desde
+      // acá (buscador "Vincular a Measurement" en BudgetModal) para saber
+      // hasta dónde el vendedor puede bajar sin perder plata, sin duplicar
+      // esta lógica de costeo del lado del CRM.
+      const costo_real_usd = calcPresupuesto(p).total_usd || null;
       await saveDBPresupuestoSM({ ...resto, cliente_id, obra_id, empresa: cliente, empresa_id, clonado_de_id: clonado_de || null, vendedor,
+        costo_real_usd,
         eliminado_por: p.eliminadoPor ?? null, eliminado_fecha: p.eliminadoFecha ?? null });
       for (const item of items || []) {
         await saveDBItem(p.id, item);

@@ -44,7 +44,7 @@ export const esUUID = (id) => !!id && UUID_RE.test(String(id));
 const COLUMNAS_PRESUPUESTO_SM = [
   "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "empresa", "empresa_id", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
-  "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor",
+  "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor", "costo_real_usd",
   "eliminado", "eliminado_por", "eliminado_fecha",
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
