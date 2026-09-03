@@ -2873,7 +2873,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     .filter(p => !filt.desde || (p.fecha||"") >= filt.desde)
     .filter(p => !filt.hasta || (p.fecha||"") <= filt.hasta)
     .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length,
-      _vendedor_nombre: usuarios.find(u => u.id === p.vendedor)?.nombre || "" })),
+      _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
 
@@ -2913,7 +2913,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
       const obra_id = p.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === p.obra.trim().toLowerCase())?.id || null) : null;
       const empresa_id = p.cliente ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === p.cliente.trim().toLowerCase())?.id || null) : null;
-      const vendedor = usuarios.find(u => u.id === p.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(p.vendedor))?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = p;
       await saveDBPresupuestoSM({ ...resto, cliente_id, obra_id, empresa: cliente, empresa_id, clonado_de_id: clonado_de || null, vendedor,
         eliminado_por: p.eliminadoPor ?? null, eliminado_fecha: p.eliminadoFecha ?? null });

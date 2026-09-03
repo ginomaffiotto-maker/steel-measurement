@@ -987,7 +987,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
       const obra_id = a.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === a.obra.trim().toLowerCase())?.id || null) : null;
       const empresa_id = a.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === a.empresa.trim().toLowerCase())?.id || null) : null;
-      const vendedor = usuarios.find(u => u.id === a.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(a.vendedor))?.profileId || null;
       const { cliente, comentarios, ...resto } = a;
       await saveDBAnidado({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
     } catch (e) {
@@ -1269,7 +1269,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             const materiales = materialesUnificados(a, tcGlobal);
             const kg = materiales.reduce((s,m)=>s+m.kg,0);
             const monto = materiales.reduce((s,m)=>s+m.precio_total,0);
-            const vendedorNombre = usuarios.find(u=>u.id===a.vendedor)?.nombre;
+            const vendedorNombre = usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre;
             return(
               <div key={a.id} onClick={()=>setSelId(a.id)}
                 style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:10,

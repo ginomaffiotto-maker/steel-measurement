@@ -990,7 +990,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       // vendedor es un id local (Date.now()) hasta que esa persona inicia
       // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
       // completa profileId (mismo patrón que meta_usuarios en steelCRM).
-      const vendedor = usuarios.find(u => u.id === c.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(c.vendedor))?.profileId || null;
       const { cliente, comentarios, ...resto } = c;
       await saveDBComputo({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
     } catch (e) {
@@ -1295,7 +1295,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             const multTotal = c.cantidad_total || 1;
             const tot = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_kg,0)*(it.cantidad||1),0) * multTotal;
             const monto = calcMontoUSDComputo(c, c.tc ?? tcGlobal);
-            const vendedorNombre = usuarios.find(u=>u.id===c.vendedor)?.nombre;
+            const vendedorNombre = usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre;
             return (
               <div key={c.id}
                 style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,

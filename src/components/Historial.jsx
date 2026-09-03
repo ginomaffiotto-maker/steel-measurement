@@ -521,7 +521,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     if (!supabase) return;
     try {
       const cliente_id = t.cliente ? await resolverClienteId(t.cliente, t.empresa) : null;
-      const vendedor = usuarios.find(u => u.id === t.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(t.vendedor))?.profileId || null;
       const { cliente, desglose_pct, ...resto } = t;
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({
@@ -660,7 +660,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                         <td style={TD}><span style={{ fontWeight:700 }}>{t.cliente||"—"}</span></td>
                         <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{t.obra||"—"}</span></td>
                         <td style={TD}><span style={BDG(C.steel,true)}>{t.categoria||"—"}</span></td>
-                        <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{usuarios.find(u=>u.id===t.vendedor)?.nombre||"—"}</span></td>
+                        <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{usuarios.find(u=>String(u.id)===String(t.vendedor))?.nombre||"—"}</span></td>
                         <td style={{ ...TD, textAlign:"right" }}>{n3(t.kg_total)}</td>
                         <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>${n2(t.usd_total)}</td>
                         <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(t._usd_kg)}</td>

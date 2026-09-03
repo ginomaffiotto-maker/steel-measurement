@@ -679,7 +679,7 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
     const next = computos.map(x => x.id === c.id ? restaurado : x);
     setComputos(next);
     saveLS("smeas_computos", next);
-    const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+    const vendedor = usuarios.find(u => String(u.id) === String(restaurado.vendedor))?.profileId || null;
     const { cliente, comentarios, ...resto } = restaurado;
     try { await saveDBComputo({ ...resto, vendedor, eliminado_por: null, eliminado_fecha: null }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
     logear?.("Cómputo restaurado", (c.nro || "") + " — " + (c.nombre || ""));
@@ -690,7 +690,7 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
     const next = anidados.map(x => x.id === a.id ? restaurado : x);
     setAnidados(next);
     saveLS("smeas_anidados", next);
-    const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+    const vendedor = usuarios.find(u => String(u.id) === String(restaurado.vendedor))?.profileId || null;
     const { cliente, comentarios, ...resto } = restaurado;
     try { await saveDBAnidado({ ...resto, vendedor, eliminado_por: null, eliminado_fecha: null }); } catch (e) { console.warn("No se pudo sincronizar la restauración a la nube:", e.message || e); }
     logear?.("Anidado restaurado", a.nombre || "");
@@ -705,7 +705,7 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
       const nombreParaClientes = (restaurado.contacto || restaurado.cliente || "").trim();
       const empresaParaClientes = restaurado.contacto ? restaurado.cliente : null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
-      const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(restaurado.vendedor))?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = restaurado;
       await saveDBPresupuestoSM({ ...resto, cliente_id, clonado_de_id: clonado_de || null, vendedor, eliminado_por: null, eliminado_fecha: null });
       for (const item of items || []) await saveDBItem(restaurado.id, item);
@@ -720,7 +720,7 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
     saveLS("smeas_historial", next);
     try {
       const cliente_id = restaurado.cliente ? await resolverClienteId(restaurado.cliente, restaurado.empresa) : null;
-      const vendedor = usuarios.find(u => u.id === restaurado.vendedor)?.profileId || null;
+      const vendedor = usuarios.find(u => String(u.id) === String(restaurado.vendedor))?.profileId || null;
       const { cliente, desglose_pct, ...resto } = restaurado;
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({
