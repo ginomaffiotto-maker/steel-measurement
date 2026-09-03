@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { C, BDG, BTN } from "../styles/colors";
-import { loadLS, saveLS } from "../utils/storage";
+import {
+  loadLS, saveLS,
+  useMergeComputosNube, useMergeAnidadosNube, useMergePresupuestosNube, useMergeHistorialNube,
+} from "../utils/storage";
 import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
 
 const n2 = v => (Math.round((+v || 0) * 100) / 100).toFixed(2);
 
 // Normaliza cada tipo de registro a una forma común para buscar/mostrar.
-function normalizar() {
-  const computos    = loadLS("smeas_computos", []);
-  const anidados    = loadLS("smeas_anidados", []);
-  const presupuestos = loadLS("smeas_presupuestos", []);
-  const historial   = loadLS("smeas_historial", []);
-
+// Recibe las 4 listas por parámetro (no las lee de localStorage directo) —
+// mismo bug real que tenía Dashboard (2026-09-03): sin esto, Buscador
+// mostraba 0 en Cómputos/Anidados/Presupuestos si era la primera pantalla
+// visitada, porque el merge de Fase 5 sólo corría en las pantallas dueñas
+// (Cómputo/Anidado/Presupuesto/Historial).
+function normalizar(computos, anidados, presupuestos, historial) {
   const filas = [];
   computos.filter(c => !c.eliminado).forEach(c => filas.push({
     tipo: "computo", id: c.id, icon: "📐", label: "Cómputo",
@@ -63,7 +66,16 @@ export default function Buscador({ onIrA, usuarios = [] }) {
   const [abierto, setAbierto] = useState(true);
   const [tipoFiltro, setTipoFiltro] = useState("");
 
-  const todas = normalizar();
+  const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
+  useMergeComputosNube(setComputos);
+  const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
+  useMergeAnidadosNube(setAnidados);
+  const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
+  useMergePresupuestosNube(setPresupuestos);
+  const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
+  useMergeHistorialNube(setHistorial);
+
+  const todas = normalizar(computos, anidados, presupuestos, historial);
   const activo = filt.texto.trim() || filt.cliente.trim() || filt.desde || filt.hasta || filt.familia || filt.tipo || filt.vendedor || tipoFiltro;
 
   // Sin el filtro de tipo — así los badges muestran cuántos hay de cada uno
