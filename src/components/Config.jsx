@@ -4,6 +4,7 @@ import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBlo
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
+import { seedTestData } from "../utils/seedTestData";
 
 // ─── GESTIÓN DE USUARIOS ─────────────────────────────────────────────────
 // Mismo mecanismo que steelCRM (mismo backend Supabase compartido): no hay
@@ -399,6 +400,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
   const hayAdmin = usuarios.some(u => u.rol === "admin");
   const soloLectura = usuario?.rol !== "admin" && hayAdmin;
 
+  const [seedErr, setSeedErr] = useState("");
   const [empresa, setEmpresa] = useState(() => loadLS("smeas_empresa", ""));
   const guardarEmpresa = (v) => { setEmpresa(v); saveLS("smeas_empresa", v); };
   // Mismos campos que se agregaron en steelCRM (mismo PDF compartido) —
@@ -518,6 +520,33 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
               </select>
               <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Al cambiarlo, la página se recarga para aplicarlo. Cualquier usuario puede cambiarlo — es solo una preferencia visual, no afecta datos.</div>
             </div>
+
+            {process.env.NODE_ENV === "development" && (
+              // Provisorio (2026-09-03, a pedido de Gino) — herramienta de
+              // desarrollo, movida acá desde el sidebar para no ensuciar la
+              // navegación principal. Sólo aparece en NODE_ENV=development,
+              // nunca en producción. Sacar cuando ya no haga falta.
+              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginTop:16 }}>
+                <div style={{ fontWeight:700, color:C.pur, fontSize:13, marginBottom:4 }}>🧪 Datos de prueba</div>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
+                  Sólo visible en desarrollo. Carga un cómputo + anidado de prueba y recarga la app.
+                </div>
+                <button
+                  onClick={() => {
+                    try {
+                      seedTestData();
+                      window.location.reload();
+                    } catch (err) {
+                      console.error("Error al cargar datos de prueba:", err);
+                      setSeedErr(err.message || "Error desconocido, ver consola (F12).");
+                    }
+                  }}
+                  style={{ background:C.pur+"18", border:`1px solid ${C.pur}44`, borderRadius:6, padding:"7px 14px", cursor:"pointer", color:C.pur, fontSize:12, fontWeight:700 }}>
+                  🧪 Seed datos prueba
+                </button>
+                {seedErr && <div style={{ color:C.err, fontSize:11, fontWeight:600, marginTop:8 }}>⚠ {seedErr}</div>}
+              </div>
+            )}
           </div>
         )}
 

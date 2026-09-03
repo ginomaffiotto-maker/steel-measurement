@@ -11,7 +11,6 @@ import Dashboard from "./components/Dashboard";
 import Config from "./components/Config";
 import Buscador from "./components/Buscador";
 import SolicitudesAsignadas from "./components/SolicitudesAsignadas";
-import { seedTestData } from "./utils/seedTestData";
 
 // ─── MÓDULOS / NAVEGACIÓN ────────────────────────────────────────
 const GRUPOS = [
@@ -392,7 +391,6 @@ export default function App() {
   const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
   const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
-  const [seedErr, setSeedErr] = useState("");
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
   // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con
   // ?type=invite o ?type=recovery en el hash de la URL. Se lee una sola vez
@@ -531,23 +529,6 @@ export default function App() {
 
         {/* Footer */}
         <div style={{ borderTop: `1px solid ${C.border}33`, padding: "10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {process.env.NODE_ENV === "development" && !collapsed && (
-            <button
-              onClick={() => {
-                try {
-                  seedTestData();
-                  window.location.reload();
-                } catch (err) {
-                  console.error("Error al cargar datos de prueba:", err);
-                  setSeedErr(err.message || "Error desconocido, ver consola (F12).");
-                }
-              }}
-              title="Carga cómputo + anidado de prueba y recarga la app"
-              style={{ width:"100%", background:C.pur+"18", border:`1px solid ${C.pur}44`, borderRadius:6, padding:"5px 8px", cursor:"pointer", color:C.pur, fontSize:10, fontWeight:700, letterSpacing:.3 }}>
-              🧪 Seed datos prueba
-            </button>
-          )}
-          {seedErr && <div style={{ color:C.err, fontSize:9, fontWeight:600 }}>⚠ {seedErr}</div>}
           <button onClick={() => setCollapsed(c => !c)} style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}44`, borderRadius: 6, padding: "5px 0", cursor: "pointer", color: C.muted, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {collapsed ? "▶" : "◀"}
           </button>
