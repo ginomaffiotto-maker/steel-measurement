@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -651,6 +651,27 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
   );
 }
 
+// Desglose de kg por proceso dentro de un grupo de material (2026-09-02, a
+// pedido de Gino): un booleano por grupo no alcanza cuando dos piezas del
+// MISMO material necesitan procesos distintos (ej. mitad por Sierra, mitad
+// por Pantógrafo; o solo una parte se galvaniza). Se acumula en kg real a
+// medida que se suman piezas — usado tanto al importar desde Cómputo como
+// al mostrar el resumen en materialesUnificados().
+const procesoVacio = () => ({ granallado_kg:0, pintura_kg:0, galvanizado_kg:0, plegado_kg:0, cilindrado_kg:0, corte_por_maquina:{} });
+const acumularProcesos = (procesos, pf, kg) => {
+  const p = { ...procesos, corte_por_maquina: { ...procesos.corte_por_maquina } };
+  if (!pf || !(kg > 0)) return p;
+  if (pf.granallado) p.granallado_kg += kg * ((pf.pct_granallado ?? 100) / 100);
+  if (pf.pintura) p.pintura_kg += kg * ((pf.pct_pintura ?? 100) / 100);
+  if (pf.galvanizado) p.galvanizado_kg += kg * ((pf.pct_galvanizado ?? 100) / 100);
+  if (pf.plegado) p.plegado_kg += kg;
+  if (pf.cilindrado) p.cilindrado_kg += kg;
+  if (pf.corte_maquina && pf.maquina) {
+    p.corte_por_maquina[pf.maquina] = (p.corte_por_maquina[pf.maquina] || 0) + kg;
+  }
+  return p;
+};
+
 // ─── Importar desde cómputo ───────────────────────────────────────
 function importar(computo_id, bib_map, bib_planchas_map) {
   const computos = loadLS("smeas_computos",[]);
@@ -702,19 +723,25 @@ function importar(computo_id, bib_map, bib_planchas_map) {
         const largo=parseFloat(p.largo_mm_input)||0; if (!largo) return;
         if (!mapaPerf[p.material_id]) {
           const mat=bib_map[p.material_id];
-          mapaPerf[p.material_id]={ id:uid(), tipo:"perfil", material_id:p.material_id, material_nombre:p.material_nombre, kg_m:mat?.kg_m||0, sup_m2m:mat?.sup_m2m||0, largo_barra_mm:mat?.largo_mm||6000, kerf_mm:0, piezas:[], resultado:null, ficha:{} };
+          mapaPerf[p.material_id]={ id:uid(), tipo:"perfil", material_id:p.material_id, material_nombre:p.material_nombre, kg_m:mat?.kg_m||0, sup_m2m:mat?.sup_m2m||0, largo_barra_mm:mat?.largo_mm||6000, kerf_mm:0, piezas:[], resultado:null, ficha:{}, procesos:procesoVacio() };
         }
+        const cantPieza = (parseInt(p.cantidad)||1)*cant_item;
+        const kgPieza = (largo/1000) * (mapaPerf[p.material_id].kg_m||0) * cantPieza;
         mapaPerf[p.material_id].ficha = mergearFicha(mapaPerf[p.material_id].ficha, p.ficha);
-        mapaPerf[p.material_id].piezas.push({ id:uid(), largo_mm:largo, cantidad:(parseInt(p.cantidad)||1)*cant_item, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
+        mapaPerf[p.material_id].procesos = acumularProcesos(mapaPerf[p.material_id].procesos, p.ficha, kgPieza);
+        mapaPerf[p.material_id].piezas.push({ id:uid(), largo_mm:largo, cantidad:cantPieza, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
       } else {
         // plancha
         const largo=parseFloat(p.largo_mm)||0, ancho=parseFloat(p.ancho_mm)||0; if (!largo||!ancho) return;
         if (!mapaPlanchas[p.material_id]) {
           const mat=bib_planchas_map[p.material_id];
-          mapaPlanchas[p.material_id]={ id:uid(), tipo:"plancha", material_id:p.material_id, material_nombre:p.material_nombre, kg_m2:mat?.kg_m2||0, sheet_w:mat?.sheet_w||6000, sheet_h:mat?.sheet_h||1500, piezas:[], resultado:null, ficha:{} };
+          mapaPlanchas[p.material_id]={ id:uid(), tipo:"plancha", material_id:p.material_id, material_nombre:p.material_nombre, kg_m2:mat?.kg_m2||0, sheet_w:mat?.sheet_w||6000, sheet_h:mat?.sheet_h||1500, piezas:[], resultado:null, ficha:{}, procesos:procesoVacio() };
         }
+        const cantPieza = (parseInt(p.cantidad)||1)*cant_item;
+        const kgPieza = (largo/1000) * (ancho/1000) * (mapaPlanchas[p.material_id].kg_m2||0) * cantPieza;
         mapaPlanchas[p.material_id].ficha = mergearFicha(mapaPlanchas[p.material_id].ficha, p.ficha);
-        mapaPlanchas[p.material_id].piezas.push({ id:uid(), largo_mm:largo, ancho_mm:ancho, cantidad:(parseInt(p.cantidad)||1)*cant_item, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
+        mapaPlanchas[p.material_id].procesos = acumularProcesos(mapaPlanchas[p.material_id].procesos, p.ficha, kgPieza);
+        mapaPlanchas[p.material_id].piezas.push({ id:uid(), largo_mm:largo, ancho_mm:ancho, cantidad:cantPieza, etiqueta:item.n_plano||item.titulo?.substring(0,8)||"" });
       }
     });
   });
@@ -728,6 +755,12 @@ function importar(computo_id, bib_map, bib_planchas_map) {
 // 0.17 desperdicio") y el precio (USD/kg de Biblioteca × kg = total USD).
 function materialesUnificados(anidado, tc) {
   const bibLineales = [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[])];
+  // Costo de Maquinado (Corte de máquina por tipo + Plegado + Cilindrado),
+  // 2026-09-02 a pedido de Gino — mismo catálogo que Insumos y Precios >
+  // Maquinado, resuelto por nombre (no hay material_id acá, son operaciones,
+  // no materiales).
+  const maquinadoPorNombre = {};
+  (loadTarifario().maquinado || []).forEach(m => { maquinadoPorNombre[m.nombre] = parseFloat(m.usd) || 0; });
   // 2026-08-31, a pedido de Gino: esto buscaba el precio por NOMBRE contra
   // la biblioteca — si el nombre no matcheaba exacto (mismo bug ya
   // corregido del lado de Presupuesto.jsx) quedaba en "—" sin avisar por
@@ -782,9 +815,25 @@ function materialesUnificados(anidado, tc) {
       else if (por === "m2") precioManualTotal = precioUSD * sup;
     }
     const precioBib = bibPorId[g.material_id] || 0;
-    const precio_total = precioManualTotal > 0 ? precioManualTotal : kg * precioBib;
-    const precio_usd_kg = precioManualTotal > 0 ? (kg > 0 ? precio_total / kg : 0) : precioBib;
-    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha };
+    const precioMaterial = precioManualTotal > 0 ? precioManualTotal : kg * precioBib;
+    const precio_usd_kg = precioManualTotal > 0 ? (kg > 0 ? precioMaterial / kg : 0) : precioBib;
+
+    // Costo de Maquinado — a diferencia de Granallado/Pintura/Galvanizado
+    // (que se valorizan más adelante, en Presupuesto > Trat. Superficie),
+    // Corte de máquina/Plegado/Cilindrado ya se muestran acá porque tienen
+    // su propio catálogo simple (USD/kg por operación, sin la lógica de
+    // %/m² de Trat. Superficie). Desglosado por máquina porque dos piezas
+    // del mismo material pueden pasar por máquinas distintas.
+    const procesos = g.procesos || procesoVacio();
+    let costoMaquinado = 0;
+    Object.entries(procesos.corte_por_maquina).forEach(([maq, kgMaq]) => {
+      costoMaquinado += kgMaq * (maquinadoPorNombre[maq] || 0);
+    });
+    costoMaquinado += procesos.plegado_kg * (maquinadoPorNombre["Plegado"] || 0);
+    costoMaquinado += procesos.cilindrado_kg * (maquinadoPorNombre["Cilindrado"] || 0);
+
+    const precio_total = precioMaterial + costoMaquinado;
+    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
   });
 }
 
@@ -820,7 +869,21 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>
-                <td style={TD}>{[m.ficha.granallado&&"◈ Granallado",m.ficha.pintura&&"🎨 Pintura",m.ficha.galvanizado&&"🔩 Galvanizado",m.ficha.corte_maquina&&("⚙ "+(m.ficha.maquina||"Corte máq.")),m.ficha.plegado&&"🗜️ Plegado",m.ficha.cilindrado&&"🌀 Cilindrado",m.precio_manual&&"$ Precio manual"].filter(Boolean).join(" · ")||"—"}</td>
+                <td style={TD}>
+                  {/* Desglose por kg (2026-09-02, a pedido de Gino): antes era
+                      un sí/no por grupo entero — con dos piezas del mismo
+                      material pasando por máquinas distintas, la segunda se
+                      perdía. Cada máquina se lista aparte con sus kg. */}
+                  {[
+                    m.procesos.granallado_kg>0 && `◈ Granallado (${n2(m.procesos.granallado_kg)}kg)`,
+                    m.procesos.pintura_kg>0 && `🎨 Pintura (${n2(m.procesos.pintura_kg)}kg)`,
+                    m.procesos.galvanizado_kg>0 && `🔩 Galvanizado (${n2(m.procesos.galvanizado_kg)}kg)`,
+                    ...Object.entries(m.procesos.corte_por_maquina).map(([maq,kgMaq]) => `⚙ ${maq} (${n2(kgMaq)}kg)`),
+                    m.procesos.plegado_kg>0 && `🗜️ Plegado (${n2(m.procesos.plegado_kg)}kg)`,
+                    m.procesos.cilindrado_kg>0 && `🌀 Cilindrado (${n2(m.procesos.cilindrado_kg)}kg)`,
+                    m.precio_manual && "$ Precio manual",
+                  ].filter(Boolean).join(" · ") || "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1299,8 +1362,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                       const mats = materialesUnificados(actual, tcGlobal).map(m => ({
                         nombre: m.nombre, kg: m.kg, sup: m.sup, usd_kg: m.precio_usd_kg || 0,
                         granallado: !!m.ficha?.granallado, pintura: !!m.ficha?.pintura, galvanizado: !!m.ficha?.galvanizado,
-                        corte_maquina: !!m.ficha?.corte_maquina, maquina: m.ficha?.maquina||"",
-                        plegado: !!m.ficha?.plegado, cilindrado: !!m.ficha?.cilindrado,
+                        // Desglose por kg (2026-09-02) en vez de sí/no + un
+                        // solo nombre de máquina — dos piezas del mismo
+                        // material pueden pasar por máquinas distintas.
+                        corte_por_maquina: m.procesos?.corte_por_maquina || {},
+                        plegado_kg: m.procesos?.plegado_kg || 0,
+                        cilindrado_kg: m.procesos?.cilindrado_kg || 0,
                       }));
                       saveLS("smeas_material_export_pending", mats);
                       // Anidado usa "cliente" para la persona y "empresa" para la

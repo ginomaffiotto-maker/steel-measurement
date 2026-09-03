@@ -261,16 +261,23 @@ function filasMaquinadoDesdeMateriales(materiales, tarifario) {
   const precioDe = (nombre) => parseFloat(catalogo.find(c => c.nombre === nombre)?.usd) || 0;
   const filas = [];
   (materiales || []).forEach(m => {
-    const kg = +(m.kg || 0).toFixed(3);
-    if (m.corte_maquina && m.maquina) {
-      const usd_unit = precioDe(m.maquina);
-      filas.push({ id: uid(), nombre: m.maquina, cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
-    }
-    if (m.plegado) {
+    // Desglose por kg (2026-09-02, a pedido de Gino): antes usaba el kg
+    // TOTAL del material para cada operación marcada — si dos piezas del
+    // mismo material pasaban por máquinas distintas, se perdía cuál kg le
+    // tocaba a cuál. Ahora Anidado ya manda el desglose real por máquina.
+    Object.entries(m.corte_por_maquina || {}).forEach(([maquina, kgMaq]) => {
+      const kg = +(kgMaq || 0).toFixed(3);
+      if (kg <= 0) return;
+      const usd_unit = precioDe(maquina);
+      filas.push({ id: uid(), nombre: maquina, cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
+    });
+    if ((m.plegado_kg || 0) > 0) {
+      const kg = +m.plegado_kg.toFixed(3);
       const usd_unit = precioDe("Plegado");
       filas.push({ id: uid(), nombre: "Plegado", cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
     }
-    if (m.cilindrado) {
+    if ((m.cilindrado_kg || 0) > 0) {
+      const kg = +m.cilindrado_kg.toFixed(3);
       const usd_unit = precioDe("Cilindrado");
       filas.push({ id: uid(), nombre: "Cilindrado", cantidad: 1, kg_unit: kg, usd_unit, obs: "", subtotal_usd: +(kg*usd_unit).toFixed(2), orden: filas.length });
     }
@@ -2780,7 +2787,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         id: uid(), nombre: m.nombre, proveedor: m.proveedor || "", fecha_precio: "", obs: "", cantidad: 1,
         kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
         arena: !!m.granallado, pintura: !!m.pintura, galvanizado: !!m.galvanizado,
-        corte_maquina: !!m.corte_maquina, maquina: m.maquina||"", plegado: !!m.plegado, cilindrado: !!m.cilindrado,
+        // Informativo en la fila de Hierros — el costo real de estas 3
+        // operaciones ya viaja desglosado por kg al rubro Maquinado
+        // (filasMaquinadoDesdeMateriales), esto es solo para mostrar acá
+        // que el material tuvo alguna marcada.
+        corte_maquina: Object.keys(m.corte_por_maquina||{}).length>0,
+        maquina: Object.keys(m.corte_por_maquina||{})[0]||"",
+        plegado: (m.plegado_kg||0)>0, cilindrado: (m.cilindrado_kg||0)>0,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });
@@ -2804,7 +2817,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         id: uid(), nombre: m.nombre, proveedor: m.proveedor || "", cantidad: 1,
         kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
         arena: !!m.granallado, pintura: !!m.pintura, galvanizado: !!m.galvanizado,
-        corte_maquina: !!m.corte_maquina, maquina: m.maquina||"", plegado: !!m.plegado, cilindrado: !!m.cilindrado,
+        // Informativo en la fila de Hierros — el costo real de estas 3
+        // operaciones ya viaja desglosado por kg al rubro Maquinado
+        // (filasMaquinadoDesdeMateriales), esto es solo para mostrar acá
+        // que el material tuvo alguna marcada.
+        corte_maquina: Object.keys(m.corte_por_maquina||{}).length>0,
+        maquina: Object.keys(m.corte_por_maquina||{})[0]||"",
+        plegado: (m.plegado_kg||0)>0, cilindrado: (m.cilindrado_kg||0)>0,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });

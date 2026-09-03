@@ -660,7 +660,14 @@ export const loadDBComputoCompleto = async (computoId) => {
     const { data: piezas, error: eP } = await supabase
       .from("computo_piezas").select("*").eq("computo_item_id", item.id);
     if (eP) throw eP;
-    itemsConPiezas.push({ ...item, piezas });
+    // Hidrata largo_mm_input (campo de edición local, ver Computo.jsx) a
+    // partir de largo_mm para piezas de perfil — sin esto, una pieza
+    // restaurada de la nube queda con longitud invisible para la UI/cálculo
+    // local, y `importar()` (Anidado.jsx) la descarta en silencio.
+    const piezasHidratadas = piezas.map(p =>
+      p.tipo === "perfil" ? { ...p, largo_mm_input: p.largo_mm != null ? String(p.largo_mm) : "" } : p
+    );
+    itemsConPiezas.push({ ...item, piezas: piezasHidratadas });
   }
   return { ...computo, items: itemsConPiezas };
 };
@@ -729,7 +736,16 @@ export const saveDBComputo = async (computo) => {
     if (piezas?.length) {
       const filas = piezas.map((p) => {
         const { id: pid, ficha, largo_mm_input, ...campos } = p;
-        return saneado({ ...campos, ...(ficha || {}), computo_item_id: savedItem.id });
+        // Bug real encontrado en vivo (2026-09-02): para una pieza tipo
+        // "perfil" el largo real vive en `largo_mm_input` (campo de edición
+        // local, ver Computo.jsx) — `largo_mm` nunca se completa ahí. Esta
+        // función excluía largo_mm_input y mandaba el `largo_mm` vacío,
+        // así que TODA pieza de perfil quedaba con longitud null en la
+        // nube desde que existe esta tabla — invisible hasta que algo
+        // necesitara releer esas piezas (ej. reimportar a Anidado después
+        // de un restore de Fase 5).
+        const largo_mm = p.tipo === "perfil" ? (parseFloat(largo_mm_input) || null) : campos.largo_mm;
+        return saneado({ ...campos, largo_mm, ...(ficha || {}), computo_item_id: savedItem.id });
       });
       const { error: ePiezas } = await supabase.from("computo_piezas").insert(filas);
       if (ePiezas) throw ePiezas;
