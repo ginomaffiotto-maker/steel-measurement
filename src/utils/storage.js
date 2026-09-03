@@ -448,7 +448,9 @@ const camposDesdeRemoto = (r, cliente, items) => ({
 // mismo sentido inverso que ya usa el guardado (vendedor local -> profileId).
 const vendedorLocalDesdeRemoto = (r, usuarios) => usuarios.find((u) => u.profileId === r.vendedor)?.id ?? null;
 
-export const useMergePresupuestosNube = (setPresupuestos, usuarios = []) => {
+// Mismo bug real que useMergeAnidadosNube (ver comentario ahí) — recibe
+// `presupuestosActuales` en vez de leerlo vía setPresupuestos((local)=>...).
+export const useMergePresupuestosNube = (presupuestosActuales, setPresupuestos, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -457,16 +459,11 @@ export const useMergePresupuestosNube = (setPresupuestos, usuarios = []) => {
       if (!ses || !vivo) return;
       try {
         const remotos = await loadDBPresupuestosSM();
-        let faltantes = [];
-        let actualizables = [];
-        setPresupuestos((local) => {
-          const localPorId = new Map(local.map((p) => [p.id, p]));
-          faltantes = (remotos || []).filter((r) => !localPorId.has(r.id));
-          actualizables = (remotos || []).filter((r) => {
-            const l = localPorId.get(r.id);
-            return l && r.updated_at && (!l.updated_at || new Date(r.updated_at) > new Date(l.updated_at));
-          });
-          return local;
+        const localPorId = new Map(presupuestosActuales.map((p) => [p.id, p]));
+        const faltantes = (remotos || []).filter((r) => !localPorId.has(r.id));
+        const actualizables = (remotos || []).filter((r) => {
+          const l = localPorId.get(r.id);
+          return l && r.updated_at && (!l.updated_at || new Date(r.updated_at) > new Date(l.updated_at));
         });
         for (const r of actualizables) {
           if (!vivo) return;
@@ -688,7 +685,9 @@ export const loadDBComputoCompleto = async (computoId) => {
 // los campos de ficha (granallado/pintura/etc.) planos en vez de anidados
 // bajo `.ficha` como espera la UI — indiferente en la práctica porque este
 // camino solo corre para cómputos que nunca pasaron por este navegador.
-export const useMergeComputosNube = (setComputos, usuarios = []) => {
+// Mismo bug real que useMergeAnidadosNube (ver comentario ahí) — recibe
+// `computosActuales` en vez de leerlo vía setComputos((local)=>...).
+export const useMergeComputosNube = (computosActuales, setComputos, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -696,12 +695,8 @@ export const useMergeComputosNube = (setComputos, usuarios = []) => {
       if (!(await esperarSesion()) || !vivo) return;
       try {
         const remotos = await loadDBComputos();
-        let faltantes = [];
-        setComputos((local) => {
-          const idsLocales = new Set(local.map((c) => c.id));
-          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
-          return local;
-        });
+        const idsLocales = new Set(computosActuales.map((c) => c.id));
+        const faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
         for (const r of faltantes) {
           if (!vivo) return;
           try {
@@ -824,7 +819,18 @@ export const saveDBAnidado = async (anidado) => {
 
 // Fase 5 (piloto, 2026-08-23): fusiona por id, mismo criterio que
 // presupuestos/cómputos — solo trae de la nube lo que no exista local.
-export const useMergeAnidadosNube = (setAnidados, usuarios = []) => {
+// Bug real encontrado en vivo (2026-09-03, probando el candado de dueño):
+// `setAnidados((local) => { faltantes = ...; return local; })` usado solo
+// para "leer" el estado actual y seguir usando `faltantes` después de forma
+// síncrona no es confiable — React puede diferir la ejecución del callback,
+// y el `for` de abajo llegaba a correr con `faltantes` todavía en su valor
+// inicial (vacío), sin ningún error visible. Se saca ese patrón por
+// completo: recibe `anidadosActuales` como parámetro (mismo criterio que
+// ya usa `usuarios`) y lo usa directo — el efecto corre una sola vez al
+// montar ([] deps), así que el valor capturado en el closure es
+// exactamente "qué había local antes de que este merge arrancara", que es
+// lo único que hace falta para calcular qué falta traer.
+export const useMergeAnidadosNube = (anidadosActuales, setAnidados, usuarios = []) => {
   useEffect(() => {
     if (!supabase) return;
     let vivo = true;
@@ -832,18 +838,19 @@ export const useMergeAnidadosNube = (setAnidados, usuarios = []) => {
       if (!(await esperarSesion()) || !vivo) return;
       try {
         const remotos = await loadDBAnidados();
-        let faltantes = [];
-        setAnidados((local) => {
-          const idsLocales = new Set(local.map((a) => a.id));
-          faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
-          return local;
-        });
+        const idsLocales = new Set(anidadosActuales.map((a) => a.id));
+        const faltantes = (remotos || []).filter((r) => !idsLocales.has(r.id));
         for (const r of faltantes) {
           if (!vivo) return;
           try {
             const [cliente, completo] = await Promise.all([resolverNombreCliente(r.cliente_id), loadDBAnidadoCompleto(r.id)]);
             const { cliente_id, ...resto } = completo;
-            // Mismo motivo que en Cómputo/Presupuesto — ver vendedorLocalDesdeRemoto.
+            // `vendedor` de la fila remota es el profileId real (uuid) --
+            // se traduce al id local, mismo motivo que en presupuestos
+            // (ver vendedorLocalDesdeRemoto) — sin esto, un cómputo traído
+            // de la nube quedaba con un vendedor "de otro" siempre, sin
+            // importar quién fuera de verdad, y el candado de dueño nunca
+            // lo reconocía como propio.
             const nuevo = { ...resto, cliente, vendedor: vendedorLocalDesdeRemoto(r, usuarios) };
             if (vivo) setAnidados((prev) => (prev.some((a) => a.id === nuevo.id) ? prev : [...prev, nuevo]));
           } catch (e) {

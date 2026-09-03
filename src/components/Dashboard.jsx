@@ -253,7 +253,7 @@ export default function Dashboard({ usuarios = [] }) {
   // Mismos hooks que ya usan esas pantallas, para que Dashboard se
   // autocomplete sin depender del orden de navegación.
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
-  useMergePresupuestosNube(setPresupuestos, usuarios);
+  useMergePresupuestosNube(presupuestos, setPresupuestos, usuarios);
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
   useMergeHistorialNube(setHistorial);
 

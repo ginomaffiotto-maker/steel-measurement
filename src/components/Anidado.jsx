@@ -937,7 +937,7 @@ function exportarListaCorte(anidado) {
 export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onExportarPresupuesto }) {
   const { show: showUndo, Toast } = useUndoToast();
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
-  useMergeAnidadosNube(setAnidados, usuarios);
+  useMergeAnidadosNube(anidados, setAnidados, usuarios);
   const [selId,      setSelId]      = useState(null);
   const [creando,    setCreando]    = useState(false);
   const [nombre,     setNombre]     = useState("");

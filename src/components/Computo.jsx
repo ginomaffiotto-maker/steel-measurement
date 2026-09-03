@@ -914,7 +914,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 // ═══════════════════════════════════════════════════════════════
 export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuarios = [], tcGlobal, logear }) {
   const [computos,      setComputos]      = useState(() => loadLS("smeas_computos", []));
-  useMergeComputosNube(setComputos, usuarios);
+  useMergeComputosNube(computos, setComputos, usuarios);
   const { show: showUndo, Toast } = useUndoToast();
   const [selId,         setSelId]         = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());

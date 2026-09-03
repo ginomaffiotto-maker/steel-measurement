@@ -2735,7 +2735,7 @@ function ImportarMaterialesModal({ materiales, presupuestos, precarga, onImporta
 // ─── PRESUPUESTO (EXPORT DEFAULT) ────────────────────────────────
 export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }) {
   const [presupuestos, setPres] = useState(() => loadLS("smeas_presupuestos", []));
-  useMergePresupuestosNube(setPres, usuarios);
+  useMergePresupuestosNube(presupuestos, setPres, usuarios);
   // Debounce del dual-write al editar campos del detalle (2026-09-01, bug
   // real reportado por Gino): updPres corre en cada tecla — sin esto,
   // escribir en Cliente disparaba resolverClienteId() en cada tecla y
