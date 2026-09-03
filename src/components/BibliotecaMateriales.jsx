@@ -1808,6 +1808,7 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
   items = items || [];
   const [busq, setBusq] = useState("");
   const [historialDe, setHistorialDe] = useState(null);
+  const [confirmarDel, setConfirmarDel] = useState(null);
   const upd = (id, field, val) => {
     onChange(items.map(it => it.id === id ? { ...it, [field]: val } : it));
     // Cada cambio de precio queda registrado — a pedido de Gino (2026-09-02),
@@ -1887,7 +1888,7 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
               style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:13, flexShrink:0 }}>📜</button>
           )}
           {!soloLectura && (
-            <button onClick={()=>del(it.id)} style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14, flexShrink:0 }}>🗑</button>
+            <button onClick={()=>setConfirmarDel(it)} style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14, flexShrink:0 }}>🗑</button>
           )}
         </div>
       ))}
@@ -1898,6 +1899,18 @@ function CatalogoEditable({ items, campoValor, labelValor, unidad, soloLectura, 
         const it = items.find(x => x.id === historialDe);
         return <HistorialPrecioModal tipo={tipoHistorial} materialId={historialDe} nombre={it?.nombre} labelValor={labelValor} onClose={()=>setHistorialDe(null)} />;
       })()}
+      {confirmarDel && (
+        // 2026-09-02, a pedido de Gino: borró un ítem de Maquinado sin
+        // querer, el 🗑 borraba directo sin ningún cartel — mismo patrón
+        // liviano (checkbox, sin contraseña) que ya usa esta pantalla para
+        // otras confirmaciones, consistente con que esto es un catálogo de
+        // precios, no un registro de negocio (presupuesto/cliente/etc).
+        <ModalConfirmarBorrado
+          titulo={`"${confirmarDel.nombre || "este ítem"}" del catálogo`}
+          onConfirm={() => { del(confirmarDel.id); setConfirmarDel(null); }}
+          onClose={() => setConfirmarDel(null)}
+        />
+      )}
     </div>
   );
 }
