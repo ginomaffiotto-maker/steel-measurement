@@ -444,7 +444,8 @@ export const useMergePresupuestosNube = (setPresupuestos) => {
     if (!supabase) return;
     let vivo = true;
     (async () => {
-      if (!(await esperarSesion()) || !vivo) return;
+      const ses = await esperarSesion();
+      if (!ses || !vivo) return;
       try {
         const remotos = await loadDBPresupuestosSM();
         let faltantes = [];

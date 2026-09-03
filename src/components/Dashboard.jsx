@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, CARD } from "../styles/colors";
-import { loadLS } from "../utils/storage";
+import { loadLS, useMergePresupuestosNube, useMergeHistorialNube } from "../utils/storage";
 import FiltrosBar from "./FiltrosBar";
 import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 import { calcPresupuesto } from "./Presupuesto";
@@ -246,8 +246,16 @@ export default function Dashboard({ usuarios = [] }) {
   const [filt, setFilt] = useState(FILT_DEFAULTS);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
 
-  const presupuestos = loadLS("smeas_presupuestos", []);
-  const historial = loadLS("smeas_historial", HISTORIAL_SEED);
+  // Bug real (2026-09-02/03): Dashboard leía localStorage directo, sin
+  // correr nunca el merge de Fase 5 — si el usuario entraba acá antes de
+  // haber visitado Presupuesto/Historial (únicos lugares que disparaban el
+  // merge), veía 0 para siempre aunque hubiera datos reales en la nube.
+  // Mismos hooks que ya usan esas pantallas, para que Dashboard se
+  // autocomplete sin depender del orden de navegación.
+  const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
+  useMergePresupuestosNube(setPresupuestos);
+  const [historial, setHistorial] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
+  useMergeHistorialNube(setHistorial);
 
   let registros = [];
   if (filt.fuente !== "historial") registros = registros.concat(presupuestos.map(normalizarPresupuesto));
