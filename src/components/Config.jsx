@@ -107,7 +107,8 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
               {u.foto ? <img src={u.foto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:16 }}>{u.emoji || "👤"}</span>}
             </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:700 }}>{u.nombre || "(sin nombre)"} {usuario?.id === u.id && <span style={{ fontSize:10, color:C.accent }}>· vos</span>}</div>
+              <div style={{ fontSize:13, fontWeight:700 }}>{u.nombre || "(sin nombre)"} {usuario?.id === u.id && <span style={{ fontSize:10, color:C.accent }}>· vos</span>}
+                {u.pendienteInvitacion && <span style={{ fontSize:10, color:C.warn, background:C.warn+"22", padding:"1px 6px", borderRadius:10, marginLeft:6 }}>⏳ Invitado — pendiente</span>}</div>
               {!u.profileId && <div style={{ fontSize:10, color:C.muted }}>Sin cuenta real todavía</div>}
             </div>
             <div style={{ fontSize:12, color:C.muted, minWidth:100 }}>{ROL_LABEL[u.rol] || u.rol}</div>
@@ -154,7 +155,7 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
 // nunca vive en la máquina de nadie. Mismo patrón ya en producción en
 // Steel CRM (api/invitar-usuario.js de ese repo) — reemplaza el flujo
 // viejo de "generar comando y pegarlo en la terminal" (crear-usuario.mjs).
-function InvitarUsuario() {
+function InvitarUsuario({ setUsuarios }) {
   const [form, setForm] = useState({ nombre:"", email:"", rol:"vendedor" });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -175,6 +176,15 @@ function InvitarUsuario() {
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "No se pudo invitar."); setCargando(false); return; }
       setMsg(`✅ Invitación enviada a ${form.email.trim()} — le va a llegar un correo para elegir su propia contraseña. Sirve para entrar acá y a Steel CRM (mismo backend), si el tenant también lo usa.`);
+      // Reflejo instantáneo en la lista de Equipo (2026-09-03, "Invitado —
+      // pendiente", mismo patrón que steelCRM) — sin esto, la persona
+      // invitada no aparecía en ningún lado hasta que alguien recargara la
+      // página (sincronizarUsuariosDesdeProfiles en App.js solo corre una
+      // vez al loguearse, no en cada cambio).
+      setUsuarios(prev => [...prev, {
+        id: Date.now(), profileId: d.userId, nombre: form.nombre.trim(), rol: form.rol,
+        emoji: "👤", foto: "", clave: "", email: form.email.trim(), pendienteInvitacion: true,
+      }]);
       setForm({ nombre:"", email:"", rol:"vendedor" });
     } catch (e) {
       setErr("No se pudo invitar: " + e.message);
@@ -582,7 +592,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
               </div>
               <EquipoUsuarios usuarios={usuarios} setUsuarios={setUsuarios} usuario={usuario} esAdmin={usuario?.rol === "admin"} />
             </div>
-            {usuario?.rol === "admin" && <InvitarUsuario />}
+            {usuario?.rol === "admin" && <InvitarUsuario setUsuarios={setUsuarios} />}
           </div>
         )}
 

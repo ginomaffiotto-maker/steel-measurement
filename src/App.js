@@ -61,9 +61,17 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
     || usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
   const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
   if (profileError || !profile) return existente || null;
+  // "Invitado — pendiente" (2026-09-03, mismo mecanismo que steelCRM): esta
+  // es la primera vez que la sesión real de esta persona pasa por acá — si
+  // el perfil todavía dice pendiente, ya dejó de estarlo. Fire-and-forget,
+  // no bloquea el login.
+  if (profile.invitado_pendiente) {
+    supabase.from("profiles").update({ invitado_pendiente: false }).eq("id", authUser.id)
+      .then(({ error }) => { if (error) console.warn("clear invitado_pendiente", error); });
+  }
   if (existente) {
-    const actualizado = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol };
-    if (actualizado.nombre !== existente.nombre || actualizado.rol !== existente.rol || existente.profileId !== authUser.id) {
+    const actualizado = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol, pendienteInvitacion: false };
+    if (actualizado.nombre !== existente.nombre || actualizado.rol !== existente.rol || existente.profileId !== authUser.id || existente.pendienteInvitacion) {
       setUsuarios(prev => prev.map(u => u.id === existente.id ? actualizado : u));
     }
     return actualizado;
@@ -71,7 +79,7 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
   const nuevo = {
     id: Date.now(), profileId: authUser.id, nombre: profile.nombre, rol: profile.rol,
     emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
-    email: authUser.email,
+    email: authUser.email, pendienteInvitacion: false,
   };
   setUsuarios(prev => [...prev, nuevo]);
   return nuevo;
@@ -92,6 +100,7 @@ async function sincronizarUsuariosDesdeProfiles(usuarios, setUsuarios) {
     return [...prev, ...faltantes.map((p, i) => ({
       id: Date.now() + i, profileId: p.id, nombre: p.nombre, rol: p.rol,
       emoji: p.emoji || "👤", foto: p.foto || "", clave: "", email: "",
+      pendienteInvitacion: !!p.invitado_pendiente,
     }))];
   });
 }

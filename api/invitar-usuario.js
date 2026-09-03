@@ -99,6 +99,7 @@ module.exports = async (req, res) => {
     tenant_id: callerProfile.tenant_id,
     nombre: nombre.trim(),
     rol,
+    invitado_pendiente: true,
   });
   if (eProfile) {
     res.status(500).json({ error: 'La invitación se mandó, pero falló crear el perfil: ' + eProfile.message });
