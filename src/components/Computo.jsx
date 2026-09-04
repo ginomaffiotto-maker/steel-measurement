@@ -954,6 +954,20 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     } catch {}
   }, []);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
+  // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
+  // cómputos a la vez — mismo criterio que el borrado individual.
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [confirmarDelLote, setConfirmarDelLote] = useState(false);
+  const toggleSelComputo = (id) => setSeleccionados(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const eliminarComputoLote = () => {
+    seleccionados.forEach(id => eliminarComputo(id));
+    setSeleccionados(new Set());
+    setConfirmarDelLote(false);
+  };
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [filt, setFilt] = useState(COMPUTO_FILT_DEFAULTS);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
@@ -1168,6 +1182,14 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             onClose={() => setConfirmarDelId(null)}
           />
         )}
+        {confirmarDelLote && (
+          <ModalConfirmarEliminar
+            titulo={`${seleccionados.size} cómputo(s) seleccionado(s)`}
+            usuarioPropio={usuario}
+            onConfirm={eliminarComputoLote}
+            onClose={() => setConfirmarDelLote(false)}
+          />
+        )}
         {showClienteRapido && (
           <ClienteRapidoModal
             nombreInicial={clienteTexto}
@@ -1287,6 +1309,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <div style={{ textAlign:"center", color:C.muted, padding:"40px 0", fontSize:13 }}>Sin resultados.</div>
         )}
 
+        {seleccionados.size > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:10, background:C.accent+"11", border:`1px solid ${C.accent}33`, borderRadius:8 }}>
+            <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{seleccionados.size} seleccionado{seleccionados.size!==1?"s":""}</span>
+            <button onClick={()=>setConfirmarDelLote(true)} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.err+"66", color:C.err }}>🗑️ Eliminar seleccionados</button>
+            <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
+          </div>
+        )}
         {/* Lista de obras — una fila por cómputo, ancho completo (2026-08-24,
             pedido de Gino: mas info visible, tipo Excel, no en grilla de
             tarjetas angostas) */}
@@ -1304,6 +1333,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                 onClick={()=>setSelId(c.id)}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                <input type="checkbox" checked={seleccionados.has(c.id)} onChange={()=>toggleSelComputo(c.id)}
+                  onClick={e=>e.stopPropagation()} style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
                 <div style={{ minWidth:70 }}>
                   {c.nro && <span style={BDG(C.accent,true)}>{c.nro}</span>}
                 </div>

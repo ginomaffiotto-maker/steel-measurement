@@ -474,6 +474,15 @@ export default function Historial({ usuario, usuarios = [], logear }) {
   const [filt, setFilt] = useState(HIST_FILT_DEFAULTS);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
+  // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
+  // trabajos a la vez — mismo criterio que el borrado individual.
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [confirmarDelLote, setConfirmarDelLote] = useState(false);
+  const toggleSelTrabajo = (id) => setSeleccionados(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   useEffect(() => { saveLS("smeas_historial", trabajos); }, [trabajos]);
 
@@ -576,6 +585,11 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     });
   };
   const trabajoAEliminar = confirmarDelId ? trabajos.find(t=>t.id===confirmarDelId) : null;
+  const delTrabajoLote = () => {
+    seleccionados.forEach(id => del(id));
+    setSeleccionados(new Set());
+    setConfirmarDelLote(false);
+  };
 
   if (vista === "detalle" && selTrab) {
     return <DetalleTrabajo t={selTrab} onChange={upd} onBack={() => { setVista("lista"); setSelId(null); }} usuarios={usuarios} />;
@@ -590,6 +604,14 @@ export default function Historial({ usuario, usuarios = [], logear }) {
           usuarioPropio={usuario}
           onConfirm={() => { del(trabajoAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
+        />
+      )}
+      {confirmarDelLote && (
+        <ModalConfirmarEliminar
+          titulo={`${seleccionados.size} trabajo(s) seleccionado(s)`}
+          usuarioPropio={usuario}
+          onConfirm={delTrabajoLote}
+          onClose={() => setConfirmarDelLote(false)}
         />
       )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
@@ -630,10 +652,22 @@ export default function Historial({ usuario, usuarios = [], logear }) {
             </div>
           )}
 
+          {seleccionados.size > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:10, background:C.accent+"11", border:`1px solid ${C.accent}33`, borderRadius:8 }}>
+              <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{seleccionados.size} seleccionado{seleccionados.size!==1?"s":""}</span>
+              <button onClick={()=>setConfirmarDelLote(true)} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.err+"66", color:C.err }}>🗑️ Eliminar seleccionados</button>
+              <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
+            </div>
+          )}
           {lista.length > 0 && (
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead><tr>
+                  <th style={TH}>
+                    <input type="checkbox" checked={listaPagina.length>0 && listaPagina.every(t=>seleccionados.has(t.id))}
+                      onChange={() => setSeleccionados(prev => listaPagina.every(t=>prev.has(t.id)) ? new Set() : new Set(listaPagina.map(t=>t.id)))}
+                      style={{ width:15, height:15, cursor:"pointer" }} />
+                  </th>
                   {[
                     { h:"OT", campo:"nro_ot" }, { h:"Fecha", campo:"fecha" }, { h:"Cliente", campo:"cliente" },
                     { h:"Obra", campo:"obra" }, { h:"Categoría", campo:"categoria" }, { h:"Vendedor", campo:null },
@@ -655,6 +689,10 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                         style={{ cursor:"pointer" }}
                         onMouseEnter={e => e.currentTarget.style.background=C.iron+"55"}
                         onMouseLeave={e => e.currentTarget.style.background=""}>
+                        <td style={TD} onClick={e=>e.stopPropagation()}>
+                          <input type="checkbox" checked={seleccionados.has(t.id)} onChange={()=>toggleSelTrabajo(t.id)}
+                            style={{ width:15, height:15, cursor:"pointer" }} />
+                        </td>
                         <td style={TD}><span style={{ color:C.muted, fontSize:11 }}>{t.nro_ot}</span></td>
                         <td style={TD}><span style={{ fontSize:11, color:C.muted }}>{t.fecha}</span></td>
                         <td style={TD}><span style={{ fontWeight:700 }}>{t.cliente||"—"}</span></td>

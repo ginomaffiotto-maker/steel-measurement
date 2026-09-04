@@ -1022,6 +1022,15 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const empresaTexto = (empresa || "").trim();
   const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
   const [confirmarDelId, setConfirmarDelId] = useState(null);
+  // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
+  // anidados a la vez — mismo criterio que el borrado individual.
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [confirmarDelLote, setConfirmarDelLote] = useState(false);
+  const toggleSelAnidado = (id) => setSeleccionados(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const [confirmarGrupoId, setConfirmarGrupoId] = useState(null);
   const [verMateriales, setVerMateriales] = useState(false);
   const [filt, setFilt] = useState(ANIDADO_FILT_DEFAULTS);
@@ -1166,6 +1175,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     });
   };
   const anidadoAEliminar = confirmarDelId ? anidados.find(a=>a.id===confirmarDelId) : null;
+  const delAnidadoLote = () => {
+    seleccionados.forEach(id => delAnidado(id));
+    setSeleccionados(new Set());
+    setConfirmarDelLote(false);
+  };
 
   // Clonar (2026-08-24, pedido de Gino: mismo criterio que Cómputo/Presupuesto)
   const clonarAnidado = (a) => {
@@ -1233,6 +1247,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
           usuarioPropio={usuario}
           onConfirm={() => { delAnidado(anidadoAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
+        />
+      )}
+      {confirmarDelLote && (
+        <ModalConfirmarEliminar
+          titulo={`${seleccionados.size} anidado(s) seleccionado(s)`}
+          usuarioPropio={usuario}
+          onConfirm={delAnidadoLote}
+          onClose={() => setConfirmarDelLote(false)}
         />
       )}
       {showClienteRapido && (
@@ -1332,6 +1354,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       <>
         {anidados.length===0&&!creando&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>No hay anidados aún.</div>}
         {anidados.length>0&&anidadosFiltrados.length===0&&<div style={{ color:C.muted,fontSize:13,padding:"12px 0" }}>Sin resultados.</div>}
+        {seleccionados.size > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:10, background:C.accent+"11", border:`1px solid ${C.accent}33`, borderRadius:8 }}>
+            <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{seleccionados.size} seleccionado{seleccionados.size!==1?"s":""}</span>
+            <button onClick={()=>setConfirmarDelLote(true)} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.err+"66", color:C.err }}>🗑️ Eliminar seleccionados</button>
+            <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
+          </div>
+        )}
         {/* Lista — una fila por anidado, ancho completo (2026-08-24, mismo
             criterio que Cómputo: mas info visible, tipo Excel) */}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -1348,6 +1377,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   display:"flex",alignItems:"center",gap:18,flexWrap:"wrap" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                <input type="checkbox" checked={seleccionados.has(a.id)} onChange={()=>toggleSelAnidado(a.id)}
+                  onClick={e=>e.stopPropagation()} style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
                 <div style={{ flex:"2 1 220px", minWidth:0 }}>
                   <div style={{ fontWeight:800,fontSize:14,color:C.text }}>{a.nombre||"Sin nombre"}</div>
                   <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{a.fecha} · {nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
