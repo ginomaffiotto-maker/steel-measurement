@@ -1058,7 +1058,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"" };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"", solicitud_id: nuevo.solicitudId || null };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
     setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });

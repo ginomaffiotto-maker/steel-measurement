@@ -15,6 +15,10 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  // ids de solicitud que ya tienen al menos un cómputo vinculado
+  // (solicitud_id, 2026-09-05) — para avisar antes de crear otro por
+  // error, sin bloquear (puede haber un caso real para un segundo cómputo).
+  const [conComputo, setConComputo] = useState(new Set());
 
   useEffect(() => {
     if (!supabase || !usuario?.profileId) { setCargando(false); return; }
@@ -28,6 +32,11 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
         setSolicitudes(data || []);
         setError("");
         setCargando(false);
+        const ids = (data || []).map(s => s.id);
+        if (ids.length) {
+          supabase.from("computos").select("solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
+            .then(({ data: cs }) => setConComputo(new Set((cs || []).map(c => c.solicitud_id))));
+        }
       });
   }, [usuario?.profileId]);
 
@@ -41,6 +50,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
         nombre: s.obra || s.cliente_nombre || "Solicitud",
         cliente: s.cliente_nombre || "",
         categoria: s.categoria || "",
+        solicitudId: s.id,
       }));
     } catch {}
     irATab("Computo");
@@ -102,7 +112,10 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   <td style={TD}><span style={{ ...BDG(ESTADO_COLOR[s.estado] || C.muted, true) }}>{s.estado}</span></td>
                   <td style={TD}>{s.fecha_limite || "—"}</td>
                   <td style={TD}>
-                    <button onClick={() => crearComputoDesde(s)} style={BTN("primary")}>📐 Crear cómputo</button>
+                    {conComputo.has(s.id) && (
+                      <span style={{ ...BDG(C.ok, true), marginRight: 8, fontSize: 11 }} title="Ya tiene al menos un cómputo vinculado — revisá antes de crear otro">✅ Ya tiene cómputo</span>
+                    )}
+                    <button onClick={() => crearComputoDesde(s)} style={BTN("primary")}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
                   </td>
                 </tr>
               ))}

@@ -48,7 +48,7 @@ const COLUMNAS_PRESUPUESTO_SM = [
   "eliminado", "eliminado_por", "eliminado_fecha",
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
-  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "solicitud_id"];
 const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id", "empresa", "empresa_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
@@ -60,7 +60,7 @@ const COLUMNAS_ITEM_PRESUPUESTO = [
 // retroactivamente), es más seguro soltar la referencia que hacer
 // fallar todo el presupuesto por un vínculo que de todos modos ya no
 // apunta a nada real.
-const CAMPOS_REF_UUID = new Set(["cliente_id", "obra_id", "empresa_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor"]);
+const CAMPOS_REF_UUID = new Set(["cliente_id", "obra_id", "empresa_id", "computo_id", "anidado_id", "clonado_de_id", "vendedor", "solicitud_id"]);
 const soloColumnas = (obj, columnas) => {
   const row = {};
   for (const k of columnas) {
