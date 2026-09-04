@@ -1315,15 +1315,23 @@ export const restoreBackup = (payload) => {
 // nunca el desglose interno de los 9 rubros de costo, mismo criterio de
 // privacidad que ya usaba el export viejo y que sigue usando el PDF del
 // presupuesto (buildPresupuestoHTML).
+// 2026-09-03, a pedido de Gino: además del vínculo (N° real de Steel CRM),
+// trae el `estado` comercial real (enviado/en negociación/aceptado/no
+// aprobado/recotizado/facturado) — antes había que abrir Steel CRM aparte
+// para saber si un presupuesto ya se aprobó o rechazó.
 export const buscarVinculoCRM = async (presupuestoSmId) => {
   if (!supabase || !presupuestoSmId) return null;
+  // La columna real en presupuestos_crm es "estado_nativo", no "estado"
+  // (bug real encontrado 2026-09-03: pedirla como "estado" tiraba un error
+  // de PostgREST que tumbaba toda la consulta, incluido el nro — el badge
+  // "Vinculado a Steel CRM" dejaba de aparecer aunque el vínculo sí existiera).
   const { data, error } = await supabase
     .from("presupuesto_calculo_link")
-    .select("presupuesto_crm_id, presupuestos_crm(nro)")
+    .select("presupuesto_crm_id, presupuestos_crm(nro, estado_nativo)")
     .eq("presupuesto_sm_id", presupuestoSmId)
     .maybeSingle();
   if (error || !data) return null;
-  return { crmId: data.presupuesto_crm_id, nro: data.presupuestos_crm?.nro || null };
+  return { crmId: data.presupuesto_crm_id, nro: data.presupuestos_crm?.nro || null, estado: data.presupuestos_crm?.estado_nativo || null };
 };
 
 // El N° de presupuesto de Steel CRM es único por tenant y sigue un formato

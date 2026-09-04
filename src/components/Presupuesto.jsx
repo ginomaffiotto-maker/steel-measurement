@@ -200,6 +200,17 @@ const ESTADO_CFG = {
   aprobado:  { label: "Aprobado",  color: C.ok,    icon: "✅" },
   rechazado: { label: "Rechazado", color: C.err,   icon: "❌" },
 };
+// Estado comercial REAL del presupuesto en Steel CRM (distinto del estado
+// local de acá arriba) — 2026-09-03, a pedido de Gino: mostrar si ya se
+// aprobó/rechazó sin tener que abrir Steel CRM aparte.
+const ESTADO_CRM_CFG = {
+  "enviado":       { label: "Enviado",       color: C.info, icon: "📤" },
+  "en negociación":{ label: "En negociación",color: C.warn, icon: "🤝" },
+  "aceptado":      { label: "Aceptado",      color: C.ok,   icon: "✅" },
+  "no aprobado":   { label: "No aprobado",   color: C.err,  icon: "❌" },
+  "recotizado":    { label: "Recotizado",    color: C.muted,icon: "🔄" },
+  "facturado":     { label: "Facturado",     color: C.ok,   icon: "🧾" },
+};
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
 const PRES_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "" };
@@ -2528,7 +2539,15 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <button style={BTN("ghost")} onClick={() => generarResumenInterno(pres, usuarios)} title="Resumen de uso interno con desglose de costos — no se envía al cliente">📊 Resumen interno</button>
           {vinculoCRM ? (
-            <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
+            <>
+              <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
+              {vinculoCRM.estado && ESTADO_CRM_CFG[vinculoCRM.estado] && (
+                <span style={{ ...BDG(ESTADO_CRM_CFG[vinculoCRM.estado].color, true), fontSize:13 }}
+                  title="Estado comercial real en Steel CRM">
+                  {ESTADO_CRM_CFG[vinculoCRM.estado].icon} CRM: {ESTADO_CRM_CFG[vinculoCRM.estado].label}
+                </span>
+              )}
+            </>
           ) : (
             <button style={BTN("ghost")} onClick={enviarSteelCRM} disabled={enviandoCRM}
               title="Crea el presupuesto en Steel CRM y lo vincula con este cálculo — directo, sin archivos de por medio">
