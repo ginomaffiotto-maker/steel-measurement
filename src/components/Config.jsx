@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
 import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { seedTestData } from "../utils/seedTestData";
+import { authorize, backupToDrive, restoreFromDrive, formatBackupDate } from "../utils/googleDrive";
 
 // ─── GESTIÓN DE USUARIOS ─────────────────────────────────────────────────
 // Mismo mecanismo que steelCRM (mismo backend Supabase compartido): no hay
@@ -299,6 +300,7 @@ function SimboloMoneda({ soloLectura }) {
 // ─── BACKUP Y DATOS ──────────────────────────────────────────────────────
 // Movido acá desde el sidebar (vivía como botones sueltos al pie, sin
 // relación visual con el resto de la configuración del sistema).
+const FREQ_MS = { "1h": 3600000, "1d": 86400000, "1w": 604800000 };
 function BackupYDatos({ usuario }) {
   const [pendingBackup, setPendingBackup] = useState(null);
   const [importErr, setImportErr] = useState("");
@@ -341,6 +343,65 @@ function BackupYDatos({ usuario }) {
     window.location.reload();
   };
 
+  // ── Google Drive (2026-09-03, a pedido de Gino — mismo mecanismo que ya
+  //    tiene Steel CRM) ──────────────────────────────────────────────────
+  const [driveClientId, setDriveClientId] = useState(() => localStorage.getItem("smeas_drive_client_id") || "");
+  const [driveFreq, setDriveFreq] = useState(() => localStorage.getItem("smeas_drive_freq") || "manual");
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveStatus, setDriveStatus] = useState("");
+  const [lastBackup, setLastBackup] = useState(() => localStorage.getItem("smeas_drive_last_backup") || "");
+  const [driveRestorePend, setDriveRestorePend] = useState(null);
+  const driveIntervalRef = useRef(null);
+
+  const runBackup = useCallback(async () => {
+    if (!driveClientId) return;
+    setDriveLoading(true); setDriveStatus("Guardando en Drive...");
+    try {
+      await backupToDrive(driveClientId);
+      const now = new Date().toISOString();
+      setLastBackup(now); localStorage.setItem("smeas_drive_last_backup", now);
+      setDriveConnected(true); setDriveStatus("✅ Respaldo guardado correctamente");
+    } catch (e) { setDriveStatus("❌ " + e.message); }
+    setDriveLoading(false);
+  }, [driveClientId]);
+
+  useEffect(() => {
+    if (driveIntervalRef.current) clearInterval(driveIntervalRef.current);
+    if (driveFreq !== "manual" && FREQ_MS[driveFreq] && driveClientId)
+      driveIntervalRef.current = setInterval(runBackup, FREQ_MS[driveFreq]);
+    return () => { if (driveIntervalRef.current) clearInterval(driveIntervalRef.current); };
+  }, [driveFreq, driveClientId, runBackup]);
+
+  function saveDriveSettings() {
+    localStorage.setItem("smeas_drive_client_id", driveClientId);
+    localStorage.setItem("smeas_drive_freq", driveFreq);
+  }
+  async function handleConnect() {
+    if (!driveClientId.trim()) { setDriveStatus("❌ Ingresá el Client ID"); return; }
+    setDriveLoading(true); setDriveStatus("Conectando...");
+    try { await authorize(driveClientId, true); setDriveConnected(true); saveDriveSettings(); setDriveStatus("✅ Conectado"); }
+    catch (e) { setDriveStatus("❌ " + e.message); }
+    setDriveLoading(false);
+  }
+  async function doRestoreDrive() {
+    setDriveLoading(true); setDriveStatus("Restaurando...");
+    try {
+      const payload = await restoreFromDrive(driveClientId);
+      if (!payload || payload.app !== "steel-measurement" || typeof payload.data !== "object") {
+        throw new Error("El respaldo encontrado no es válido para Steel Measurement.");
+      }
+      restoreBackup(payload);
+      setDriveConnected(true);
+      setDriveStatus("✅ Restaurado. Respaldo del " + formatBackupDate(payload.exported_at) + ". Recargá la app.");
+    } catch (e) { setDriveStatus("❌ " + e.message); }
+    setDriveLoading(false);
+  }
+  function handleRestoreDrive() {
+    if (!driveClientId.trim()) { setDriveStatus("❌ Ingresá el Client ID"); return; }
+    setDriveRestorePend(true);
+  }
+
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
       <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>💾 Backup y Datos</div>
@@ -359,6 +420,51 @@ function BackupYDatos({ usuario }) {
       </div>
       <input ref={fileInputRef} type="file" accept="application/json" onChange={onArchivo} style={{ display:"none" }} />
       {importErr && <div style={{ color:C.err, fontSize:11, fontWeight:600, marginTop:10 }}>⚠ {importErr}</div>}
+
+      {/* Google Drive (2026-09-03) — mismo mecanismo que ya tiene Steel CRM */}
+      <div style={{ marginTop:20, paddingTop:16, borderTop:`1px dashed ${C.border}` }}>
+        <div style={{ fontWeight:700, color:"#34a853", fontSize:12, marginBottom:4 }}>
+          ☁ Respaldo Google Drive
+          {driveConnected && <span style={{ marginLeft:8, fontSize:10, background:"#34a85322", color:"#34a853", padding:"2px 8px", borderRadius:10 }}>Conectado</span>}
+        </div>
+        <div style={{ fontSize:11, color:C.muted, marginBottom:12, lineHeight:1.6 }}>
+          Necesitás un Client ID de Google Cloud Console.{" "}
+          <span style={{ color:C.info, cursor:"pointer", textDecoration:"underline" }} onClick={() => window.open("https://console.cloud.google.com/apis/credentials", "_blank")}>Obtener Client ID</span>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
+          <div>
+            <label style={LBL}>Client ID de Google</label>
+            <input style={{ ...INP, fontFamily:"monospace", fontSize:11 }} value={driveClientId}
+              onChange={e => setDriveClientId(e.target.value.trim())} placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
+              disabled={!puedeEliminar(usuario)} />
+          </div>
+          <div>
+            <label style={LBL}>Frecuencia de respaldo automático</label>
+            <select style={INP} value={driveFreq} disabled={!puedeEliminar(usuario)}
+              onChange={e => { setDriveFreq(e.target.value); saveDriveSettings(); }}>
+              <option value="manual">Solo manual</option>
+              <option value="1h">Cada hora</option>
+              <option value="1d">Cada día</option>
+              <option value="1w">Cada semana</option>
+            </select>
+          </div>
+        </div>
+        {puedeEliminar(usuario) && (
+          <div style={{ marginTop:12, display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <button onClick={handleConnect} disabled={driveLoading} style={{ ...BTN("ghost"), borderColor:"#34a85366", color:"#34a853" }}>
+              {driveConnected ? "Reconectar" : "Conectar"}
+            </button>
+            <button onClick={runBackup} disabled={driveLoading || !driveConnected} style={{ ...BTN("ghost"), borderColor:C.info+"66", color:C.info }}>
+              Respaldar ahora
+            </button>
+            <button onClick={handleRestoreDrive} disabled={driveLoading || !driveConnected} style={{ ...BTN("ghost") }}>
+              Restaurar desde Drive
+            </button>
+          </div>
+        )}
+        {lastBackup && <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Último respaldo: <strong style={{ color:C.text }}>{formatBackupDate(lastBackup)}</strong></div>}
+        {driveStatus && <div style={{ marginTop:8, fontSize:12, color: driveStatus.startsWith("✅") ? "#34a853" : driveStatus.startsWith("❌") ? C.err : C.info, fontWeight:600 }}>{driveLoading && "⏳ "}{driveStatus}</div>}
+      </div>
 
       {/* Fase 4 (piloto, 2026-08-23) — MIGRACIÓN DE UNA SOLA VEZ.
           Sube todo lo que ya está en localStorage al backend real. Una vez
@@ -404,6 +510,16 @@ function BackupYDatos({ usuario }) {
           labelBoton="♻️ Restaurar y reemplazar todo"
           onConfirm={confirmarRestaurar}
           onClose={() => setPendingBackup(null)}
+        />
+      )}
+      {driveRestorePend && (
+        <ModalConfirmarEliminar
+          verbo="Restaurar"
+          titulo="el último respaldo de Google Drive"
+          subtitulo="Esto reemplaza TODOS los datos actuales de la app (presupuestos, cómputos, historial, biblioteca) por los del respaldo en Drive. No se puede deshacer."
+          labelBoton="♻️ Restaurar y reemplazar todo"
+          onConfirm={() => { doRestoreDrive(); setDriveRestorePend(null); }}
+          onClose={() => setDriveRestorePend(null)}
         />
       )}
     </div>
