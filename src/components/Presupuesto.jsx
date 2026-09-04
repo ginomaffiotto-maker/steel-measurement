@@ -3021,9 +3021,20 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const [syncPendientes, setSyncPendientes] = useState(() => obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
   const [syncError, setSyncError] = useState(null);
   const refrescarSyncPendientes = () => setSyncPendientes(obtenerSyncPendientes().filter(p => p.tipo === "presupuesto"));
+  // Bug real (2026-09-04, reportado por Gino con captura): `smeas_sync_pendientes`
+  // es una key de localStorage compartida, sin distinguir de qué usuario es
+  // — si el guardado de un presupuesto falla estando logueado como Gino y
+  // más tarde otro usuario (sin ser dueño ni admin/supervisor) entra en el
+  // mismo navegador, el cartel le sigue apareciendo A ÉL, y "Reintentar
+  // ahora" le va a fallar SIEMPRE (el candado de dueño, agregado el 3/9,
+  // bloquea la escritura para cualquiera que no sea el dueño o admin/
+  // supervisor) — un loop de error sin salida posible para esa persona.
+  // Se filtra a lo que este usuario realmente puede resolver.
+  const puedeReintentar = (p) => !p || !p.vendedor || String(p.vendedor) === String(usuario?.id) || ["admin", "supervisor"].includes(usuario?.rol);
+  const syncPendientesVisibles = syncPendientes.filter(sp => puedeReintentar(presupuestos.find(x => x.id === sp.id)));
   const reintentarSync = () => {
     setSyncError(null);
-    syncPendientes.forEach(sp => {
+    syncPendientesVisibles.forEach(sp => {
       const p = presupuestos.find(x => x.id === sp.id);
       if (p) dualWritePresupuesto(p);
       else { limpiarSyncPendiente("presupuesto", sp.id); refrescarSyncPendientes(); }
@@ -3252,10 +3263,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
 
       {/* Aviso de presupuestos sin sincronizar a la nube — mismo mecanismo
           agregado del lado de Steel CRM (2026-08-29) */}
-      {syncPendientes.length > 0 && (
+      {syncPendientesVisibles.length > 0 && (
         <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <span>☁️ <strong>{syncPendientes.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
+            <span>☁️ <strong>{syncPendientesVisibles.length}</strong> presupuesto(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
             <button onClick={reintentarSync} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
               Reintentar ahora
             </button>

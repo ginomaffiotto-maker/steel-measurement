@@ -574,16 +574,32 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
   // patrón que ya tiene Steel CRM desde el 2/9 (tenant_settings, gana la
   // nube sobre lo local si hay algo guardado, recién ahí se habilita
   // guardar hacia la nube para no subir lo local viejo antes de leer).
+  // `empresaSyncEstado` es el reemplazo del "botón Guardar" que Gino
+  // esperaba acá — el campo ya guardaba solo en cada tecla (auto-save,
+  // mismo criterio que el resto de Config), pero no había ninguna señal
+  // visible de si esa escritura llegó a la nube o falló en silencio.
+  const [empresaSyncEstado, setEmpresaSyncEstado] = useState(null); // null | "ok" | "error"
   const empresaCloudReady = useRef(false);
   useEffect(() => {
     loadTenantSettingDB("empresa").then(remoto => {
       if (remoto) { setEmpresa(remoto); saveLS("smeas_empresa", remoto); }
+      else if (empresa) {
+        // Backfill (2026-09-04): si la nube todavía no tiene nada pero
+        // este dispositivo ya tenía un nombre cargado de antes de que
+        // existiera este sync, se sube tal cual en vez de esperar a que
+        // alguien lo vuelva a tipear a mano.
+        saveTenantSettingDB("empresa", empresa).then(() => setEmpresaSyncEstado("ok")).catch(err => { console.warn("saveTenantSettingDB empresa (backfill)", err); setEmpresaSyncEstado("error"); });
+      }
       empresaCloudReady.current = true;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }).catch(err => { console.warn("[Fase 5] No se pudo leer el nombre de empresa de la nube:", err); empresaCloudReady.current = true; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const guardarEmpresa = (v) => {
     setEmpresa(v); saveLS("smeas_empresa", v);
-    if (empresaCloudReady.current) saveTenantSettingDB("empresa", v).catch(err => console.warn("saveTenantSettingDB empresa", err));
+    if (empresaCloudReady.current) {
+      saveTenantSettingDB("empresa", v).then(() => setEmpresaSyncEstado("ok")).catch(err => { console.warn("saveTenantSettingDB empresa", err); setEmpresaSyncEstado("error"); });
+    }
   };
   // Mismos campos que se agregaron en Steel CRM (mismo PDF compartido) —
   // direccion/RUT/tel/email/web/logo, guardados en un solo objeto.
@@ -591,13 +607,26 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
   const empresaDatosCloudReady = useRef(false);
   useEffect(() => {
     loadTenantSettingDB("empresa_datos").then(remoto => {
-      if (remoto) setEmpresaDatos(prev => { const n = { ...prev, ...remoto }; saveLS("smeas_empresa_datos", n); return n; });
+      if (remoto) {
+        setEmpresaDatos(prev => { const n = { ...prev, ...remoto }; saveLS("smeas_empresa_datos", n); return n; });
+      } else {
+        // Backfill, mismo criterio que "empresa" — solo si hay algo
+        // real cargado localmente (no manda un objeto vacío de arranque).
+        setEmpresaDatos(prev => {
+          if (Object.values(prev).some(v => v)) {
+            saveTenantSettingDB("empresa_datos", prev).then(() => setEmpresaSyncEstado("ok")).catch(err => { console.warn("saveTenantSettingDB empresa_datos (backfill)", err); setEmpresaSyncEstado("error"); });
+          }
+          return prev;
+        });
+      }
       empresaDatosCloudReady.current = true;
     }).catch(err => { console.warn("[Fase 5] No se pudo leer los datos de empresa de la nube:", err); empresaDatosCloudReady.current = true; });
   }, []);
   const setEmpresaDato = (k, v) => setEmpresaDatos(prev => {
     const n = { ...prev, [k]: v }; saveLS("smeas_empresa_datos", n);
-    if (empresaDatosCloudReady.current) saveTenantSettingDB("empresa_datos", n).catch(err => console.warn("saveTenantSettingDB empresa_datos", err));
+    if (empresaDatosCloudReady.current) {
+      saveTenantSettingDB("empresa_datos", n).then(() => setEmpresaSyncEstado("ok")).catch(err => { console.warn("saveTenantSettingDB empresa_datos", err); setEmpresaSyncEstado("error"); });
+    }
     return n;
   });
   const logoRef = useRef();
@@ -661,9 +690,14 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
         {seccion === "empresa" && (
           <div>
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
-              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🏢 Datos de la empresa</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                <div style={{ fontWeight:700, color:C.accent, fontSize:13 }}>🏢 Datos de la empresa</div>
+                {empresaSyncEstado === "ok" && <span style={{ fontSize:11, color:C.ok }}>☁️ Sincronizado — visible en cualquier dispositivo</span>}
+                {empresaSyncEstado === "error" && <span style={{ fontSize:11, color:C.err }}>⚠️ No se pudo sincronizar — quedó solo en este dispositivo</span>}
+              </div>
               <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
                 Aparece en el PDF de presupuesto y donde el sistema muestre el nombre de la empresa. Sin el nombre configurado, el PDF sale sin nombre de empresa.
+                Se guarda solo, sin botón — cada cambio viaja a la nube al instante.
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
                 <div style={{ gridColumn:"span 2" }}>
