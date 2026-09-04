@@ -64,7 +64,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
     <div>
       <div style={{ fontWeight: 800, fontSize: 20, color: C.text, marginBottom: 4 }}>📥 Mis solicitudes asignadas</div>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>
-        Cargadas y asignadas desde steelCRM — mismo backend, sin pasos manuales.
+        Cargadas y asignadas desde Steel CRM — mismo backend, sin pasos manuales.
       </div>
 
       {cargando && <div style={{ color: C.muted, fontSize: 13 }}>Cargando…</div>}

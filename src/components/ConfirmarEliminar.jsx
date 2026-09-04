@@ -79,7 +79,7 @@ export function ModalConfirmarEliminar({ titulo, subtitulo, labelBoton, verbo, o
         <label style={LBL}>{usuarioPropio ? "Tu contraseña" : "Contraseña"}</label>
         <input type="password" value={pass} autoFocus={!!usuarioPropio}
           onChange={e => { setPass(e.target.value); setErr(""); }}
-          placeholder="••••••" required autoComplete="current-password"
+          placeholder="••••••" required autoComplete="new-password"
           style={{ ...INP, marginBottom: err ? 6 : 16, border: `1.5px solid ${err ? C.err : C.border}` }} />
         {err && <div style={{ color:C.err, fontSize:11, marginBottom:14, fontWeight:600 }}>⚠ {err}</div>}
         <div style={{ display:"flex", gap:8 }}>

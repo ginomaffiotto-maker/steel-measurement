@@ -2532,7 +2532,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           <div style={{ fontWeight:800, fontSize:17, color:C.accent }}>{pres.nombre||"Presupuesto sin nombre"}</div>
           <div style={{ fontSize:13, color:C.muted }}>
             {pres.nro} · {pres.fecha}
-            {pres.codigo_calculo && <span title="Código de cálculo — vincula este presupuesto con steelCRM (idsCalc)"> · 🔗 {pres.codigo_calculo}</span>}
+            {pres.codigo_calculo && <span title="Código de cálculo — vincula este presupuesto con Steel CRM (idsCalc)"> · 🔗 {pres.codigo_calculo}</span>}
             {pres.clonado_de && <span> · 📋 clonado de {origenNro || pres.clonado_de}</span>}
           </div>
         </div>
