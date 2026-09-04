@@ -22,7 +22,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
     supabase.from("solicitudes").select("*")
       .eq("asignado_a", usuario.profileId)
       .eq("eliminado", false)
-      .not("estado", "in", '("ganada","perdida")')
+      .not("estado", "in", '("ganada","perdida","no cotizado")')
       .then(({ data, error: err }) => {
         if (err) { setError(err.message); setCargando(false); return; }
         setSolicitudes(data || []);
