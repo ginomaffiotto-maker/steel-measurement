@@ -14,7 +14,7 @@ import { authorize, backupToDrive, restoreFromDrive, formatBackupDate } from "..
 // persona elige su propia contraseña. Cambiar el rol de alguien con cuenta
 // real (profileId) sincroniza profiles.rol en Supabase, permitido solo a
 // admin por la política profiles_update_admin.
-const ROL_LABEL = { admin: "Administrador", supervisor: "Gerencia", vendedor: "Vendedor" };
+const ROL_LABEL = { admin: "Administrador", supervisor: "Supervisor", vendedor: "Vendedor" };
 
 function MiCuenta({ usuario }) {
   const [p1, setP1] = useState(""); const [p2, setP2] = useState("");
@@ -137,7 +137,7 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
             <input value={nombreEdit} onChange={e=>setNombreEdit(e.target.value)} style={{ ...INP, flex:"1 1 140px" }} placeholder="Nombre" />
             <select value={rolEdit} onChange={e=>setRolEdit(e.target.value)} style={{ ...INP, width:150 }}>
               <option value="admin">Administrador</option>
-              <option value="supervisor">Gerencia</option>
+              <option value="supervisor">Supervisor</option>
               <option value="vendedor">Vendedor</option>
             </select>
           </div>
@@ -229,7 +229,7 @@ function InvitarUsuario({ setUsuarios }) {
         <div><label style={LBL}>Rol</label>
           <select style={INP} value={form.rol} onChange={e=>setForm(f=>({...f, rol:e.target.value}))}>
             <option value="admin">Administrador</option>
-            <option value="supervisor">Gerencia</option>
+            <option value="supervisor">Supervisor</option>
             <option value="vendedor">Vendedor</option>
           </select>
         </div>
@@ -897,7 +897,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
               <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>👤 Equipo</div>
               <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-                Administrador ve todo el sistema · Gerencia ve el equipo y aprueba · Vendedor ve sus propios datos.
+                Administrador ve todo el sistema · Supervisor ve el equipo y aprueba · Vendedor ve sus propios datos.
                 No se puede eliminar el último Administrador.
               </div>
               <EquipoUsuarios usuarios={usuarios} setUsuarios={setUsuarios} usuario={usuario} esAdmin={usuario?.rol === "admin"} />
