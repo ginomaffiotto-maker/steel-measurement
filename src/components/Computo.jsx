@@ -1075,6 +1075,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         piezas: it.piezas.map(p => ({ ...p, id: uid(), ficha: { ...p.ficha } })),
       })),
       ...stamp(),
+      // Bug real (2026-09-04, reportado por Gino): clonar un cómputo de
+      // otro usuario copiaba también su `vendedor` — el clon, que es un
+      // registro nuevo, quedaba "de otro" desde el primer segundo y el
+      // candado de dueño (esDeOtro) lo bloqueaba igual que al original.
+      // El dueño del clon pasa a ser quien clona.
+      vendedor: usuario?.id || "",
     };
     setComputos(prev=>[nuevoC,...prev]);
     setSelId(nuevoC.id);

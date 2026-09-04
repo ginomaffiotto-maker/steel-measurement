@@ -1193,7 +1193,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const clonarAnidado = (a) => {
     const nuevo = { ...a, id: uid(), nombre: `${a.nombre} (copia)`,
       grupos: a.grupos.map(g => ({ ...g, id: uid(), piezas: (g.piezas||[]).map(p => ({ ...p, id: uid() })) })),
-      comentarios: [], ...stamp() };
+      comentarios: [], ...stamp(),
+      // Mismo bug real que Computo.jsx (2026-09-04, reportado por Gino):
+      // clonar copiaba también el `vendedor` del original — el clon
+      // quedaba bloqueado por el candado de dueño desde el primer
+      // segundo. El dueño del clon pasa a ser quien clona.
+      vendedor: usuario?.id || "" };
     save([nuevo, ...anidados]);
     setSelId(nuevo.id);
     dualWriteAnidado(nuevo);

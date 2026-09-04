@@ -3166,6 +3166,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       id: uid(), clonado_de: p.id, estado: "borrador",
       fecha: new Date().toISOString().slice(0, 10),
       ...stamp(),
+      // Mismo bug real que Computo.jsx/Anidado.jsx (2026-09-04, reportado
+      // por Gino): clonar copiaba también el `vendedor` del original — el
+      // clon quedaba bloqueado por el candado de dueño desde el primer
+      // segundo. El dueño del clon pasa a ser quien clona.
+      vendedor: usuario?.id || "",
     };
     nuevo.nro = newNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
