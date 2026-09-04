@@ -61,6 +61,17 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
     || usuarios.find(u => u.email && u.email.toLowerCase() === authUser.email.toLowerCase());
   const { data: profile, error: profileError } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
   if (profileError || !profile) return existente || null;
+  // Control de acceso por módulo (2026-09-04, pedido de Gino): la cuenta es
+  // real y el login con Supabase Auth ya pasó, pero eso no implica acceso a
+  // ESTE producto puntual — CRM y Costos se pueden vender por separado
+  // dentro de la misma empresa. Si el checkbox de este módulo está apagado
+  // (Config > Usuarios, cualquiera de los dos sistemas), se cierra la
+  // sesión al toque y no se deja entrar — sin esto, cualquier cuenta creada
+  // para el otro producto entraba acá gratis.
+  if (profile.acceso_costos === false) {
+    await supabase.auth.signOut();
+    return { accesoDenegado: true };
+  }
   // "Invitado — pendiente" (2026-09-03, mismo mecanismo que steelCRM): esta
   // es la primera vez que la sesión real de esta persona pasa por acá — si
   // el perfil todavía dice pendiente, ya dejó de estarlo. Fire-and-forget,
@@ -70,8 +81,12 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
       .then(({ error }) => { if (error) console.warn("clear invitado_pendiente", error); });
   }
   if (existente) {
-    const actualizado = { ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol, pendienteInvitacion: false };
-    if (actualizado.nombre !== existente.nombre || actualizado.rol !== existente.rol || existente.profileId !== authUser.id || existente.pendienteInvitacion) {
+    const actualizado = {
+      ...existente, profileId: authUser.id, nombre: profile.nombre, rol: profile.rol, pendienteInvitacion: false,
+      accesoCrm: profile.acceso_crm !== false, accesoCostos: profile.acceso_costos !== false,
+    };
+    if (actualizado.nombre !== existente.nombre || actualizado.rol !== existente.rol || existente.profileId !== authUser.id || existente.pendienteInvitacion
+      || actualizado.accesoCrm !== existente.accesoCrm || actualizado.accesoCostos !== existente.accesoCostos) {
       setUsuarios(prev => prev.map(u => u.id === existente.id ? actualizado : u));
     }
     return actualizado;
@@ -80,6 +95,7 @@ async function resolverUsuarioLocal(authUser, usuarios, setUsuarios) {
     id: Date.now(), profileId: authUser.id, nombre: profile.nombre, rol: profile.rol,
     emoji: profile.emoji || "👤", foto: profile.foto || "", clave: "",
     email: authUser.email, pendienteInvitacion: false,
+    accesoCrm: profile.acceso_crm !== false, accesoCostos: profile.acceso_costos !== false,
   };
   setUsuarios(prev => [...prev, nuevo]);
   return nuevo;
@@ -101,6 +117,7 @@ async function sincronizarUsuariosDesdeProfiles(usuarios, setUsuarios) {
       id: Date.now() + i, profileId: p.id, nombre: p.nombre, rol: p.rol,
       emoji: p.emoji || "👤", foto: p.foto || "", clave: "", email: "",
       pendienteInvitacion: !!p.invitado_pendiente,
+      accesoCrm: p.acceso_crm !== false, accesoCostos: p.acceso_costos !== false,
     }))];
   });
 }
@@ -192,6 +209,11 @@ function Login({ usuarios, setUsuarios, onLogin }) {
     const authUser = data.user;
     const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
     setCargando(false);
+    if (local?.accesoDenegado) {
+      setErr("Tu cuenta no tiene acceso a Steel Costos. Pedile a un administrador que te lo habilite en Config > Usuarios.");
+      setPass("");
+      return;
+    }
     if (!local) {
       setErr("Tu cuenta no tiene un perfil asignado todavía — avisale al administrador.");
       return;
@@ -369,7 +391,11 @@ export default function App() {
         const authUser = data?.session?.user;
         if (authUser) {
           const local = await resolverUsuarioLocal(authUser, usuarios, setUsuarios);
-          if (local) setUsuario(local);
+          // Si el acceso a este módulo se apagó mientras la sesión seguía
+          // abierta en este dispositivo, resolverUsuarioLocal ya cerró la
+          // sesión real (signOut) — acá no queda nada más que hacer, el
+          // usuario se va a quedar en la pantalla de login.
+          if (local && !local.accesoDenegado) setUsuario(local);
         }
       }
       marcarActividad();

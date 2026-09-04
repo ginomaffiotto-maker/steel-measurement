@@ -55,7 +55,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { nombre, email, rol } = req.body || {};
+  const { nombre, email, rol, accesoCrm, accesoCostos } = req.body || {};
   if (!nombre?.trim() || !email?.trim()) {
     res.status(400).json({ error: 'Ingresá nombre y email.' });
     return;
@@ -100,12 +100,18 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Control de acceso por módulo (2026-09-04): quien invita elige acá si
+  // la cuenta nueva entra a CRM, a Costos, o a los dos — por default,
+  // ambos `false` si no viene nada en el body (nunca se asume acceso de
+  // más sin que el checkbox correspondiente lo haya marcado).
   const { error: eProfile } = await admin.from('profiles').insert({
     id: created.user.id,
     tenant_id: callerProfile.tenant_id,
     nombre: nombre.trim(),
     rol,
     invitado_pendiente: true,
+    acceso_crm: !!accesoCrm,
+    acceso_costos: !!accesoCostos,
   });
   if (eProfile) {
     res.status(500).json({ error: 'La invitación se mandó, pero falló crear el perfil: ' + eProfile.message });

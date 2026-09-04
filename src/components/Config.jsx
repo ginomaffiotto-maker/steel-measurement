@@ -50,15 +50,20 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
   const [editId, setEditId] = useState(null);
   const [rolEdit, setRolEdit] = useState("vendedor");
   const [nombreEdit, setNombreEdit] = useState("");
+  const [accesoCrmEdit, setAccesoCrmEdit] = useState(true);
+  const [accesoCostosEdit, setAccesoCostosEdit] = useState(true);
   const objDel = usuarios.find(u => u.id === confirmarDelId);
   const admins = usuarios.filter(u => u.rol === "admin");
 
-  const abrirEdit = (u) => { setEditId(u.id); setRolEdit(u.rol); setNombreEdit(u.nombre); };
+  const abrirEdit = (u) => {
+    setEditId(u.id); setRolEdit(u.rol); setNombreEdit(u.nombre);
+    setAccesoCrmEdit(u.accesoCrm !== false); setAccesoCostosEdit(u.accesoCostos !== false);
+  };
   const guardarEdit = () => {
     const original = usuarios.find(u => u.id === editId);
-    setUsuarios(prev => prev.map(u => u.id === editId ? { ...u, nombre: nombreEdit, rol: rolEdit } : u));
+    setUsuarios(prev => prev.map(u => u.id === editId ? { ...u, nombre: nombreEdit, rol: rolEdit, accesoCrm: accesoCrmEdit, accesoCostos: accesoCostosEdit } : u));
     if (original?.profileId && supabase) {
-      supabase.from("profiles").update({ rol: rolEdit, nombre: nombreEdit }).eq("id", original.profileId)
+      supabase.from("profiles").update({ rol: rolEdit, nombre: nombreEdit, acceso_crm: accesoCrmEdit, acceso_costos: accesoCostosEdit }).eq("id", original.profileId)
         .then(({ error }) => { if (error) console.warn("update profile rol", error); });
     }
     setEditId(null);
@@ -111,6 +116,12 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
                 {u.pendienteInvitacion && <span style={{ fontSize:10, color:C.warn, background:C.warn+"22", padding:"1px 6px", borderRadius:10, marginLeft:6 }}>⏳ Invitado — pendiente</span>}</div>
               {!u.profileId && <div style={{ fontSize:10, color:C.muted }}>Sin cuenta real todavía</div>}
             </div>
+            {u.profileId && (
+              <div style={{ display:"flex", gap:4 }} title="Módulos con acceso">
+                <span style={{ fontSize:10, padding:"1px 6px", borderRadius:10, background: u.accesoCostos!==false ? C.ok+"22" : C.border+"44", color: u.accesoCostos!==false ? C.ok : C.muted }}>Costos</span>
+                <span style={{ fontSize:10, padding:"1px 6px", borderRadius:10, background: u.accesoCrm!==false ? C.ok+"22" : C.border+"44", color: u.accesoCrm!==false ? C.ok : C.muted }}>CRM</span>
+              </div>
+            )}
             <div style={{ fontSize:12, color:C.muted, minWidth:100 }}>{ROL_LABEL[u.rol] || u.rol}</div>
             {esAdmin && <button onClick={() => abrirEdit(u)} style={{ background:"none", border:"none", color:C.accent, cursor:"pointer", fontSize:12 }}>✏️</button>}
             {esAdmin && !esUltimoAdmin && usuario?.id !== u.id && (
@@ -129,6 +140,17 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
               <option value="supervisor">Gerencia</option>
               <option value="vendedor">Vendedor</option>
             </select>
+          </div>
+          <div style={{ marginTop:8 }}>
+            <label style={{ ...LBL, marginBottom:2 }}>Módulos con acceso</label>
+            <div style={{ display:"flex", gap:16 }}>
+              <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, cursor:"pointer" }}>
+                <input type="checkbox" checked={accesoCostosEdit} onChange={e=>setAccesoCostosEdit(e.target.checked)} /> Steel Costos
+              </label>
+              <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, cursor:"pointer" }}>
+                <input type="checkbox" checked={accesoCrmEdit} onChange={e=>setAccesoCrmEdit(e.target.checked)} /> Steel CRM
+              </label>
+            </div>
           </div>
           <div style={{ marginTop:8, display:"flex", gap:8 }}>
             <button onClick={guardarEdit} style={{ ...BTN("ghost"), fontSize:12, padding:"6px 14px" }}>💾 Guardar</button>
@@ -156,12 +178,17 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
 // Steel CRM (api/invitar-usuario.js de ese repo) — reemplaza el flujo
 // viejo de "generar comando y pegarlo en la terminal" (crear-usuario.mjs).
 function InvitarUsuario({ setUsuarios }) {
-  const [form, setForm] = useState({ nombre:"", email:"", rol:"vendedor" });
+  // accesoCostos arranca tildado (es el módulo desde donde se está
+  // invitando), accesoCrm arranca destildado — quien invita decide acá
+  // mismo si la cuenta nueva entra a los dos o solo a este (2026-09-04,
+  // control de acceso por módulo, pedido de Gino).
+  const [form, setForm] = useState({ nombre:"", email:"", rol:"vendedor", accesoCrm:false, accesoCostos:true });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [cargando, setCargando] = useState(false);
   const invitar = async () => {
     if (!form.nombre.trim() || !form.email.trim()) { alert("Ingresá nombre y email"); return; }
+    if (!form.accesoCrm && !form.accesoCostos) { alert("Tildá al menos un módulo (CRM y/o Costos)."); return; }
     if (!supabase) { setErr("Backend no configurado"); return; }
     setCargando(true); setErr(""); setMsg("");
     try {
@@ -171,11 +198,11 @@ function InvitarUsuario({ setUsuarios }) {
       const r = await fetch("https://steelcostos.vercel.app/api/invitar-usuario", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-        body: JSON.stringify({ nombre: form.nombre.trim(), email: form.email.trim(), rol: form.rol }),
+        body: JSON.stringify({ nombre: form.nombre.trim(), email: form.email.trim(), rol: form.rol, accesoCrm: form.accesoCrm, accesoCostos: form.accesoCostos }),
       });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || "No se pudo invitar."); setCargando(false); return; }
-      setMsg(`✅ Invitación enviada a ${form.email.trim()} — le va a llegar un correo para elegir su propia contraseña. Sirve para entrar acá y a Steel CRM (mismo backend), si el tenant también lo usa.`);
+      setMsg(`✅ Invitación enviada a ${form.email.trim()} — le va a llegar un correo para elegir su propia contraseña.`);
       // Reflejo instantáneo en la lista de Equipo (2026-09-03, "Invitado —
       // pendiente", mismo patrón que steelCRM) — sin esto, la persona
       // invitada no aparecía en ningún lado hasta que alguien recargara la
@@ -184,8 +211,9 @@ function InvitarUsuario({ setUsuarios }) {
       setUsuarios(prev => [...prev, {
         id: Date.now(), profileId: d.userId, nombre: form.nombre.trim(), rol: form.rol,
         emoji: "👤", foto: "", clave: "", email: form.email.trim(), pendienteInvitacion: true,
+        accesoCrm: form.accesoCrm, accesoCostos: form.accesoCostos,
       }]);
-      setForm({ nombre:"", email:"", rol:"vendedor" });
+      setForm({ nombre:"", email:"", rol:"vendedor", accesoCrm:false, accesoCostos:true });
     } catch (e) {
       setErr("No se pudo invitar: " + e.message);
     }
@@ -204,6 +232,17 @@ function InvitarUsuario({ setUsuarios }) {
             <option value="supervisor">Gerencia</option>
             <option value="vendedor">Vendedor</option>
           </select>
+        </div>
+      </div>
+      <div style={{ marginTop:10 }}>
+        <label style={LBL}>Módulos con acceso</label>
+        <div style={{ display:"flex", gap:16, marginTop:4 }}>
+          <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, cursor:"pointer" }}>
+            <input type="checkbox" checked={form.accesoCostos} onChange={e=>setForm(f=>({...f, accesoCostos:e.target.checked}))} /> Steel Costos
+          </label>
+          <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, cursor:"pointer" }}>
+            <input type="checkbox" checked={form.accesoCrm} onChange={e=>setForm(f=>({...f, accesoCrm:e.target.checked}))} /> Steel CRM
+          </label>
         </div>
       </div>
       <button onClick={invitar} disabled={cargando} style={{ ...BTN("ghost"), marginTop:10, fontSize:12, padding:"6px 14px", opacity: cargando?0.6:1 }}>{cargando ? "Enviando..." : "✉️ Enviar invitación"}</button>
