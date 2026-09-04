@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -15,7 +15,7 @@ import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { MAQUINAS_OPTS } from "./Computo";
 import FiltrosBar from "./FiltrosBar";
-import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import { Combobox, normalizarTexto } from "./Combobox";
 
 const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
@@ -690,9 +690,13 @@ function importar(computo_id, bib_map, bib_planchas_map) {
   const mergearFicha = (destino, pf) => {
     if (!pf) return destino;
     const f = { ...destino };
-    if (pf.granallado) f.granallado = true;
-    if (pf.pintura) f.pintura = true;
-    if (pf.galvanizado) f.galvanizado = true;
+    // 2026-09-03, a pedido de Gino: los % parciales de tratamiento (que ya
+    // se cargan pieza por pieza en Cómputo) tampoco viajaban a Anidado —
+    // mismo criterio de ambigüedad que precio_raw/maquina: el primero que
+    // aparece entre las piezas del grupo, ninguno pisa uno ya cargado.
+    if (pf.granallado) { f.granallado = true; if (pf.pct_granallado != null && f.pct_granallado == null) f.pct_granallado = pf.pct_granallado; }
+    if (pf.pintura) { f.pintura = true; if (pf.pct_pintura != null && f.pct_pintura == null) f.pct_pintura = pf.pct_pintura; }
+    if (pf.galvanizado) { f.galvanizado = true; if (pf.pct_galvanizado != null && f.pct_galvanizado == null) f.pct_galvanizado = pf.pct_galvanizado; }
     // Bug real (2026-09-02, reportado por Gino con captura): solo se
     // copiaba el NOMBRE de la máquina, nunca el flag corte_maquina en sí —
     // por eso el resumen de Anidado nunca mostraba "Corte de máquina"
@@ -837,11 +841,54 @@ function materialesUnificados(anidado, tc) {
   });
 }
 
+// Busca un material en el catálogo real (localStorage + seed precargado,
+// mismo criterio que FichaHierroModal en Presupuesto.jsx) — perfiles y
+// planchuelas comparten el bucket "perfil" acá (mismo agrupamiento que ya
+// usa materialesUnificados/bibLineales), planchas van aparte.
+const CATALOGOS_ANIDADO_SEED = {
+  perfil: [
+    ["smeas_perfiles","perfil", PERFILES_DATA, IDS_UNIFICADOS_GM],
+    ["smeas_planchuelas","planchuela", PLANCHUELAS_DATA, undefined],
+  ],
+  plancha: [["smeas_planchas","plancha", PLANCHAS_DATA, undefined]],
+};
+function buscarMaterialCatalogo(nombre, tipoGrupo) {
+  const n = (nombre||"").trim().toLowerCase();
+  if (!n) return null;
+  for (const [catKey, tipoDB, seedData, ids] of (CATALOGOS_ANIDADO_SEED[tipoGrupo]||[])) {
+    const combinado = migrar(mergeSeed(loadLS(catKey, null), seedData, ids));
+    const found = combinado.find(m => (m.nombre||"").trim().toLowerCase() === n);
+    if (found) return { catKey, tipoDB, item: found, enLocal: loadLS(catKey, []).some(it=>it.id===found.id) };
+  }
+  return null;
+}
+
 function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
   const materiales = materialesUnificados(anidado, tcGlobal);
   const totalKg = materiales.reduce((s,m)=>s+m.kg,0);
   const totalUsd = materiales.reduce((s,m)=>s+m.precio_total,0);
   const sinCalcular = (anidado?.grupos||[]).length - materiales.length;
+  const [, setTick] = useState(0);
+  const [verFichaMat, setVerFichaMat] = useState(null); // { catKey, tipoDB, item, enLocal }
+  const guardarFicha = (matActualizado) => {
+    if (!verFichaMat) return;
+    const t = touch(matActualizado);
+    const actuales = loadLS(verFichaMat.catKey, []);
+    saveLS(verFichaMat.catKey, verFichaMat.enLocal
+      ? actuales.map(it => it.id === t.id ? t : it)
+      : [...actuales, t]);
+    if (supabase) {
+      const { historial_precios, ...rowDB } = t;
+      saveDBMaterial(verFichaMat.tipoDB, rowDB).catch(e => console.warn("[Fase 3] No se pudo sincronizar material:", e.message || e));
+    }
+    setTick(x => x + 1);
+  };
+  const eliminarFicha = (id) => {
+    if (!verFichaMat) return;
+    saveLS(verFichaMat.catKey, loadLS(verFichaMat.catKey, []).filter(it => it.id !== id));
+    setTick(x => x + 1);
+    setVerFichaMat(null);
+  };
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
@@ -874,15 +921,23 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
                       un sí/no por grupo entero — con dos piezas del mismo
                       material pasando por máquinas distintas, la segunda se
                       perdía. Cada máquina se lista aparte con sus kg. */}
-                  {[
-                    m.procesos.granallado_kg>0 && `◈ Granallado (${n2(m.procesos.granallado_kg)}kg)`,
-                    m.procesos.pintura_kg>0 && `🎨 Pintura (${n2(m.procesos.pintura_kg)}kg)`,
-                    m.procesos.galvanizado_kg>0 && `🔩 Galvanizado (${n2(m.procesos.galvanizado_kg)}kg)`,
-                    ...Object.entries(m.procesos.corte_por_maquina).map(([maq,kgMaq]) => `⚙ ${maq} (${n2(kgMaq)}kg)`),
-                    m.procesos.plegado_kg>0 && `🗜️ Plegado (${n2(m.procesos.plegado_kg)}kg)`,
-                    m.procesos.cilindrado_kg>0 && `🌀 Cilindrado (${n2(m.procesos.cilindrado_kg)}kg)`,
-                    m.precio_manual && "$ Precio manual",
-                  ].filter(Boolean).join(" · ") || "—"}
+                  <span style={{ marginRight:6 }}>
+                    {[
+                      m.procesos.granallado_kg>0 && `◈ Granallado (${n2(m.procesos.granallado_kg)}kg)`,
+                      m.procesos.pintura_kg>0 && `🎨 Pintura (${n2(m.procesos.pintura_kg)}kg)`,
+                      m.procesos.galvanizado_kg>0 && `🔩 Galvanizado (${n2(m.procesos.galvanizado_kg)}kg)`,
+                      ...Object.entries(m.procesos.corte_por_maquina).map(([maq,kgMaq]) => `⚙ ${maq} (${n2(kgMaq)}kg)`),
+                      m.procesos.plegado_kg>0 && `🗜️ Plegado (${n2(m.procesos.plegado_kg)}kg)`,
+                      m.procesos.cilindrado_kg>0 && `🌀 Cilindrado (${n2(m.procesos.cilindrado_kg)}kg)`,
+                      m.precio_manual && "$ Precio manual",
+                    ].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                  {/* 2026-09-03, a pedido de Gino: acá antes era solo texto —
+                      sin forma de ver/editar el precio o los datos técnicos
+                      reales del material sin salir a Insumos y Precios. */}
+                  <button onClick={()=>setVerFichaMat(buscarMaterialCatalogo(m.nombre, m.tipo))}
+                    title="Ver ficha completa del material en el catálogo"
+                    style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:4, color:C.accent, cursor:"pointer", fontSize:11, padding:"1px 6px" }}>📋</button>
                 </td>
               </tr>
             ))}
@@ -892,6 +947,12 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
       <div style={{ marginTop:10, fontSize:11, color:C.muted }}>
         Para llevar esta lista a un presupuesto: en Presupuesto → ítem → pestaña Hierros → vinculá este anidado desde el desplegable → "⬇ Importar materiales del anidado".
       </div>
+      {verFichaMat && (
+        <FichaModal mat={verFichaMat.item} tipo={verFichaMat.tipoDB}
+          onClose={()=>setVerFichaMat(null)}
+          onUpdate={guardarFicha}
+          onEliminar={eliminarFicha} />
+      )}
     </div>
   );
 }
@@ -1394,6 +1455,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                       const mats = materialesUnificados(actual, tcGlobal).map(m => ({
                         nombre: m.nombre, kg: m.kg, sup: m.sup, usd_kg: m.precio_usd_kg || 0,
                         granallado: !!m.ficha?.granallado, pintura: !!m.ficha?.pintura, galvanizado: !!m.ficha?.galvanizado,
+                        // 2026-09-03, a pedido de Gino: el % parcial ya cargado
+                        // en Cómputo/Anidado también tiene que viajar acá.
+                        pct_granallado: m.ficha?.pct_granallado, pct_pintura: m.ficha?.pct_pintura, pct_galvanizado: m.ficha?.pct_galvanizado,
                         // Desglose por kg (2026-09-02) en vez de sí/no + un
                         // solo nombre de máquina — dos piezas del mismo
                         // material pueden pasar por máquinas distintas.

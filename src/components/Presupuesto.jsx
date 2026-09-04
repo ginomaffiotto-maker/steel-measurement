@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
-import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial } from "../utils/storage";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -690,8 +690,11 @@ const CATALOGOS_HIERRO_SEED = [
   ["smeas_planchas","Plancha", PLANCHAS_DATA, undefined],
 ];
 
+const TIPO_POR_CATKEY = { smeas_perfiles:"perfil", smeas_planchuelas:"planchuela", smeas_planchas:"plancha" };
+
 function FichaHierroModal({ row, onChange, onClose }) {
   const [, setTick] = useState(0); // fuerza re-leer el catálogo después de crear/guardar
+  const [verFicha, setVerFicha] = useState(false);
   const nombre = (row.nombre || "").trim();
   let catKey = null, catItem = null, catEnLocal = false;
   for (const [key, , seedData, ids] of CATALOGOS_HIERRO_SEED) {
@@ -721,6 +724,31 @@ function FichaHierroModal({ row, onChange, onClose }) {
     setTick(t => t + 1);
   };
 
+  // Ficha completa del catálogo (2026-09-03, a pedido de Gino: "debe ser
+  // una tabla con la misma información que tienen los materiales en el
+  // catálogo") — reusa FichaModal de BibliotecaMateriales.jsx tal cual,
+  // mismo patrón de guardado que usan las 4 secciones de esa pantalla
+  // (actualizar/eliminarMat + dualWrite), en vez de reimplementar datos
+  // técnicos/historial de precios acá de nuevo.
+  const guardarDesdeFichaCompleta = (matActualizado) => {
+    const t = touch(matActualizado);
+    const actuales = loadLS(catKey, []);
+    saveLS(catKey, catEnLocal
+      ? actuales.map(it => it.id === t.id ? t : it)
+      : [...actuales, t]);
+    const tipoDB = TIPO_POR_CATKEY[catKey];
+    if (supabase && tipoDB) {
+      const { historial_precios, ...rowDB } = t;
+      saveDBMaterial(tipoDB, rowDB).catch(e => console.warn("[Fase 3] No se pudo sincronizar material:", e.message || e));
+    }
+    setTick(x => x + 1);
+  };
+  const eliminarDesdeFichaCompleta = (id) => {
+    saveLS(catKey, loadLS(catKey, []).filter(it => it.id !== id));
+    setTick(x => x + 1);
+    setVerFicha(false);
+  };
+
   const ficha = row.ficha || {};
   const setFicha = (k, v) => onChange({ ...row, ficha: { ...ficha, [k]: v } });
 
@@ -745,6 +773,9 @@ function FichaHierroModal({ row, onChange, onClose }) {
               <input type="number" value={precioEdit} step="0.01" onChange={e=>setPrecioEdit(e.target.value)} style={{...INP,width:90}} />
               <button onClick={guardarPrecioCatalogo} style={{...BTN("primary"),padding:"4px 10px",fontSize:12}}>Guardar precio</button>
             </div>
+            <button onClick={()=>setVerFicha(true)} style={{...BTN("ghost"),padding:"4px 10px",fontSize:12,marginTop:8}}>
+              📋 Ver ficha completa (datos técnicos + historial de precios)
+            </button>
           </div>
         ) : (
           <div style={{ marginBottom:18 }}>
@@ -794,6 +825,12 @@ function FichaHierroModal({ row, onChange, onClose }) {
           <button onClick={onClose} style={{...BTN("primary")}}>Listo</button>
         </div>
       </div>
+      {verFicha && catItem && (
+        <FichaModal mat={catItem} tipo={TIPO_POR_CATKEY[catKey]}
+          onClose={()=>setVerFicha(false)}
+          onUpdate={guardarDesdeFichaCompleta}
+          onEliminar={eliminarDesdeFichaCompleta} />
+      )}
     </div>
   );
 }
@@ -894,11 +931,22 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
               const nuevasFilas = filas.map(m => {
                 const usd_kg = m.precio_usd_kg || 0;
                 const f = m.ficha || {};
+                // 2026-09-03, a pedido de Gino: si el Cómputo ya trae el %
+                // parcial de tratamiento cargado (pct_granallado/pintura/
+                // galvanizado), tiene que viajar hasta acá en vez de quedar
+                // en blanco — nombre de campo distinto porque en Presupuesto
+                // ese checkbox se llama "arena" (Cómputo/Anidado usan
+                // "granallado" para lo mismo).
+                const fichaPresupuesto = {};
+                if (f.maquina) fichaPresupuesto.maquina = f.maquina;
+                if (f.pct_granallado != null) fichaPresupuesto.pct_arena = f.pct_granallado;
+                if (f.pct_pintura != null) fichaPresupuesto.pct_pintura = f.pct_pintura;
+                if (f.pct_galvanizado != null) fichaPresupuesto.pct_galvanizado = f.pct_galvanizado;
                 return {
                   id: uid(), nombre: m.nombre, proveedor: "", fecha_precio: "", obs: "", cantidad: 1,
                   kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
                   arena: !!f.granallado, pintura: !!f.pintura, galvanizado: !!f.galvanizado,
-                  ficha: f.maquina ? { maquina: f.maquina } : undefined,
+                  ficha: Object.keys(fichaPresupuesto).length ? fichaPresupuesto : undefined,
                   pct_desperdicio: m.pct_desperdicio || 0,
                   subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
                   _anidado_id: anidadoSel.id,
@@ -2844,6 +2892,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         corte_maquina: Object.keys(m.corte_por_maquina||{}).length>0,
         maquina: Object.keys(m.corte_por_maquina||{})[0]||"",
         plegado: (m.plegado_kg||0)>0, cilindrado: (m.cilindrado_kg||0)>0,
+        // 2026-09-03, a pedido de Gino: el % parcial de tratamiento ya
+        // cargado en Cómputo/Anidado tiene que viajar hasta acá también.
+        ficha: (m.pct_granallado!=null||m.pct_pintura!=null||m.pct_galvanizado!=null) ? {
+          ...(m.pct_granallado!=null && { pct_arena: m.pct_granallado }),
+          ...(m.pct_pintura!=null && { pct_pintura: m.pct_pintura }),
+          ...(m.pct_galvanizado!=null && { pct_galvanizado: m.pct_galvanizado }),
+        } : undefined,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });
@@ -2874,6 +2929,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         corte_maquina: Object.keys(m.corte_por_maquina||{}).length>0,
         maquina: Object.keys(m.corte_por_maquina||{})[0]||"",
         plegado: (m.plegado_kg||0)>0, cilindrado: (m.cilindrado_kg||0)>0,
+        // 2026-09-03, a pedido de Gino: el % parcial de tratamiento ya
+        // cargado en Cómputo/Anidado tiene que viajar hasta acá también.
+        ficha: (m.pct_granallado!=null||m.pct_pintura!=null||m.pct_galvanizado!=null) ? {
+          ...(m.pct_granallado!=null && { pct_arena: m.pct_granallado }),
+          ...(m.pct_pintura!=null && { pct_pintura: m.pct_pintura }),
+          ...(m.pct_galvanizado!=null && { pct_galvanizado: m.pct_galvanizado }),
+        } : undefined,
         subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
       };
     });

@@ -843,7 +843,12 @@ const CATS = ["Todas","HEB","HEA","IPE","IPN","UPN","W americanas","Cajón UPN",
 // ═══════════════════════════════════════════════════════════════════
 // FICHA MODAL — precios + datos técnicos + eliminar
 // ═══════════════════════════════════════════════════════════════════
-function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
+// Exportado (2026-09-03, a pedido de Gino): la ficha de material que se
+// abre desde un ítem de Presupuesto reusa este mismo componente en vez de
+// tener su propia versión resumida — "debe ser la misma información que
+// tienen los materiales en el catálogo". Ver FichaHierroModal en
+// Presupuesto.jsx.
+export function FichaModal({ mat, tipo, onClose, onUpdate, onEliminar }) {
   const [tab,      setTab]      = useState("precios");
   const [form,     setForm]     = useState({ fecha: hoy(), proveedor: "", precio: "" });
   const [guardado, setGuardado] = useState(false);
