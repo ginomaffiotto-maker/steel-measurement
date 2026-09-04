@@ -732,7 +732,7 @@ export const HISTORIAL_SEED = [
     "horas_mon_real": 0,
     "negociacion_pct": 1.9,
     "dias_obra": 106.42,
-    "notas": "Camisas Simples con refuerzos de 3/8\" de 12m (ojo a los kilos entre gestsoft y programa) USD/KG menor",
+    "notas": "Camisas Simples con refuerzos de 3/8\" de 12m (ojo a los kilos entre el sistema externo y el programa) USD/KG menor",
     "origen": "importado_excel",
     "presupuesto_id": null,
     "created_at": "2026-07-31T21:50:37.763388Z",

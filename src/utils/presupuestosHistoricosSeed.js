@@ -2064,7 +2064,7 @@ export const PRESUPUESTOS_HISTORICOS_SEED = [
     "cliente": "",
     "contacto": "",
     "obra": "",
-    "detalle": "Camisas Simples con refuerzos de 3/8\" de 12m (ojo a los kilos entre gestsoft y programa) USD/KG menor",
+    "detalle": "Camisas Simples con refuerzos de 3/8\" de 12m (ojo a los kilos entre el sistema externo y el programa) USD/KG menor",
     "tipo_trabajo": "Fabricación",
     "fecha": "2021-12-23",
     "estado": "aprobado",

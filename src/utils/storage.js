@@ -1651,6 +1651,18 @@ const TARIFARIO_DEFAULT = {
 // "todavía no se llamó nunca" de "se llamó y no había nada guardado".
 const _SIN_CACHEAR = Symbol("sin cachear");
 let _tarifarioRawCache = _SIN_CACHEAR, _tarifarioParsedCache = null;
+
+// Símbolo de moneda configurable (2026-09-03, a pedido de Gino) — mismo
+// patrón que ya tiene Steel CRM (Config > Visualización > "Símbolo de
+// moneda", localStorage `scrm_config.moneda`), acá con su propia key
+// simple porque Measurement no tiene un objeto de config genérico. Default
+// "U$S" — a diferencia de "$" suelto, que en un sistema que ya convive con
+// UYU (cotización del BROU) puede confundirse con pesos. Es puramente de
+// presentación: el cálculo interno sigue siendo en USD siempre.
+export const getMoneda = () => localStorage.getItem("smeas_moneda") || "U$S";
+export const setMoneda = (v) => localStorage.setItem("smeas_moneda", v);
+export const fU = (n) => getMoneda() + " " + Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
 export const loadTarifario = () => {
   const raw = localStorage.getItem("smeas_tarifario");
   if (raw === _tarifarioRawCache) return _tarifarioParsedCache;

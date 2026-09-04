@@ -612,7 +612,7 @@ export const PERFILES_DATA = [
   { id:"GM_PERFIL_C_127X50X17X3", nombre:"Perfil C 127x50x17x3", cat:"Perfil C conformado", kg_m:5.72, largo:6, sup:0.522 },
   { id:"GM_PERFIL_C_150X60X20X2", nombre:"Perfil C 150x60x20x2", cat:"Perfil C conformado", kg_m:4.66, largo:6, sup:0.62 },
   { id:"GM_PERFIL_C_150X60X20X3", nombre:"Perfil C 150x60x20x3", cat:"Perfil C conformado", kg_m:6.88, largo:6, sup:0.62 },
-  // Perfil C decapado/zincgrip por espesor — 42 ítems (Gestsoft, agregado 2026-08-01)
+  // Perfil C decapado/zincgrip por espesor — 42 ítems (catálogo externo de referencia, agregado 2026-08-01)
   { id:"GN_PERFILC_100_44_14_DEC_20", nombre:"Perfil C 100-44-14 Decapado 2,0mm", cat:"Perfil C conformado", kg_m:3.17, largo:6, sup:0.432, precio_usd_kg:2.71 },
   { id:"GN_PERFILC_100_44_14_DEC_25", nombre:"Perfil C 100-44-14 Decapado 2,5mm", cat:"Perfil C conformado", kg_m:4.27, largo:6, sup:0.432, precio_usd_kg:2.71 },
   { id:"GN_PERFILC_100_44_14_ZIN_124", nombre:"Perfil C 100-44-14 Zincgrip 1,24mm", cat:"Perfil C conformado", kg_m:1.96, largo:6, sup:0.432, precio_usd_kg:3.36 },
@@ -659,7 +659,7 @@ export const PERFILES_DATA = [
   { id:"GN_PERFILC_80_54_14_ZIN_124", nombre:"Perfil C 80-54-14 Zincgrip 1,24mm", cat:"Perfil C conformado", kg_m:1.96, largo:6, sup:0.432, precio_usd_kg:3.22 },
   { id:"GN_PERFILC_80_54_14_ZIN_15", nombre:"Perfil C 80-54-14 Zincgrip 1,5mm", cat:"Perfil C conformado", kg_m:2.38, largo:6, sup:0.432, precio_usd_kg:3.10 },
   { id:"GN_PERFILC_80_54_14_ZIN_20", nombre:"Perfil C 80-54-14 Zincgrip 2,0mm", cat:"Perfil C conformado", kg_m:3.17, largo:6, sup:0.432, precio_usd_kg:3.08 },
-  // Caño con costura (Cédula) — categoría nueva, 23 ítems (Gestsoft, agregado 2026-08-01)
+  // Caño con costura (Cédula) — categoría nueva, 23 ítems (catálogo externo de referencia, agregado 2026-08-01)
   { id:"GN_CANO_CED_1_2_21_3_C20", nombre:"Caño c/costura 1/2\" (21,3mm) Cédula 20", cat:"Caño Cédula", kg_m:1.12, largo:6, sup:0.0669, precio_usd_kg:1.87 },
   { id:"GN_CANO_CED_3_4_26_7_C20", nombre:"Caño c/costura 3/4\" (26,7mm) Cédula 20", cat:"Caño Cédula", kg_m:1.44, largo:6, sup:0.0839, precio_usd_kg:1.87 },
   { id:"GN_CANO_CED_3_8_17_1_C40", nombre:"Caño c/costura 3/8\" (17,1mm) Cédula 40", cat:"Caño Cédula", kg_m:0.84, largo:6, sup:0.0537, precio_usd_kg:6.60 },
@@ -683,7 +683,7 @@ export const PERFILES_DATA = [
   { id:"GN_CANO_CED_18_457_2X9_5", nombre:"Caño c/costura 18\" (457,2mm x 9,5mm)", cat:"Caño Cédula", kg_m:105.02, largo:6, sup:1.4363, precio_usd_kg:3.42 },
   { id:"GN_CANO_CED_20_508X9_5", nombre:"Caño c/costura 20\" (508,0mm x 9,5mm)", cat:"Caño Cédula", kg_m:116.93, largo:6, sup:1.5959, precio_usd_kg:3.26 },
   { id:"GN_CANO_CED_24_609_6X9_5", nombre:"Caño c/costura 24\" (609,6mm x 9,5mm)", cat:"Caño Cédula", kg_m:140.76, largo:6, sup:1.9152, precio_usd_kg:3.73 },
-  // U Chico — categoría nueva, 5 ítems (Gestsoft, agregado 2026-08-01)
+  // U Chico — categoría nueva, 5 ítems (catálogo externo de referencia, agregado 2026-08-01)
   { id:"GN_UCHICO_40X20X5", nombre:"U Chico 40x20x5", cat:"U Chico", kg_m:2.90, largo:6, sup:0.16, precio_usd_kg:1.19 },
   { id:"GN_UCHICO_50X25X5", nombre:"U Chico 50x25x5", cat:"U Chico", kg_m:3.84, largo:6, sup:0.20, precio_usd_kg:1.19 },
   { id:"GN_UCHICO_50X38X5", nombre:"U Chico 50x38x5", cat:"U Chico", kg_m:5.59, largo:6, sup:0.252, precio_usd_kg:1.19 },
@@ -695,7 +695,7 @@ export const PERFILES_DATA = [
 function mkPL(id, ancho, esp, largo = 6) {
   const kg_m = Math.round(ancho * esp * 7.85 / 1000 * 1000) / 1000;
   const sup  = Math.round(2 * (ancho + esp) / 1000 * 1000) / 1000;
-  // Precio representativo de Gestsoft (planillas Gino, 2026-08): 1,17 USD/kg para anchos
+  // Precio representativo de referencia (planillas Gino, 2026-08): 1,17 USD/kg para anchos
   // hasta ~3" (80mm), 1,22 USD/kg para 4" (100mm) en adelante — mismo patrón en ~90 filas reales.
   const precio_usd_kg = ancho <= 80 ? 1.17 : 1.22;
   return { id, nombre:`Planchuela ${ancho}×${esp} mm`, cat:"Planchuelas", kg_m, largo, sup, precio_usd_kg, historial_precios:[] };
@@ -786,8 +786,8 @@ const PLANCHAS_GM_DATA = [
   { id:"PA_GM_PLANCHA_GALV_1_4_6_35_MM", nombre:"Plancha Galv. 1/4\" (6,35 mm)", espesor:6.35, kg_m2:50.3, largo_mm:6000, ancho_mm:1500, area_m2:9.0, kg_ud:452.7, precio_usd_kg:0, historial_precios:[] },
   { id:"PA_GM_PLANCHA_GALV_3_8_9_53_MM", nombre:"Plancha Galv. 3/8\" (9,53 mm)", espesor:9.53, kg_m2:75.4, largo_mm:6000, ancho_mm:1500, area_m2:9.0, kg_ud:678.6, precio_usd_kg:0, historial_precios:[] },
   { id:"PA_GM_PLANCHA_GALV_1_2_12_7_MM", nombre:"Plancha Galv. 1/2\" (12,7 mm)", espesor:12.7, kg_m2:100.5, largo_mm:6000, ancho_mm:1500, area_m2:9.0, kg_ud:904.5, precio_usd_kg:0, historial_precios:[] },
-  // Chapa galvanizada de calibre delgado — categoría nueva, 10 ítems (Gestsoft, agregado 2026-08-01)
-  // kg_m2 real de Gestsoft (incluye el recubrimiento de zinc, no es esp_mm×7,85 puro como el resto del seed)
+  // Chapa galvanizada de calibre delgado — categoría nueva, 10 ítems (catálogo externo de referencia, agregado 2026-08-01)
+  // kg_m2 real de ese catálogo (incluye el recubrimiento de zinc, no es esp_mm×7,85 puro como el resto del seed)
   { id:"GN_CHAPA_GALV_N12_2_52MM", nombre:"Chapa Galvanizada N12 (2,52 mm)", espesor:2.52, kg_m2:22.12, largo_mm:2440, ancho_mm:1220, area_m2:2.977, kg_ud:65.85, precio_usd_kg:1.74, historial_precios:[] },
   { id:"GN_CHAPA_GALV_N14_1_99MM", nombre:"Chapa Galvanizada N14 (1,99 mm)", espesor:1.99, kg_m2:16.02, largo_mm:2440, ancho_mm:1220, area_m2:2.977, kg_ud:47.69, precio_usd_kg:1.32, historial_precios:[] },
   { id:"GN_CHAPA_GALV_N16_1_56MM", nombre:"Chapa Galvanizada N16 (1,56 mm)", espesor:1.56, kg_m2:13.00, largo_mm:2440, ancho_mm:1220, area_m2:2.977, kg_ud:38.70, precio_usd_kg:1.33, historial_precios:[] },

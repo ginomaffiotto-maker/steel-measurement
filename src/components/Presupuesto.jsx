@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -356,7 +356,7 @@ export function calcItem(it) {
   const total_kg   = it.no_agrega_kg ? 0 : hier_kg * cant;
   const usd_kg     = total_kg > 0 ? total_usd / total_kg : 0;
   // Valor en USD del desperdicio, usando el USD/kg promedio de los hierros
-  // de este ítem como tasa (mismo criterio que Gestsoft).
+  // de este ítem como tasa.
   const desperdicio_usd = hier_kg > 0 ? kg_desp_pond * (hier_usd / hier_kg) : 0;
 
   return {
@@ -1294,7 +1294,11 @@ function TabMO({ item, set, tipo }) {
   const key  = tipo === "fabricacion" ? "mo_fabricacion" : "mo_montajes";
   const tarifario = loadTarifario();
   const catalogo = (tipo === "fabricacion" ? tarifario.mo_fab : tarifario.mo_mon) || [];
-  const cats = catalogo.length ? catalogo.map(c=>c.nombre) : ["Sin categorías — cargalas en Config"];
+  // 2026-09-03, bug real reportado por Gino: el mensaje decía "cargalas en
+  // Config", pero el catálogo de MO Fab/MO Mon vive en Insumos y Precios
+  // (BibliotecaMateriales.jsx > Tarifario), pantalla separada de Config —
+  // mandaba al usuario al lugar equivocado.
+  const cats = catalogo.length ? catalogo.map(c=>c.nombre) : ["Sin categorías — cargalas en Insumos y Precios"];
   const rows = item[key] || [];
 
   const upd = (id, field, val) => set(key, rows.map(r => {
@@ -2738,8 +2742,8 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               {/* Gran total */}
               <div style={{ background:C.accent+"18", border:`1px solid ${C.accent}33`, borderRadius:8, padding:14 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-                  <span style={{ fontSize:14, color:C.accent, fontWeight:700 }}>TOTAL USD</span>
-                  <span style={{ fontSize:28, fontWeight:900, color:C.accent }}>${n2(c.gran_total)}</span>
+                  <span style={{ fontSize:14, color:C.accent, fontWeight:700 }}>TOTAL {getMoneda()}</span>
+                  <span style={{ fontSize:28, fontWeight:900, color:C.accent }}>{getMoneda()} {n2(c.gran_total)}</span>
                 </div>
                 {c.total_kg > 0 && (
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:8, paddingTop:8, borderTop:`1px solid ${C.accent}22` }}>

@@ -1,9 +1,8 @@
 import { useState, useRef } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, loadBloquesPDF, saveBloquesPDF, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
-import { BLOQUES_DEFAULT, BLOQUES_LABELS } from "../utils/pdfPresupuesto";
 import { seedTestData } from "../utils/seedTestData";
 
 // ─── GESTIÓN DE USUARIOS ─────────────────────────────────────────────────
@@ -259,7 +258,7 @@ function NumeracionPresupuestos({ soloLectura }) {
         <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}44` }}>
           <label style={LBL}>Corregir contador actual {cfg.reiniciaPorAnio ? `(año ${new Date().getFullYear()})` : ""}</label>
           <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>
-            Usalo si el número real de tu sistema externo (ej: GestSoft) ya va más adelante que este contador.
+            Usalo si el número real de tu sistema externo ya va más adelante que este contador.
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input type="number" min="0" style={{ ...INP, maxWidth:160 }} value={contador}
@@ -275,33 +274,24 @@ function NumeracionPresupuestos({ soloLectura }) {
   );
 }
 
-// ─── BLOQUES DEL PDF ─────────────────────────────────────────────────────
-function DisenoPDF({ soloLectura }) {
-  const [bloques, setBloques] = useState(() => loadBloquesPDF() || BLOQUES_DEFAULT.map(b => ({ ...b })));
-  const guardar = (nuevos) => { setBloques(nuevos); saveBloquesPDF(nuevos); };
-  const toggle = (i) => { if (soloLectura) return; const n = bloques.map((b, idx) => idx === i ? { ...b, activo: !b.activo } : b); guardar(n); };
-  const mover = (i, dir) => {
-    if (soloLectura) return;
-    const j = i + dir;
-    if (j < 0 || j >= bloques.length) return;
-    const n = bloques.slice();
-    [n[i], n[j]] = [n[j], n[i]];
-    guardar(n);
-  };
+// ─── SÍMBOLO DE MONEDA ───────────────────────────────────────────────────
+// 2026-09-03, a pedido de Gino — mismo patrón que Steel CRM (Config >
+// Visualización > "Símbolo de moneda"), acá dentro de Sistema porque
+// Measurement no tiene un tab de Visualización separado. Puramente de
+// presentación: el cálculo interno de todo el sistema sigue siendo en USD.
+function SimboloMoneda({ soloLectura }) {
+  const [moneda, setMonedaState] = useState(() => getMoneda());
+  const cambiar = (v) => { setMonedaState(v); setMoneda(v); };
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
-      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>📄 Diseño del PDF</div>
+      <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>💱 Símbolo de moneda</div>
       <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
-        Qué secciones aparecen en el PDF de presupuesto y en qué orden. Afecta a los presupuestos generados de acá en adelante.
+        Cómo se muestran los montos en toda la app — el cálculo siempre es en dólares, esto es solo el prefijo que se ve.
       </div>
-      {bloques.map((b, i) => (
-        <div key={b.tipo} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom: i < bloques.length-1 ? "1px solid "+C.border+"44" : "none" }}>
-          <input type="checkbox" checked={b.activo} disabled={soloLectura} onChange={()=>toggle(i)} style={{ cursor: soloLectura?"default":"pointer" }} />
-          <span style={{ flex:1, fontSize:13, color: b.activo ? C.text : C.muted }}>{BLOQUES_LABELS[b.tipo] || b.tipo}</span>
-          <button onClick={()=>mover(i,-1)} disabled={soloLectura || i===0} style={{ background:"none", border:"none", cursor: (soloLectura||i===0)?"default":"pointer", color: (soloLectura||i===0)?C.border:C.muted, fontSize:14 }}>▲</button>
-          <button onClick={()=>mover(i,1)} disabled={soloLectura || i===bloques.length-1} style={{ background:"none", border:"none", cursor: (soloLectura||i===bloques.length-1)?"default":"pointer", color: (soloLectura||i===bloques.length-1)?C.border:C.muted, fontSize:14 }}>▼</button>
-        </div>
-      ))}
+      <select style={{ ...INP, maxWidth:260 }} value={moneda} disabled={soloLectura} onChange={e => cambiar(e.target.value)}>
+        <option value="U$S">U$S - Dólares</option>
+        <option value="$UY">$UY - Pesos uruguayos</option>
+      </select>
     </div>
   );
 }
@@ -490,7 +480,12 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
         {puedeVerPapelera && TAB_BTN("papelera","🗑️","Papelera")}
       </div>
 
-      <div style={{ maxWidth:680 }}>
+      {/* 2026-09-03, a pedido de Gino: las pestañas quedaban en un recuadro
+          angosto (maxWidth:680) que no ocupaba la pantalla, distinto al
+          resto de las ventanas (Cómputo/Anidado/Presupuesto usan el ancho
+          completo). Las tarjetas internas ya tienen su propio grid de
+          columnas — sin el límite, se estiran igual que en el resto de la app. */}
+      <div>
         {seccion === "empresa" && (
           <div>
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
@@ -515,8 +510,8 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
             </div>
 
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
-              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🖼️ Logo para el PDF</div>
-              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Aparece en el encabezado del PDF de presupuesto, junto a los datos de la empresa.</div>
+              <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🖼️ Logo de la empresa</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Ingresá acá el logo de la empresa — JPG, PNG o similar.</div>
               <div style={{ display:"flex", alignItems:"center", gap:14 }}>
                 <div style={{ position:"relative", cursor: soloLectura ? "default" : "pointer" }} onClick={() => !soloLectura && logoRef.current.click()}>
                   {empresaDatos.logo
@@ -537,7 +532,7 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
         {seccion === "sistema" && (
           <div>
             <NumeracionPresupuestos soloLectura={soloLectura} />
-            <DisenoPDF soloLectura={soloLectura} />
+            <SimboloMoneda soloLectura={soloLectura} />
 
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18 }}>
               <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>🎨 Apariencia</div>

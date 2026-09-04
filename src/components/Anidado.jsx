@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial, getMoneda } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -894,7 +894,7 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
         <div style={{ fontWeight:800, fontSize:13, color:C.text }}>📋 Materiales unificados (post-anidado)</div>
         <span style={BDG(C.ok,true)}>{n2(totalKg)} kg total</span>
-        {totalUsd>0 && <span style={BDG(C.gold,true)}>${n2(totalUsd)}</span>}
+        {totalUsd>0 && <span style={BDG(C.gold,true)}>{getMoneda()} {n2(totalUsd)}</span>}
         {sinCalcular>0 && <span style={BDG(C.warn,true)}>{sinCalcular} grupo{sinCalcular!==1?"s":""} sin calcular</span>}
         <button onClick={onClose} style={{ ...BTN("ghost"), marginLeft:"auto", padding:"4px 10px", fontSize:11 }}>✕ Cerrar</button>
       </div>
