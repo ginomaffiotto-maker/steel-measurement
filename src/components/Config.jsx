@@ -82,7 +82,7 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) return "Tu sesión no tiene token real — volvé a iniciar sesión.";
-      const r = await fetch("https://steel-measurement.vercel.app/api/eliminar-usuario", {
+      const r = await fetch("https://steelcostos.vercel.app/api/eliminar-usuario", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
         body: JSON.stringify({ userId: u.profileId }),
@@ -168,7 +168,7 @@ function InvitarUsuario({ setUsuarios }) {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) { setErr("Tu sesión no tiene token real — volvé a iniciar sesión."); setCargando(false); return; }
-      const r = await fetch("https://steel-measurement.vercel.app/api/invitar-usuario", {
+      const r = await fetch("https://steelcostos.vercel.app/api/invitar-usuario", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
         body: JSON.stringify({ nombre: form.nombre.trim(), email: form.email.trim(), rol: form.rol }),

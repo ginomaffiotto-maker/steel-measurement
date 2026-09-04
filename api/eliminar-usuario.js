@@ -15,9 +15,10 @@
 // profiles se borra sola — no hace falta un segundo delete acá.
 const { createClient } = require('@supabase/supabase-js');
 
+const ORIGENES_PERMITIDOS = ['https://steelcostos.vercel.app', 'https://steel-measurement.vercel.app'];
 function setCors(req, res) {
   const origin = req.headers.origin || '';
-  if (origin === 'https://steel-measurement.vercel.app' || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+  if (ORIGENES_PERMITIDOS.includes(origin) || /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
