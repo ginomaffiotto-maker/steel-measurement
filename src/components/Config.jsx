@@ -668,6 +668,18 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
   const [aPurgar, setAPurgar] = useState(null); // { item, tipo, setLista, lista, nombre } | null
+  // 2026-09-03, a pedido de Gino: casillas de marcado para actuar sobre
+  // varios registros de la papelera al mismo tiempo — clave compuesta
+  // "tipo:id" porque las 4 listas pueden tener ids repetidos entre sí.
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [loteAPurgar, setLoteAPurgar] = useState(false);
+  const claveSel = (tipo, id) => tipo + ":" + id;
+  const toggleSel = (tipo, id) => setSeleccionados(prev => {
+    const next = new Set(prev);
+    const k = claveSel(tipo, id);
+    next.has(k) ? next.delete(k) : next.add(k);
+    return next;
+  });
 
   const restaurarComputo = async (c) => {
     const restaurado = { ...c, eliminado: false, eliminadoPor: null, eliminadoFecha: null };
@@ -759,9 +771,7 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
   // uuid real (registro legacy de antes de crypto.randomUUID()), no es el
   // mismo id que la fila remota — cae al respaldo por match en vez de
   // arriesgarse a un DELETE que no borra nada.
-  const purgar = async () => {
-    if (!aPurgar) return;
-    const { item, tipo } = aPurgar;
+  const purgarUno = async (item, tipo) => {
     const { lista, setLista } = LISTAS[tipo];
     const next = lista.filter(x => x.id !== item.id);
     setLista(next);
@@ -771,11 +781,36 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
       else await deleteFilaPorMatchDB(TABLA_DB[tipo], matchDe(tipo, item));
     } catch (e) { console.warn("No se pudo borrar la fila real en Supabase:", e.message || e); }
     logear?.(`${tipo} eliminado definitivamente`, item.nro_ot || item.nro || item.nombre || item.cliente || "");
+  };
+  const purgar = async () => {
+    if (!aPurgar) return;
+    await purgarUno(aPurgar.item, aPurgar.tipo);
     setAPurgar(null);
+  };
+
+  const RESTAURAR = { Cómputo: restaurarComputo, Anidado: restaurarAnidado, Presupuesto: restaurarPresupuesto, Historial: restaurarTrabajo };
+  const todosEliminados = [
+    ...eliminadosComputo.map(item => ({ item, tipo: "Cómputo" })),
+    ...eliminadosAnidado.map(item => ({ item, tipo: "Anidado" })),
+    ...eliminadosPresupuesto.map(item => ({ item, tipo: "Presupuesto" })),
+    ...eliminadosTrabajo.map(item => ({ item, tipo: "Historial" })),
+  ];
+  const seleccionadosItems = todosEliminados.filter(({ item, tipo }) => seleccionados.has(claveSel(tipo, item.id)));
+
+  const restaurarLote = async () => {
+    for (const { item, tipo } of seleccionadosItems) await RESTAURAR[tipo](item);
+    setSeleccionados(new Set());
+  };
+  const purgarLote = async () => {
+    for (const { item, tipo } of seleccionadosItems) await purgarUno(item, tipo);
+    setSeleccionados(new Set());
+    setLoteAPurgar(false);
   };
 
   const fila = (item, tipo, onRestaurar, titulo) => (
     <div key={tipo + item.id} style={{ display:"flex", gap:12, padding:"9px 0", borderBottom:`1px solid ${C.border}22`, fontSize:12, alignItems:"center" }}>
+      <input type="checkbox" checked={seleccionados.has(claveSel(tipo, item.id))} onChange={() => toggleSel(tipo, item.id)}
+        style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
       <span style={{ fontSize:11, fontWeight:700, color:C.muted, minWidth:70 }}>{tipo}</span>
       <div style={{ flex:1 }}>
         <div style={{ color:C.text, fontWeight:600 }}>{titulo ? titulo(item) : (item.nombre || item.nro || "Sin nombre")}</div>
@@ -808,6 +843,17 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
           onClose={() => setAPurgar(null)}
         />
       )}
+      {loteAPurgar && (
+        <ModalConfirmarEliminar
+          verbo="Eliminar definitivamente"
+          titulo={`${seleccionadosItems.length} registro(s) seleccionado(s)`}
+          subtitulo="Esto borra las filas reales de la base de datos, no solo la marca eliminada. No quedan en la Papelera después de esto — no hay vuelta atrás."
+          labelBoton="🗑️ Eliminar definitivamente"
+          usuarioPropio={usuario}
+          onConfirm={purgarLote}
+          onClose={() => setLoteAPurgar(false)}
+        />
+      )}
       <div style={{ fontWeight:700, fontSize:14, color:C.steel, marginBottom:4 }}>🗑️ Papelera</div>
       <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>
         Cómputos, anidados, presupuestos y trabajos de historial eliminados. Restaurar los devuelve a su lista normal, sin límite de tiempo.
@@ -816,6 +862,16 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
       {eliminadosComputo.length === 0 && eliminadosAnidado.length === 0 && eliminadosPresupuesto.length === 0 && eliminadosTrabajo.length === 0
         ? <div style={{ color:C.muted, fontSize:13, textAlign:"center", padding:20 }}>✅ Todo limpio — no hay nada en la papelera</div>
         : <>
+            {seleccionados.size > 0 && (
+              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:8, background:C.accent+"11", border:`1px solid ${C.accent}33`, borderRadius:8 }}>
+                <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{seleccionados.size} seleccionado{seleccionados.size!==1?"s":""}</span>
+                <button onClick={restaurarLote} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.accent+"66", color:C.accent }}>↩ Restaurar seleccionados</button>
+                {usuario?.rol === "admin" && (
+                  <button onClick={() => setLoteAPurgar(true)} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.err+"66", color:C.err }}>🗑️ Eliminar definitivamente seleccionados</button>
+                )}
+                <button onClick={() => setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
+              </div>
+            )}
             {eliminadosComputo.map(c => fila(c, "Cómputo", restaurarComputo))}
             {eliminadosAnidado.map(a => fila(a, "Anidado", restaurarAnidado))}
             {eliminadosPresupuesto.map(p => fila(p, "Presupuesto", restaurarPresupuesto))}

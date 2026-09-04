@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, TH, TD, CARD, BTN, BDG } from "../styles/colors";
 import { supabase } from "../utils/supabaseClient";
+import { useSortable } from "../utils/useSortable";
 
 // Lee directo de la tabla `solicitudes` de steelCRM — mismo backend
 // compartido, sin exportar/importar ningún archivo. Filtra por
@@ -45,6 +46,10 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
     irATab("Computo");
   }
 
+  // 2026-09-03, a pedido de Gino: mismo patrón de ordenamiento por columna
+  // (clic en header, asc/desc) que ya tienen Cómputo/Anidado/Presupuesto/Historial.
+  const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(solicitudes, "fecha_limite", "asc");
+
   if (!usuario?.profileId) {
     return (
       <div style={CARD()}>
@@ -76,16 +81,20 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={TH}>Cliente</th>
-                <th style={TH}>Obra</th>
-                <th style={TH}>Categoría</th>
-                <th style={TH}>Estado</th>
-                <th style={TH}>Fecha límite</th>
-                <th style={TH}></th>
+                {[
+                  { h: "Cliente", campo: "cliente_nombre" }, { h: "Obra", campo: "obra" },
+                  { h: "Categoría", campo: "categoria" }, { h: "Estado", campo: "estado" },
+                  { h: "Fecha límite", campo: "fecha_limite" }, { h: "", campo: null },
+                ].map(({ h, campo }) => (
+                  <th key={h} title={campo ? "Ordenar por " + h : ""} style={{ ...TH, cursor: campo ? "pointer" : "default", userSelect: "none" }}
+                    onClick={() => campo && ordenarPor(campo)}>
+                    {h}{sortCampo === campo && campo ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {solicitudes.map(s => (
+              {lista.map(s => (
                 <tr key={s.id}>
                   <td style={TD}>{s.cliente_nombre || "—"}</td>
                   <td style={TD}>{s.obra || "—"}</td>

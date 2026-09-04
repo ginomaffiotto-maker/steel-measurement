@@ -2849,6 +2849,16 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
   const [filtEst, setFiltEst] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
+  // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
+  // presupuestos a la vez — mismo criterio de borrado que uno solo
+  // (soft-delete con contraseña propia).
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const [confirmarDelLote, setConfirmarDelLote] = useState(false);
+  const toggleSelPres = (id) => setSeleccionados(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
   const [precargaPend, setPrecargaPend] = useState(() => loadLS("smeas_presupuesto_precarga_pending", null));
   const [historicoCargado, setHistoricoCargado] = useState(() => loadLS("smeas_historico_cargado", false));
@@ -3125,6 +3135,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     });
   };
 
+  const delPresLote = () => {
+    seleccionados.forEach(id => delPres(id));
+    setSeleccionados(new Set());
+    setConfirmarDelLote(false);
+  };
+
   const clonarPres = (p) => {
     const nuevo = {
       ...JSON.parse(JSON.stringify(p)),
@@ -3170,6 +3186,14 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
           usuarioPropio={usuario}
           onConfirm={() => { delPres(presAEliminar.id); setConfirmarDelId(null); }}
           onClose={() => setConfirmarDelId(null)}
+        />
+      )}
+      {confirmarDelLote && (
+        <ModalConfirmarEliminar
+          titulo={`${seleccionados.size} presupuesto(s) seleccionado(s)`}
+          usuarioPropio={usuario}
+          onConfirm={delPresLote}
+          onClose={() => setConfirmarDelLote(false)}
         />
       )}
       {confirmarHistorico && (
@@ -3248,10 +3272,22 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
 
+      {seleccionados.size > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:10, background:C.accent+"11", border:`1px solid ${C.accent}33`, borderRadius:8 }}>
+          <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{seleccionados.size} seleccionado{seleccionados.size!==1?"s":""}</span>
+          <button onClick={() => setConfirmarDelLote(true)} style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:12, borderColor:C.err+"66", color:C.err }}>🗑️ Eliminar seleccionados</button>
+          <button onClick={() => setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
+        </div>
+      )}
       {lista.length > 0 && (
         <div style={{ overflowX:"auto" }}>
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead><tr>
+              <th style={TH}>
+                <input type="checkbox" checked={lista.length>0 && lista.every(p=>seleccionados.has(p.id))}
+                  onChange={() => setSeleccionados(prev => lista.every(p=>prev.has(p.id)) ? new Set() : new Set(lista.map(p=>p.id)))}
+                  style={{ width:15, height:15, cursor:"pointer" }} />
+              </th>
               {[
                 { h:"N°", campo:"nro" }, { h:"Nombre", campo:"nombre" }, { h:"Cliente", campo:"cliente" },
                 { h:"Obra", campo:"obra" }, { h:"Tipo", campo:"tipo_trabajo" }, { h:"Vendedor", campo:"_vendedor_nombre" },
@@ -3272,6 +3308,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     style={{ cursor:"pointer" }}
                     onMouseEnter={e => e.currentTarget.style.background=C.iron+"55"}
                     onMouseLeave={e => e.currentTarget.style.background=""}>
+                    <td style={TD} onClick={e=>e.stopPropagation()}>
+                      <input type="checkbox" checked={seleccionados.has(p.id)} onChange={() => toggleSelPres(p.id)}
+                        style={{ width:15, height:15, cursor:"pointer" }} />
+                    </td>
                     <td style={TD}><span style={{ color:C.muted, fontSize:13 }}>{p.nro}</span></td>
                     <td style={TD}><span style={{ fontWeight:700 }}>{p.nombre}</span></td>
                     <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p.cliente||"—"}</span></td>
