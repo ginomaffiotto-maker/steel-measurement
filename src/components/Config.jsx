@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda, loadTenantSettingDB, saveTenantSettingDB } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { seedTestData } from "../utils/seedTestData";
@@ -222,7 +222,22 @@ function previewNroPres(cfg) {
 }
 function NumeracionPresupuestos({ soloLectura }) {
   const [cfg, setCfg] = useState(() => loadNumeracion());
-  const set = (patch) => { const n = { ...cfg, ...patch }; setCfg(n); saveNumeracion(n); };
+  // Sync entre dispositivos (2026-09-04) — mismo criterio que
+  // SimboloMoneda: el FORMATO (prefijo/dígitos/año/reinicio) viaja entre
+  // dispositivos, el contador en sí (`smeas_last_nro*`) queda local a
+  // propósito — sincronizarlo abriría la puerta a que dos dispositivos
+  // pisen el contador del otro y generen el mismo número dos veces.
+  const cloudReady = useRef(false);
+  useEffect(() => {
+    loadTenantSettingDB("numeracion").then(remoto => {
+      if (remoto) setCfg(c => { const n = { ...c, ...remoto }; saveNumeracion(n); return n; });
+      cloudReady.current = true;
+    }).catch(err => { console.warn("[Fase 5] No se pudo leer numeración de la nube:", err); cloudReady.current = true; });
+  }, []);
+  const set = (patch) => {
+    const n = { ...cfg, ...patch }; setCfg(n); saveNumeracion(n);
+    if (cloudReady.current) saveTenantSettingDB("numeracion", n).catch(err => console.warn("saveTenantSettingDB numeracion", err));
+  };
   const contadorKey = cfg.reiniciaPorAnio ? `smeas_last_nro_${new Date().getFullYear()}` : "smeas_last_nro";
   const [contador, setContador] = useState(() => localStorage.getItem(contadorKey) || "");
 
@@ -282,7 +297,21 @@ function NumeracionPresupuestos({ soloLectura }) {
 // presentación: el cálculo interno de todo el sistema sigue siendo en USD.
 function SimboloMoneda({ soloLectura }) {
   const [moneda, setMonedaState] = useState(() => getMoneda());
-  const cambiar = (v) => { setMonedaState(v); setMoneda(v); };
+  // Sync entre dispositivos (2026-09-04) — se trae una vez de la nube al
+  // montar (gana sobre lo local si hay algo guardado) y recién ahí se
+  // habilita guardar hacia la nube, mismo criterio anti-carrera que ya usa
+  // Steel CRM para Config desde el 2/9.
+  const cloudReady = useRef(false);
+  useEffect(() => {
+    loadTenantSettingDB("moneda").then(remoto => {
+      if (remoto) { setMonedaState(remoto); setMoneda(remoto); }
+      cloudReady.current = true;
+    }).catch(err => { console.warn("[Fase 5] No se pudo leer la moneda de la nube:", err); cloudReady.current = true; });
+  }, []);
+  const cambiar = (v) => {
+    setMonedaState(v); setMoneda(v);
+    if (cloudReady.current) saveTenantSettingDB("moneda", v).catch(err => console.warn("saveTenantSettingDB moneda", err));
+  };
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
       <div style={{ fontWeight:700, color:C.accent, fontSize:13, marginBottom:4 }}>💱 Símbolo de moneda</div>
@@ -539,11 +568,38 @@ export default function Config({ usuario, usuarios, setUsuarios, auditLog = [], 
 
   const [seedErr, setSeedErr] = useState("");
   const [empresa, setEmpresa] = useState(() => loadLS("smeas_empresa", ""));
-  const guardarEmpresa = (v) => { setEmpresa(v); saveLS("smeas_empresa", v); };
-  // Mismos campos que se agregaron en steelCRM (mismo PDF compartido) —
+  // Sync entre dispositivos (2026-09-04, Tarea 6 — bug real reportado por
+  // Gino: "Nombre de la empresa" aparecía vacío en un dispositivo distinto
+  // al que lo cargó, porque hasta ahora era 100% local por origen). Mismo
+  // patrón que ya tiene Steel CRM desde el 2/9 (tenant_settings, gana la
+  // nube sobre lo local si hay algo guardado, recién ahí se habilita
+  // guardar hacia la nube para no subir lo local viejo antes de leer).
+  const empresaCloudReady = useRef(false);
+  useEffect(() => {
+    loadTenantSettingDB("empresa").then(remoto => {
+      if (remoto) { setEmpresa(remoto); saveLS("smeas_empresa", remoto); }
+      empresaCloudReady.current = true;
+    }).catch(err => { console.warn("[Fase 5] No se pudo leer el nombre de empresa de la nube:", err); empresaCloudReady.current = true; });
+  }, []);
+  const guardarEmpresa = (v) => {
+    setEmpresa(v); saveLS("smeas_empresa", v);
+    if (empresaCloudReady.current) saveTenantSettingDB("empresa", v).catch(err => console.warn("saveTenantSettingDB empresa", err));
+  };
+  // Mismos campos que se agregaron en Steel CRM (mismo PDF compartido) —
   // direccion/RUT/tel/email/web/logo, guardados en un solo objeto.
   const [empresaDatos, setEmpresaDatos] = useState(() => loadLS("smeas_empresa_datos", { direccion: "", rut: "", tel: "", email: "", web: "", logo: "" }));
-  const setEmpresaDato = (k, v) => setEmpresaDatos(prev => { const n = { ...prev, [k]: v }; saveLS("smeas_empresa_datos", n); return n; });
+  const empresaDatosCloudReady = useRef(false);
+  useEffect(() => {
+    loadTenantSettingDB("empresa_datos").then(remoto => {
+      if (remoto) setEmpresaDatos(prev => { const n = { ...prev, ...remoto }; saveLS("smeas_empresa_datos", n); return n; });
+      empresaDatosCloudReady.current = true;
+    }).catch(err => { console.warn("[Fase 5] No se pudo leer los datos de empresa de la nube:", err); empresaDatosCloudReady.current = true; });
+  }, []);
+  const setEmpresaDato = (k, v) => setEmpresaDatos(prev => {
+    const n = { ...prev, [k]: v }; saveLS("smeas_empresa_datos", n);
+    if (empresaDatosCloudReady.current) saveTenantSettingDB("empresa_datos", n).catch(err => console.warn("saveTenantSettingDB empresa_datos", err));
+    return n;
+  });
   const logoRef = useRef();
   const handleLogo = (e) => {
     const f = e.target.files[0]; if (!f) return;

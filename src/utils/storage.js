@@ -1671,6 +1671,27 @@ export const getMoneda = () => localStorage.getItem("smeas_moneda") || "U$S";
 export const setMoneda = (v) => localStorage.setItem("smeas_moneda", v);
 export const fU = (n) => getMoneda() + " " + Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
+// Config compartida entre dispositivos (2026-09-04, mismo patrón ya en
+// producción en Steel CRM desde el 2/9 — ver storage.js de ese repo,
+// loadTenantSettingDB/saveTenantSettingDB). Usa `tenant_settings`, misma
+// tabla que ya comparten los dos sistemas (una fila por tenant por key).
+// A diferencia de Steel CRM (que tiene un solo objeto grande "config"),
+// acá cada ajuste vive en su propia key de localStorage sin un objeto
+// contenedor único — se sincroniza cada uno por separado con su propia
+// key de tenant_settings, en vez de forzar un objeto compartido que no
+// existe en el modelo actual.
+export async function loadTenantSettingDB(key) {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("tenant_settings").select("value").eq("key", key).maybeSingle();
+  if (error) { console.warn("loadTenantSettingDB", key, error); return null; }
+  return data?.value ?? null;
+}
+export async function saveTenantSettingDB(key, value) {
+  if (!supabase) return;
+  const { error } = await supabase.from("tenant_settings").upsert({ key, value }, { onConflict: "tenant_id,key" });
+  if (error) console.warn("saveTenantSettingDB", key, error);
+}
+
 export const loadTarifario = () => {
   const raw = localStorage.getItem("smeas_tarifario");
   if (raw === _tarifarioRawCache) return _tarifarioParsedCache;
