@@ -151,7 +151,7 @@ function EquipoUsuarios({ usuarios, setUsuarios, usuario, esAdmin }) {
 // Invitar usuario nuevo (2026-09-03) — manda el mail real desde acá, vía
 // api/invitar-usuario.js (función serverless de Vercel de ESTE proyecto,
 // la única que tiene la service_role key). Siempre le pega a la URL de
-// producción de Steel Measurement, corra la sesión local o no — esa key
+// producción de Steel Costos, corra la sesión local o no — esa key
 // nunca vive en la máquina de nadie. Mismo patrón ya en producción en
 // Steel CRM (api/invitar-usuario.js de ese repo) — reemplaza el flujo
 // viejo de "generar comando y pegarlo en la terminal" (crear-usuario.mjs).
@@ -389,7 +389,7 @@ function BackupYDatos({ usuario }) {
     try {
       const payload = await restoreFromDrive(driveClientId);
       if (!payload || payload.app !== "steel-measurement" || typeof payload.data !== "object") {
-        throw new Error("El respaldo encontrado no es válido para Steel Measurement.");
+        throw new Error("El respaldo encontrado no es válido para Steel Costos.");
       }
       restoreBackup(payload);
       setDriveConnected(true);

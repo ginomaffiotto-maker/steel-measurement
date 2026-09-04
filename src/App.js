@@ -151,7 +151,7 @@ function Login({ usuarios, setUsuarios, onLogin }) {
       <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
-          <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
+          <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Costos</div>
           <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>Recuperar contraseña</div>
         </div>
         <div style={{ width: "100%", maxWidth: 340 }}>
@@ -205,7 +205,7 @@ function Login({ usuarios, setUsuarios, onLogin }) {
       {/* Logo */}
       <div style={{ textAlign: "center", marginBottom: 36 }}>
         <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
-        <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
+        <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Costos</div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>Metraje · Cómputo · Presupuesto Industrial</div>
       </div>
 
@@ -283,7 +283,7 @@ function SetPasswordScreen({ modo, onDone }) {
     <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", marginBottom: 36 }}>
         <div style={{ width: 56, height: 56, background: C.accent, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", margin: "0 auto 14px" }}>📐</div>
-        <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Measurement</div>
+        <div style={{ color: C.accent, fontWeight: 900, fontSize: 24, letterSpacing: -0.5 }}>Steel Costos</div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{modo === "invite" ? "Elegí tu contraseña" : "Elegí una contraseña nueva"}</div>
       </div>
       <div style={{ width: "100%", maxWidth: 340 }}>
@@ -484,7 +484,7 @@ export default function App() {
           <div style={{ width: 28, height: 28, background: C.accent, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>📐</div>
           {!collapsed && (
             <div>
-              <div style={{ color: C.accent, fontWeight: 900, fontSize: 12, letterSpacing: -0.3, lineHeight: 1 }}>Steel Measurement</div>
+              <div style={{ color: C.accent, fontWeight: 900, fontSize: 12, letterSpacing: -0.3, lineHeight: 1 }}>Steel Costos</div>
               <div style={{ color: C.muted, fontSize: 9, letterSpacing: 1, textTransform: "uppercase" }}>Metraje · Metalúrgica</div>
             </div>
           )}

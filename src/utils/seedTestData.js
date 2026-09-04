@@ -1,5 +1,5 @@
 /**
- * SEED DE DATOS DE PRUEBA — Steel Measurement
+ * SEED DE DATOS DE PRUEBA — Steel Costos
  * ─────────────────────────────────────────────
  * Pegar en la consola del navegador (F12 → Console) con la app abierta,
  * o importar como módulo en desarrollo.
@@ -306,7 +306,7 @@ export function seedTestData() {
   const r2 = anidado.grupos[1].resultado.resumen;
   const r5 = anidado.grupos[4].resultado.resumen;
 
-  console.groupCollapsed("✅ Steel Measurement — Datos de prueba cargados");
+  console.groupCollapsed("✅ Steel Costos — Datos de prueba cargados");
   console.log(`📐 Cómputo: "${computo.nombre}"`);
   console.log(`   ${computo.items.length} ítems / ${totalPiezas} piezas (perfiles + planchas)`);
   console.log(`✂️ Anidado: "${anidado.nombre}"`);

@@ -1,9 +1,9 @@
-// Resumen interno de presupuesto — exclusivo de Steel Measurement, no se
+// Resumen interno de presupuesto — exclusivo de Steel Costos, no se
 // comparte con Steel CRM (a diferencia de pdfPresupuesto.js, que sí vive
 // copiado igual en los dos repos porque genera el documento COMERCIAL que
 // se le manda al cliente). Este documento es de uso interno: expone el
 // desglose real de costos por rubro que pdfPresupuesto.js deja afuera a
-// propósito (ver su comentario de cabecera) — Steel Measurement no le
+// propósito (ver su comentario de cabecera) — Steel Costos no le
 // manda nada al cliente directamente (esa función vive en Steel CRM, ver
 // botón "☁️ Enviar a Steel CRM"), así que mantener acá un PDF comercial
 // duplicado era redundante.

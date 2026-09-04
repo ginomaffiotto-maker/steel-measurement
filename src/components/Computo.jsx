@@ -1488,7 +1488,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
         <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
           {/* 2026-08-30: Gino pidió un botón de guardar — acá (como en el
-              resto de Steel Measurement) cada cambio ya se guarda solo en
+              resto de Steel Costos) cada cambio ya se guarda solo en
               cuanto lo tipeás, no hay nada que perder al cerrar o navegar.
               Se deja el indicador en vez de un botón que no haría nada real. */}
           <span title="Cada cambio se guarda solo, no hace falta apretar nada" style={{ fontSize:12, color:C.ok, display:"flex", alignItems:"center", gap:4 }}>

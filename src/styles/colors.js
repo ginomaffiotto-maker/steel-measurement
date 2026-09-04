@@ -2,7 +2,7 @@
 // cliente sin tocar el resto de la app: todo lo demás (BTN/INP/CARD/etc.)
 // consume el objeto C sin saber de dónde salió.
 const THEMES = {
-  // El tema original de Steel Measurement — paleta idéntica a steelCRM.
+  // El tema original de Steel Costos — paleta idéntica a steelCRM.
   industrial_dark: {
     bg: "#0d0f12", card: "#13161c", iron: "#1e2330", border: "#252a36",
     steel: "#8fa3b8", steelDk: "#4a5568", accent: "#e85d04", text: "#d4dde8",

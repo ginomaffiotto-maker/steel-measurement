@@ -1,9 +1,9 @@
 // Plantilla del PDF comercial de presupuesto — el documento que se le
 // manda al cliente. Hasta el 2026-09-03 vivía copiada igual en steelCRM y
-// en Steel Measurement; desde ese día, Steel Measurement dejó de usarla
+// en Steel Costos; desde ese día, Steel Costos dejó de usarla
 // (reemplazada ahí por utils/resumenInterno.js, de uso interno, con el
 // desglose real de costos — este documento comercial nunca lo expone,
-// solo kg, USD/kg y el monto total). Steel Measurement ya no le manda
+// solo kg, USD/kg y el monto total). Steel Costos ya no le manda
 // nada al cliente directamente, esa función quedó centralizada en Steel
 // CRM (botón "☁️ Enviar a Steel CRM"). Este archivo pasa a ser exclusivo
 // de steelCRM — no hace falta replicar cambios en ningún otro repo.

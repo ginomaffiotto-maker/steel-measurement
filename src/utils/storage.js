@@ -358,7 +358,7 @@ export const agregarAListaEmpresas = (nueva) => {
 
 // ─── OBRAS — capa de acceso al backend (2026-08-29) ────────────────
 // Tabla `obras`, compartida con steelCRM (ver ENTIDADES-COMPARTIDAS.md) —
-// hasta ahora Steel Measurement nunca la usaba: "obra" era texto libre
+// hasta ahora Steel Costos nunca la usaba: "obra" era texto libre
 // suelto en Anidado/Presupuesto y ni siquiera existía como campo en
 // Cómputo. A diferencia de clientes, acá NO hay auto-creación silenciosa
 // al tipear — la única forma de crear una obra nueva es ObraRapidaModal
