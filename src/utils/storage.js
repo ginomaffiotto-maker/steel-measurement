@@ -1319,8 +1319,20 @@ export const restoreBackup = (payload) => {
 // trae el `estado` comercial real (enviado/en negociación/aceptado/no
 // aprobado/recotizado/facturado) — antes había que abrir Steel CRM aparte
 // para saber si un presupuesto ya se aprobó o rechazó.
-export const buscarVinculoCRM = async (presupuestoSmId) => {
-  if (!supabase || !presupuestoSmId) return null;
+//
+// 2026-09-04, corrección real: el `unique` de presupuesto_calculo_link es
+// sobre el PAR (presupuesto_crm_id, presupuesto_sm_id), no sobre
+// presupuesto_sm_id solo — un mismo cálculo de Costos puede terminar
+// vinculado a más de un presupuesto real de Steel CRM (ej. una
+// recotización crea un presupuesto_crm nuevo y alguien lo vincula al
+// mismo cálculo desde "Vincular a Steel Measurement" en el CRM). Esta
+// función usaba `.maybeSingle()`, que en Supabase/PostgREST devuelve
+// ERROR (no una fila) apenas hay 2+ resultados — con `if (error || !data)
+// return null`, eso hacía desaparecer en silencio TODO (badge, estado, y
+// el candado de "cerrado en CRM") apenas existía un segundo vínculo, sin
+// ningún aviso. Ahora trae todos los vínculos reales, como array.
+export const buscarVinculosCRM = async (presupuestoSmId) => {
+  if (!supabase || !presupuestoSmId) return [];
   // La columna real en presupuestos_crm es "estado_nativo", no "estado"
   // (bug real encontrado 2026-09-03: pedirla como "estado" tiraba un error
   // de PostgREST que tumbaba toda la consulta, incluido el nro — el badge
@@ -1328,10 +1340,9 @@ export const buscarVinculoCRM = async (presupuestoSmId) => {
   const { data, error } = await supabase
     .from("presupuesto_calculo_link")
     .select("presupuesto_crm_id, presupuestos_crm(nro, estado_nativo)")
-    .eq("presupuesto_sm_id", presupuestoSmId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return { crmId: data.presupuesto_crm_id, nro: data.presupuestos_crm?.nro || null, estado: data.presupuestos_crm?.estado_nativo || null };
+    .eq("presupuesto_sm_id", presupuestoSmId);
+  if (error || !data) return [];
+  return data.map(row => ({ crmId: row.presupuesto_crm_id, nro: row.presupuestos_crm?.nro || null, estado: row.presupuestos_crm?.estado_nativo || null }));
 };
 
 // El N° de presupuesto de Steel CRM es único por tenant y sigue un formato
@@ -1341,8 +1352,8 @@ export const buscarVinculoCRM = async (presupuestoSmId) => {
 // con "Corregir N° de Presupuesto" (Importar > Mantenimiento, ya existe).
 export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const existente = await buscarVinculoCRM(pres.id);
-  if (existente) return existente;
+  const existentes = await buscarVinculosCRM(pres.id);
+  if (existentes.length > 0) return existentes[0];
 
   const nombreParaClientes = (pres.contacto || pres.cliente || "").trim();
   const empresaParaClientes = pres.contacto ? pres.cliente : null;

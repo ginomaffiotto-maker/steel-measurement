@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -2445,20 +2445,27 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
   const empresaTexto = (pres.cliente || "").trim();
   const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
-  const [vinculoCRM, setVinculoCRM] = useState(null); // {crmId, nro} | null
+  // Array, no un único vínculo (2026-09-04, corrección real): un mismo
+  // cálculo de Costos puede terminar vinculado a más de un presupuesto de
+  // Steel CRM (ej. una recotización crea un presupuesto_crm nuevo y
+  // alguien lo vincula al mismo cálculo desde "Vincular a Steel
+  // Measurement" en el CRM) — antes se asumía uno solo y la consulta
+  // (`.maybeSingle()`) directamente fallaba en silencio con 2+.
+  const [vinculosCRM, setVinculosCRM] = useState([]); // [{crmId, nro, estado}]
   const [enviandoCRM, setEnviandoCRM] = useState(false);
   const [confirmReabrirSM, setConfirmReabrirSM] = useState(false);
-  // Si el presupuesto vinculado ya está aceptado o facturado en Steel CRM
-  // (2026-09-04, a pedido de Gino), el estado acá queda fijo — la decisión
-  // comercial real ya se cerró del otro lado, no tiene sentido que alguien
-  // lo mueva de "enviado" a "borrador" (o a cualquier otro) desde Costos.
-  const crmCerrado = !!(vinculoCRM?.estado && ["aceptado", "facturado"].includes(vinculoCRM.estado));
+  // Si CUALQUIERA de los presupuestos vinculados ya está aceptado o
+  // facturado en Steel CRM (2026-09-04, a pedido de Gino), el estado acá
+  // queda fijo — alguien ya cerró un trato real con estos números, no
+  // tiene sentido que se muevan desde Costos, sin importar qué pasó con
+  // los otros presupuestos vinculados al mismo cálculo.
+  const crmCerrado = vinculosCRM.some(v => ["aceptado", "facturado"].includes(v.estado));
 
-  // Chequea si este presupuesto ya tiene un presupuesto real vinculado en
-  // Steel CRM (tabla presupuesto_calculo_link) — evita reenviarlo dos veces.
+  // Chequea si este presupuesto ya tiene presupuesto(s) real(es) vinculado(s)
+  // en Steel CRM (tabla presupuesto_calculo_link).
   useEffect(() => {
     let vivo = true;
-    if (pres?.id) buscarVinculoCRM(pres.id).then(v => { if (vivo) setVinculoCRM(v); });
+    if (pres?.id) buscarVinculosCRM(pres.id).then(v => { if (vivo) setVinculosCRM(v); });
     return () => { vivo = false; };
   }, [pres?.id]);
 
@@ -2481,7 +2488,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // importados) todavía no tienen codigo_calculo — se les asigna recién acá,
   // en el momento en que hace falta enviarlos a Steel CRM.
   const enviarSteelCRM = async () => {
-    if (vinculoCRM || enviandoCRM) return;
+    if (vinculosCRM.length > 0 || enviandoCRM) return;
     if (contactoSinResolver) return alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
     if (obraSinResolver) return alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de enviar a Steel CRM.`);
     if (empresaSinResolver) return alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de enviar a Steel CRM.`);
@@ -2490,7 +2497,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
     setEnviandoCRM(true);
     try {
       const v = await enviarPresupuestoASteelCRM({ ...pres, codigo_calculo: codigo }, c, usuario);
-      setVinculoCRM(v);
+      setVinculosCRM(prev => [...prev, v]);
     } catch (e) {
       alert("No se pudo enviar a Steel CRM: " + (e.message || e));
     } finally {
@@ -2563,16 +2570,22 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         </div>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <button style={BTN("ghost")} onClick={() => generarResumenInterno(pres, usuarios)} title="Resumen de uso interno con desglose de costos — no se envía al cliente">📊 Resumen interno</button>
-          {vinculoCRM ? (
-            <>
-              <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${vinculoCRM.nro}`}>✅ Vinculado a Steel CRM {vinculoCRM.nro}</span>
-              {vinculoCRM.estado && ESTADO_CRM_CFG[vinculoCRM.estado] && (
-                <span style={{ ...BDG(ESTADO_CRM_CFG[vinculoCRM.estado].color, true), fontSize:13 }}
-                  title="Estado comercial real en Steel CRM">
-                  {ESTADO_CRM_CFG[vinculoCRM.estado].icon} CRM: {ESTADO_CRM_CFG[vinculoCRM.estado].label}
-                </span>
-              )}
-            </>
+          {vinculosCRM.length > 0 ? (
+            // Un mismo cálculo puede terminar en más de un presupuesto de
+            // Steel CRM (2026-09-04) — se muestra un badge por cada uno,
+            // no solo el primero, para no esconder si alguno quedó
+            // aceptado y otro no aprobado.
+            vinculosCRM.map(v => (
+              <Fragment key={v.crmId}>
+                <span style={{ ...BDG(C.ok, true), fontSize:13 }} title={`Vinculado a Steel CRM ${v.nro}`}>✅ {v.nro}</span>
+                {v.estado && ESTADO_CRM_CFG[v.estado] && (
+                  <span style={{ ...BDG(ESTADO_CRM_CFG[v.estado].color, true), fontSize:13 }}
+                    title="Estado comercial real en Steel CRM">
+                    {ESTADO_CRM_CFG[v.estado].icon} CRM: {ESTADO_CRM_CFG[v.estado].label}
+                  </span>
+                )}
+              </Fragment>
+            ))
           ) : (
             <button style={BTN("ghost")} onClick={enviarSteelCRM} disabled={enviandoCRM}
               title="Crea el presupuesto en Steel CRM y lo vincula con este cálculo — directo, sin archivos de por medio">
