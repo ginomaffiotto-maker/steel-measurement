@@ -1355,8 +1355,14 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
   const existentes = await buscarVinculosCRM(pres.id);
   if (existentes.length > 0) return existentes[0];
 
-  const nombreParaClientes = (pres.contacto || pres.cliente || "").trim();
-  const empresaParaClientes = pres.contacto ? pres.cliente : null;
+  // 2026-09-05: mismo fix que ya se había aplicado el 31/8 en el guardado
+  // automático de Presupuesto.jsx, pero se había quedado sin aplicar acá —
+  // sin este cambio, enviar a Steel CRM un presupuesto sin Contacto cargado
+  // seguía escribiendo la razón social como si fuera un cliente-persona en
+  // la tabla `clientes`, compartida con Steel CRM. Sin contacto, no se
+  // toca la tabla de clientes.
+  const nombreParaClientes = (pres.contacto || "").trim();
+  const empresaParaClientes = pres.cliente || null;
   const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
 
   const rowCrm = saneado({
