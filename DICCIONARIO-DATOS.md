@@ -66,7 +66,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 
 ---
 
-## 2. `clientes` (única, compartida entre Steel CRM y Steel Measurement)
+## 2. `clientes` (única, compartida entre Steel CRM y Steel Costos)
 
 | Columna | Tipo | Nota |
 |---|---|---|
@@ -80,7 +80,7 @@ PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config lib
 
 Índice extra: `(tenant_id, empresa)` — soporta el patrón `matchClienteBudget` (empresa con varios contactos).
 
-### `empresas` (única, compartida entre Steel CRM y Steel Measurement — nueva 2026-08-29)
+### `empresas` (única, compartida entre Steel CRM y Steel Costos — nueva 2026-08-29)
 | Columna | Tipo | Nota |
 |---|---|---|
 | `nombre` | text | Razón social. |
@@ -113,7 +113,7 @@ dos nunca tuvieron columna `empresa` en la base, nada que recuperar).
 | `categoria`, `producto`, `descripcion`, `obra` | text | |
 | `kg_cotizados`, `precio_usd_kg`, `monto_usd`, `monto_final` | numeric | El monto digitado por el usuario (`monto_final`) siempre prevalece sobre el cálculo automático — nunca se sobreescribe sin acción explícita. |
 | `moneda` | text not null default `'USD'`, check in (`USD`,`UYU`) | |
-| `estado_nativo` | text not null default `'enviado'`, check in (`enviado`,`en negociación`,`recotizado`,`licitación`,`aceptado`,`facturado`,`no aprobado`) | El estado comercial real. No confundir con `estado_sm` (informativo, viene de un import de Steel Measurement) — ese campo vive del lado local/UI, no en esta tabla. |
+| `estado_nativo` | text not null default `'enviado'`, check in (`enviado`,`en negociación`,`recotizado`,`licitación`,`aceptado`,`facturado`,`no aprobado`) | El estado comercial real. No confundir con `estado_sm` (informativo, viene de un import de Steel Costos) — ese campo vive del lado local/UI, no en esta tabla. |
 | `probabilidad`, `cierre` | numeric / date | Usados por Forecast. |
 | `notas` | text | |
 | `vendedor_id` | uuid → `profiles` on delete set null | |
@@ -121,7 +121,7 @@ dos nunca tuvieron columna `empresa` en la base, nada que recuperar).
 | `recotizacion_de_id` | uuid → `presupuestos_crm` (self) on delete set null | Cadena de recotización — una recotización es una fila nueva, no un cambio de estado del original. |
 | `estado_obra` | text, check in (`''`,`Adjudicada`,`Licitación`,`Directa`) | |
 | `plazo_pago`, `porcentaje_negociacion`, `acabado_superficial` | int / numeric / text | |
-| `ids_calc` | **text[]** | Códigos de cálculo de Steel Measurement vinculados — texto libre, sin FK. Ver §6 de `ENTIDADES-COMPARTIDAS.md`. |
+| `ids_calc` | **text[]** | Códigos de cálculo de Steel Costos vinculados — texto libre, sin FK. Ver §6 de `ENTIDADES-COMPARTIDAS.md`. |
 | `fecha_aceptado`, `fecha_facturado` | date | |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
 
@@ -164,7 +164,7 @@ Misma forma en las 3 (genéricas vía `comentarioToDB`/`FromDB` con `table` como
 `empresa`, `presupuesto_id → presupuestos_crm`, `precio_usd`, `kg_cotizados`, `motivo`, `motivo_detalle`, `notas`, `fecha`. Sin soft-delete.
 
 ### `obras`
-`nombre`, `direccion`, `empresa`, `fecha_inicio`, `fecha_fin`, `estado` (check in `activa`/`finalizada`/`pausada`/`cancelada`), `notas`. ✅ soft-delete. Hasta 2026-08-29 solo la consumía Steel CRM (`obra_presupuestos`) — desde esa fecha también `computos`/`anidados`/`presupuestos_sm` de Steel Measurement, vía `obra_id` directo (sin tabla de vínculo intermedia).
+`nombre`, `direccion`, `empresa`, `fecha_inicio`, `fecha_fin`, `estado` (check in `activa`/`finalizada`/`pausada`/`cancelada`), `notas`. ✅ soft-delete. Hasta 2026-08-29 solo la consumía Steel CRM (`obra_presupuestos`) — desde esa fecha también `computos`/`anidados`/`presupuestos_sm` de Steel Costos, vía `obra_id` directo (sin tabla de vínculo intermedia).
 
 ### `obra_presupuestos`
 Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade), `unique(obra_id, presupuesto_id)`. Tabla de vínculo pura — el esquema permite muchos-a-muchos pero la UI fuerza 1 obra por presupuesto (ver `ENTIDADES-COMPARTIDAS.md` §4).
@@ -208,12 +208,12 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 
 ---
 
-## 4. Steel Measurement
+## 4. Steel Costos
 
 ### `presupuestos_sm` — entidad central
 | Columna | Tipo | Nota |
 |---|---|---|
-| `nro` | text | Numeración interna de Steel Measurement — **no** es lo mismo que `nro` de `presupuestos_crm`. |
+| `nro` | text | Numeración interna de Steel Costos — **no** es lo mismo que `nro` de `presupuestos_crm`. |
 | `codigo_calculo` | text | Antes `not null` — relajado (`fix_steel_measurement_schema`, 24/8) porque hay presupuestos reales más viejos que la funcionalidad y nunca tuvieron uno. Único por `(tenant_id, codigo_calculo)`. Es el identificador que viaja a Steel CRM (`ids_calc`). |
 | `nombre`, `contacto`, `obra`, `detalle`, `empresa` | text | |
 | `cliente_id` | uuid → `clientes` on delete set null | |
@@ -283,13 +283,13 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`, `tarifario_maquinado` (2026-09-02, catálogo nuevo — Plegado/Cilindrado + las 8 máquinas de "Corte de máquina"): `nombre` + `usd`/`usd_hora` + `unidad`, `proveedor`, `fecha_precio` (date), `obs` (agregadas 2026-09-02 a los primeros 6 — el editor real, `CatalogoEditable`, siempre las mandó desde que existe; sin ellas, cada guardado de estos catálogos fallaba en silencio con "column ... not found in schema cache" y la lectura de Fase 5, que prefiere la nube, terminaba pisando el catálogo local correcto con la versión vacía de la nube). `tarifario_pinturas` además: `ficha_tecnica_link`, `rendimiento` (numeric, m²/L), `volumen_solidos` (numeric, %) — 2026-09-02. `tarifario_interes_financiero`: `nombre`, `moneda`, `dias`, `pct`. `tarifario_config` (PK = `tenant_id`, una sola fila): `arenado_usd_m2`, `galvanizado_usd_kg`, `panto_usd_kg_2d`, `panto_usd_kg_3d`, más `{arenado,galvanizado,panto_2d,panto_3d}_{proveedor,fecha_precio,obs}` (2026-09-02, ficha consistente con el resto de los catálogos).
 
 ### `comentarios_computo` / `comentarios_anidado` / `comentarios_presupuesto_sm`
-Misma forma que los comentarios de Steel CRM (`computo_id`/`anidado_id`/`presupuesto_id` → tabla padre cascade, `autor`, `texto`, `fecha`, `hora`). Sin columnas de soft-delete propias en la migración original de Steel Measurement — a diferencia de las de Steel CRM, que sí las ganaron después (`soft_delete_comentarios`, ver §0). Confirmar contra el código si esto cambió antes de asumir.
+Misma forma que los comentarios de Steel CRM (`computo_id`/`anidado_id`/`presupuesto_id` → tabla padre cascade, `autor`, `texto`, `fecha`, `hora`). Sin columnas de soft-delete propias en la migración original de Steel Costos — a diferencia de las de Steel CRM, que sí las ganaron después (`soft_delete_comentarios`, ver §0). Confirmar contra el código si esto cambió antes de asumir.
 
 ---
 
 ## 5. `presupuesto_calculo_link` — el vínculo real, activo desde 2026-08-29
 
-`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Se escribe desde "☁️ Enviar a Steel CRM" en Steel Measurement, se lee desde `BudgetModal` en Steel CRM. Detalle: `ENTIDADES-COMPARTIDAS.md` §6.
+`presupuesto_crm_id → presupuestos_crm` cascade, `presupuesto_sm_id → presupuestos_sm` cascade, `unique(presupuesto_crm_id, presupuesto_sm_id)`. Sin columnas de negocio — es una tabla de vínculo pura. Se escribe desde "☁️ Enviar a Steel CRM" en Steel Costos, se lee desde `BudgetModal` en Steel CRM. Detalle: `ENTIDADES-COMPARTIDAS.md` §6.
 
 ---
 

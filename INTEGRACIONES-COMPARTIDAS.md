@@ -1,7 +1,7 @@
 # Integraciones externas — Steel Platform
 
 **Para:** cualquier sesión que toque IA, cotización, backup o cualquier
-llamada a un servicio externo en Steel CRM o Steel Measurement.
+llamada a un servicio externo en Steel CRM o Steel Costos.
 **De:** sesión de documentación (`steelCRM - BUILDIING`)
 **Fecha:** 2026-08-25
 **Fuente:** `server.js` y `api/*.js` de los dos repos, `src/utils/googleDrive.js`,
@@ -18,7 +18,7 @@ asimetrías reales entre los dos sistemas). Para el esquema de datos,
 
 ## 1. IA (Claude / Anthropic) — solo Steel CRM
 
-Steel Measurement no tiene ninguna integración de IA — no hay `/api/claude`
+Steel Costos no tiene ninguna integración de IA — no hay `/api/claude`
 ni equivalente en ese repo.
 
 **Modelo:** `claude-haiku-4-5-20251001`.
@@ -79,7 +79,7 @@ para extraer compra/venta.
 | | Local | Producción |
 |---|---|---|
 | Steel CRM | `GET http://localhost:3001/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`) |
-| Steel Measurement | `GET http://localhost:3003/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`, repo propio) |
+| Steel Costos | `GET http://localhost:3003/api/cotizacion` | `GET /api/cotizacion` (`api/cotizacion.js`, repo propio) |
 
 **Mismo scraping, mismo parser copiado en 4 archivos** (`server.js` ×2,
 `api/cotizacion.js` ×2) — si el BROU cambia el HTML, hay que actualizar
@@ -89,7 +89,7 @@ los 4, no solo uno.
 descuido:
 - **Steel CRM**: solo informativo, se muestra en un topbar fijo, no
   alimenta ningún cálculo guardado.
-- **Steel Measurement**: autocompleta el campo `tc` (tipo de cambio
+- **Steel Costos**: autocompleta el campo `tc` (tipo de cambio
   histórico) de cada presupuesto al abrirlo — desde ahí sí alimenta el
   cálculo real. Sigue siendo editable a mano después.
 
@@ -116,7 +116,7 @@ descuido:
   de esto) — el valor nunca se sanitizaba antes de usarse. Corregido con
   `.trim()` al guardar.
 
-**Steel Measurement no tiene ninguno de los dos mecanismos de arriba.**
+**Steel Costos no tiene ninguno de los dos mecanismos de arriba.**
 Su "Backup y Datos" (Config) es enteramente del lado del browser:
 - "⬇️ Descargar backup": arma un `.json` con todo (presupuestos, cómputos,
   anidados, historial, biblioteca) y lo baja como archivo — sin pasar por
@@ -129,7 +129,7 @@ Su "Backup y Datos" (Config) es enteramente del lado del browser:
 Los dos sistemas comparten, sí, la herramienta de migración a la nube
 ("☁️ Migrar todo a la nube" / "Migrar datos históricos a la nube") —
 pensada como acción de una sola vez, no como mecanismo de backup
-recurrente (ver comentario en el propio código de Steel Measurement:
+recurrente (ver comentario en el propio código de Steel Costos:
 "este bloque entero se puede borrar" una vez confirmada la migración).
 
 ---

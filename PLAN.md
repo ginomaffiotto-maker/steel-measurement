@@ -8,7 +8,7 @@
 
 ## 1. QUÉ ES ESTE PROYECTO
 
-**Steel Measurement** es el módulo de ingeniería de presupuestación de una metalúrgica en Uruguay. Reemplaza planillas Excel de cómputo de materiales, anidado/optimización de corte y presupuestación industrial.
+**Steel Costos** es el módulo de ingeniería de presupuestación de una metalúrgica en Uruguay. Reemplaza planillas Excel de cómputo de materiales, anidado/optimización de corte y presupuestación industrial.
 
 Es parte de **Steel Platform** — cuando madure, se vende como módulo de Steel CRM a otras metalúrgicas de LATAM. Por eso debe ser configurable: no todo lo que usa esta metalúrgica lo usan otras.
 
@@ -479,7 +479,7 @@ abajo ya están cargados como seed, o si la tabla arranca vacía.
 
 ## 8. PRINCIPIOS DE DISEÑO PARA OTRAS METALÚRGICAS
 
-Steel Measurement no puede ser un fork de un solo cliente. Para que sea vendible:
+Steel Costos no puede ser un fork de un solo cliente. Para que sea vendible:
 
 1. **Rubros activables por empresa** — una metalúrgica sin obra desactiva MO Mon, Terc.Mon, Traslados
 2. **Tarifario propio** — cada empresa carga sus USD/hora, precios de superficie, tercerizadas
@@ -655,9 +655,9 @@ paralelo, nunca bloquea ni puede romper el guardado local.
   masiva/histórica.
 - Pendiente: biblioteca de materiales y tarifario siguen sin dual-write.
 
-## §9.32 — Fase 3 completa en Steel Measurement: biblioteca + tarifario (2026-08-23)
+## §9.32 — Fase 3 completa en Steel Costos: biblioteca + tarifario (2026-08-23)
 
-Cierra la lista de entidades de Steel Measurement — con esto, **las 9
+Cierra la lista de entidades de Steel Costos — con esto, **las 9
 entidades tienen dual-write** (clientes, presupuestos+ítems, computos,
 anidados, historial_trabajos, y ahora biblioteca de materiales + tarifario).
 
@@ -876,14 +876,14 @@ usuario, pero se construyó igual).
   nuevo (un solo dispositivo, todo ya está local). Recomendado: probar
   esto de verdad el día que haya un segundo dispositivo o usuario.
 
-Con esto, **Fase 5 queda completa en las 9 entidades de Steel Measurement**.
+Con esto, **Fase 5 queda completa en las 9 entidades de Steel Costos**.
 
 ## §9.27 — Bugs reales en el launcher de escritorio, encontrados dando de alta a Tiao (2026-08-23)
 
 Gino quiere compartir acceso con un compañero (Tiao) desde su propia PC —
 ya tiene su email para crear la cuenta (mismo backend/tenant compartido
 con Steel CRM, confirmado con `c9` — un solo login sirve para los dos
-sistemas, sin nada extra de perfil/rol del lado de Steel Measurement).
+sistemas, sin nada extra de perfil/rol del lado de Steel Costos).
 Antes de escribirle el instructivo, probé el launcher real de punta a
 punta (no solo leí el código) y encontré 2 bugs reales que le iban a
 fallar a Tiao en silencio:
@@ -897,7 +897,7 @@ fallar a Tiao en silencio:
 - **`IniciarSteelMeasurement.ps1` fallaba en silencio siempre** (no solo
   para Tiao — esto ya le pasaba a Gino, aunque nunca lo notó porque
   probablemente lo tenía andando de una sesión vieja): invocaba
-  `cmd.exe /c "Iniciar Steel Measurement.bat"` vía
+  `cmd.exe /c "Iniciar Steel Costos.bat"` vía
   `[System.Diagnostics.Process]::Start()` — el nombre del `.bat` tiene
   espacios, y esa combinación puntual dispara un bug de parseo clásico
   de `cmd.exe` (toma "Iniciar" como el comando y el resto como
@@ -1162,7 +1162,7 @@ haber andado bien acá, más allá de cualquier fix de sesión.
   mandó Gino — pendiente que confirme el mensaje exacto tras volver a
   correr con el resto de los fixes ya aplicados.
 - Pedido de Gino de paso: el `short_name` del manifest (lo que aparece
-  bajo el ícono del escritorio al instalar) pasa de "Steel Measurement" a
+  bajo el ícono del escritorio al instalar) pasa de "Steel Costos" a
   **"SteelMeasurement"**, sin espacio.
 - Build limpio, desplegado a producción. **Falta que Gino corra el SQL en
   Supabase y vuelva a migrar** — sin eso, nada de este fix tiene efecto.
@@ -1275,4 +1275,4 @@ confirmación. `ComentariosPanel.jsx` solo tenía "agregar".
 
 ---
 
-*Steel Measurement — construido desde las planillas que ya funcionan*
+*Steel Costos — construido desde las planillas que ya funcionan*

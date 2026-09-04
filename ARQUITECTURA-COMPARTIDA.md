@@ -1,4 +1,4 @@
-# Arquitectura — Steel Platform (Steel CRM · Steel Measurement · steel-backend)
+# Arquitectura — Steel Platform (Steel CRM · Steel Costos · steel-backend)
 
 **Para:** cualquier sesión de Claude Code trabajando en los tres repos, y
 como base directa para el manual de instalación y la descripción técnica
@@ -19,7 +19,7 @@ armado el software que los mueve**.
 flowchart LR
     subgraph LOCAL["PC de Gino (uso diario)"]
         CRMlocal["Steel CRM<br/>localhost:3000"]
-        SMlocal["Steel Measurement<br/>localhost:3002"]
+        SMlocal["Steel Costos<br/>localhost:3002"]
         SRVcrm["server.js<br/>localhost:3001"]
         SRVsm["server.js<br/>localhost:3003"]
     end
@@ -51,7 +51,7 @@ propio.
 
 ---
 
-## 2. Stack técnico (idéntico en Steel CRM y Steel Measurement)
+## 2. Stack técnico (idéntico en Steel CRM y Steel Costos)
 
 - **Frontend**: React 19 + Create React App (`react-scripts` 5.0.1) — sin
   router de terceros, un solo `App.js` que decide qué `.jsx` de
@@ -107,7 +107,7 @@ saber dónde un cambio va a doler más:
 | steel-measurement | `src/components/Anidado.jsx` | 1253 |
 
 (`historialSeed.js` 8231 líneas y `presupuestosHistoricosSeed.js` 25078
-líneas en Steel Measurement son datos semilla, no lógica — no cuentan como
+líneas en Steel Costos son datos semilla, no lógica — no cuentan como
 deuda técnica de código.)
 
 **Módulos de Steel CRM** (`src/components/`, 18 archivos): Inicio,
@@ -116,7 +116,7 @@ Solicitudes, Obras, Aceptados, Competencia, Forecast, Bonificaciones,
 CerebroNegocio, Calculadora, Config, Importar, `shared.jsx` (componentes
 compartidos entre módulos: `BudgetModal`, `ComentariosThread`, `ExportModal`, etc.).
 
-**Módulos de Steel Measurement** (`src/components/`, 20 archivos):
+**Módulos de Steel Costos** (`src/components/`, 20 archivos):
 BibliotecaMateriales, Computo, Anidado, Presupuesto, Historial, Dashboard,
 Config, Buscador, FiltrosBar, ComentariosPanel, Toast, ConfirmarEliminar,
 AutocompleteCliente, AutocompleteEmpresa, SolicitudesAsignadas (2026-08-26
@@ -144,7 +144,7 @@ por `tenant_id` vía RLS + Supabase Auth (`profiles`).
 | Integración | Cómo funciona | Local | Producción |
 |---|---|---|---|
 | **IA (Claude, `claude-haiku-4-5-20251001`)** | Proxy que agrega el header `x-api-key` server-side — la key nunca vive en el browser. | ✅ `server.js` expone `POST /api/claude` en `localhost:3001` (steelcrm). | ✅ `api/claude.js` (función serverless, commit `2bfa1ef`) — ver §7 para el detalle y un bug distinto que sigue abierto en un módulo puntual. |
-| **Cotización BROU** | `server.js`/`api/cotizacion.js` hacen el mismo POST que la página pública del BROU a un portlet de Liferay (scraping, sin API oficial — riesgo conocido y documentado en el propio código: si el BROU rediseña la página, deja de funcionar). Steel CRM la muestra como referencia; Steel Measurement la usa para autocompletar el tipo de cambio de cada presupuesto. | ✅ `localhost:3001` (steelcrm) / `localhost:3003` (Steel Measurement). | ✅ `api/cotizacion.js` (función serverless, mismo código de scraping) en los dos repos. |
+| **Cotización BROU** | `server.js`/`api/cotizacion.js` hacen el mismo POST que la página pública del BROU a un portlet de Liferay (scraping, sin API oficial — riesgo conocido y documentado en el propio código: si el BROU rediseña la página, deja de funcionar). Steel CRM la muestra como referencia; Steel Costos la usa para autocompletar el tipo de cambio de cada presupuesto. | ✅ `localhost:3001` (steelcrm) / `localhost:3003` (Steel Costos). | ✅ `api/cotizacion.js` (función serverless, mismo código de scraping) en los dos repos. |
 | **Backup automático** | `server.js` escribe `backups/backup_<fecha>.json` a disco y purga lo de más de 30 días. Por diseño, solo tiene sentido con un proceso local con disco propio. | ✅ `POST /api/backup`, `localhost:3001`. | — (no aplica; Config avisa si pasaron >3 días sin backup exitoso). |
 | **Google Drive (backup opcional)** | `src/utils/googleDrive.js` — OAuth (Google Identity Services) + `drive.file` scope, sube/baja `steelcrm_backup.json`. Solo Steel CRM. | ✅ funciona igual en cualquier origen (no depende de `server.js`). | ✅ |
 | **Supabase Auth** | Login real por email/contraseña, reemplaza la selección de usuario local. Una sola cuenta sirve para los dos sistemas (mismo backend). | ✅ | ✅ |
@@ -154,11 +154,11 @@ por `tenant_id` vía RLS + Supabase Auth (`profiles`).
 ## 6. Despliegue
 
 **Local (uso diario)**: doble click en el launcher de escritorio
-(`IniciarSteelCRM_Oculto.bat` / `Iniciar Steel Measurement.bat`) →
+(`IniciarSteelCRM_Oculto.bat` / `Iniciar Steel Costos.bat`) →
 `.ps1` oculto (`-WindowStyle Hidden`) → arranca `server.js` y `npm start`
 como procesos ocultos → hace polling de puerto contra `127.0.0.1` hasta que
 responde → abre el navegador en `http://localhost:3000` (Steel CRM) /
-`:3002` (Steel Measurement) explícitamente en `localhost`, nunca en
+`:3002` (Steel Costos) explícitamente en `localhost`, nunca en
 `127.0.0.1` — son **orígenes distintos** para el browser (con
 `localStorage` separado); confundirlos fue la causa de un bug real de
 "datos perdidos" el 23/8 (ver `PLAN.md` / changelog de esa fecha).

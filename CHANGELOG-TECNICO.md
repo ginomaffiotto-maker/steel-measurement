@@ -17,13 +17,13 @@ verdad. Este documento resume, no sustituye.
 
 ---
 
-## 2026-06 — Steel Measurement, módulos base
+## 2026-06 — Steel Costos, módulos base
 
 - **M1 — Biblioteca** de materiales (perfiles, planchuelas, planchas, rejillas).
 - **M2 — Cómputo** (reescrito 2026-06-19): carga de piezas, cálculo de peso/superficie.
 - **M3 — Anidado** (actualizado 2026-06-19): optimización de corte.
 
-## 2026-07-31 — Steel Measurement, Presupuesto e Historial
+## 2026-07-31 — Steel Costos, Presupuesto e Historial
 
 - **M4 — Presupuesto**: 9 rubros de costo por ítem, importación de material desde Cómputo/Anidado.
 - **M5 — Historial**: registro de trabajos cerrados, benchmark para Predictor Eq.
@@ -54,16 +54,16 @@ verdad. Este documento resume, no sustituye.
 
 - `nroDuplicado` conectado en los 3 puntos donde se guarda un presupuesto. Config > Empresa > Numeración (prefijo, dígitos, año, reinicio anual).
 
-## 2026-08-19/20 — Punto E: importador Steel Measurement → Steel CRM
+## 2026-08-19/20 — Punto E: importador Steel Costos → Steel CRM
 
-- Botón "⬇️ Steel CRM" en Steel Measurement (exporta `.json`). Importador en Steel CRM (`Importar.jsx`): `codigo_calculo` → append a `idsCalc`, `estado_sm` guardado aparte (no pisa el `estado` comercial real).
+- Botón "⬇️ Steel CRM" en Steel Costos (exporta `.json`). Importador en Steel CRM (`Importar.jsx`): `codigo_calculo` → append a `idsCalc`, `estado_sm` guardado aparte (no pisa el `estado` comercial real).
 
 ## 2026-08-22 — Backend Fase 0-1, launchers, PDF por bloques
 
 - **Fase 0** (diseño de esquema): `BACKEND-COMPARTIDO.md`, ~48 tablas relevadas del código real.
 - **Fase 1** (infraestructura): proyecto Supabase creado (`lnblgecgskjyulbqocet`, São Paulo), migraciones aplicadas, RLS por `tenant_id`.
 - Launchers reemplazados (`.vbs` → `.ps1` + `.bat` oculto) — Windows bloqueaba VBScript.
-- `pdfPresupuesto.js`: PDF con bloques configurables (`RENDER_BLOQUE`), compartido 1:1 entre Steel CRM y Steel Measurement.
+- `pdfPresupuesto.js`: PDF con bloques configurables (`RENDER_BLOQUE`), compartido 1:1 entre Steel CRM y Steel Costos.
 - Sistema de temas (`colors.js`, `THEMES`): `industrial_dark` + `metalsales_light`.
 - Config > Sistema nueva (Numeración + PDF, sacados de Empresa).
 - Auditoría de UI: `Importar.jsx` reorganizado en pestañas ("Cargar datos" / "Mantenimiento").
@@ -91,44 +91,44 @@ verdad. Este documento resume, no sustituye.
 - **Deploy a Vercel** (steelcrm.vercel.app, steel-measurement.vercel.app), repos conectados a GitHub, auto-deploy en push.
 - Rediseño de Obras↔Presupuesto: vínculo se hace desde el Presupuesto, no desde una lista de 1000+ botones en Obras.
 - `descuentos_pendientes` deja de borrarse al resolver — queda como historial (`estado: aprobado/rechazado`).
-- **6 rondas de bugs de esquema en Steel Measurement** encontradas migrando datos reales: `tc` faltante, `codigo_calculo` NOT NULL sin necesidad, biblioteca con `id` legible en vez de uuid, ids legacy no-uuid, columnas sueltas sin whitelist, `""` no convertido a `null`, `tenant_id` ambiguo con 2 cuentas.
-- Borrado con contraseña + Papelera: Cómputo y Anidado (Steel Measurement) — primera vez que aparece este patrón, luego extendido.
+- **6 rondas de bugs de esquema en Steel Costos** encontradas migrando datos reales: `tc` faltante, `codigo_calculo` NOT NULL sin necesidad, biblioteca con `id` legible en vez de uuid, ids legacy no-uuid, columnas sueltas sin whitelist, `""` no convertido a `null`, `tenant_id` ambiguo con 2 cuentas.
+- Borrado con contraseña + Papelera: Cómputo y Anidado (Steel Costos) — primera vez que aparece este patrón, luego extendido.
 
 ## 2026-08-25 — Soft-delete generalizado, coordinación multi-sesión, documentación
 
-- Soft-delete (`eliminado`/`eliminado_por`/`eliminado_fecha`) extendido a: Presupuestos, Clientes, Obras, Solicitudes, Fichas de Aceptados, Seguimientos, Historial de Interacciones, Comentarios (Steel CRM) y Presupuestos/Historial de Trabajos (Steel Measurement) — cubre prácticamente todo el sistema.
+- Soft-delete (`eliminado`/`eliminado_por`/`eliminado_fecha`) extendido a: Presupuestos, Clientes, Obras, Solicitudes, Fichas de Aceptados, Seguimientos, Historial de Interacciones, Comentarios (Steel CRM) y Presupuestos/Historial de Trabajos (Steel Costos) — cubre prácticamente todo el sistema.
 - **Reglas 7-9** formalizadas en los tres `CLAUDE.md`/`PLAN.md`: identificación de sesión, coordinación antes de tocar archivos compartidos, sync de documentación técnica con cada cambio de esquema.
-- Documentación completa: `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md` (técnicos, en los repos); manuales de uso (Steel CRM, Steel Measurement), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
+- Documentación completa: `ENTIDADES-COMPARTIDAS.md`, `ARQUITECTURA-COMPARTIDA.md`, `DICCIONARIO-DATOS.md`, `INTEGRACIONES-COMPARTIDAS.md` (técnicos, en los repos); manuales de uso (Steel CRM, Steel Costos), instalación, administrador, runbook de incidentes (entregables); ficha de producto comercial.
 - Fix real: IA de Steel CRM rota en producción — 8 call-sites con `localhost:3001` hardcodeado, sin función serverless equivalente a `api/cotizacion.js`. Corregido (`api/claude.js` nuevo + hostname switch). Segundo bug encontrado de paso en `Inicio.jsx` (formato de request incorrecto), también corregido.
-- Arranque de la estrategia comercial (Praxware): FODA de Praxware/Steel CRM/Steel Measurement, identidad mínima, 4 segmentos de outreach en LinkedIn.
+- Arranque de la estrategia comercial (Praxware): FODA de Praxware/Steel CRM/Steel Costos, identidad mínima, 4 segmentos de outreach en LinkedIn.
 
-## 2026-08-26 — Anonimización + Solicitudes: Categoría obligatoria, creado_por, y primer cruce directo Steel Measurement → Steel CRM
+## 2026-08-26 — Anonimización + Solicitudes: Categoría obligatoria, creado_por, y primer cruce directo Steel Costos → Steel CRM
 
 - Renombre de los 7 documentos técnicos (sufijo `-MMN` sacado) y limpieza de menciones a la empresa real en ~11 documentos, código fuente (`Config.jsx` de los dos sistemas, comentarios) y datos seed reales (`historialSeed.js`/`presupuestosHistoricosSeed.js`) — ver el registro de sesión para el detalle completo, no se repite acá por no ser un cambio de esquema/capacidad.
 - **`solicitudes` gana `categoria` (text, lista canónica de 32, obligatoria) y `creado_por` (text, fijado una sola vez)** — Categoría viaja a Presupuestos al crear uno desde la solicitud.
 - **"Crear presupuesto desde esta solicitud"**: botón nuevo, crea el presupuesto precargado y lo vincula sin esperar a "ganar".
-- **Primer caso de un sistema leyendo una tabla que el otro es dueño**: Steel Measurement lee `solicitudes` (tabla de Steel CRM) directo de Supabase, filtrada por `asignado_a` — pantalla nueva "Mis solicitudes asignadas", sin export/import de archivo. Hasta ahora la única tabla verdaderamente compartida era `clientes`.
+- **Primer caso de un sistema leyendo una tabla que el otro es dueño**: Steel Costos lee `solicitudes` (tabla de Steel CRM) directo de Supabase, filtrada por `asignado_a` — pantalla nueva "Mis solicitudes asignadas", sin export/import de archivo. Hasta ahora la única tabla verdaderamente compartida era `clientes`.
 - ✅ **Bug de migración duplicada — corregido**: `steel-backend` commit `976dd10` intentaba `alter table solicitudes add column asignado_a` — esa columna ya existía desde el esquema original (2026-08-22), el `ALTER TABLE` nunca pudo haber tenido éxito. Archivo eliminado (`steel-backend` commit `ae6431a`), confirmado con Gino antes de borrar. Las otras 2 migraciones del mismo lote (`categoria`, `creado_por`) eran válidas y no se tocaron.
 
 ---
 
-## 2026-08-29 — Vínculo real Steel Measurement → Steel CRM, sin archivo intermedio
+## 2026-08-29 — Vínculo real Steel Costos → Steel CRM, sin archivo intermedio
 
-- **`presupuesto_calculo_link` pasa de "tabla existe, sin usar" a activa** — el vínculo que se dejó a propósito sin conectar el 22/8 (ver §6 de `ENTIDADES-COMPARTIDAS.md`) se wireó: botón "☁️ Enviar a Steel CRM" en el detalle de Presupuesto de Steel Measurement crea la fila en `presupuestos_crm` y el vínculo directo por Supabase, sin `.json` de por medio.
-- **Mecanismo `.json` (Punto E) dado de baja**: se sacaron `exportPresupuestoParaSteelCRM` (Steel Measurement) y el modo "Cargar desde Steel Measurement" de `Importar.jsx` (Steel CRM).
+- **`presupuesto_calculo_link` pasa de "tabla existe, sin usar" a activa** — el vínculo que se dejó a propósito sin conectar el 22/8 (ver §6 de `ENTIDADES-COMPARTIDAS.md`) se wireó: botón "☁️ Enviar a Steel CRM" en el detalle de Presupuesto de Steel Costos crea la fila en `presupuestos_crm` y el vínculo directo por Supabase, sin `.json` de por medio.
+- **Mecanismo `.json` (Punto E) dado de baja**: se sacaron `exportPresupuestoParaSteelCRM` (Steel Costos) y el modo "Cargar desde Steel Costos" de `Importar.jsx` (Steel CRM).
 - **Límite conocido, aceptado**: el `nro` de Steel CRM creado así es provisorio (`SM-<código de cálculo>`) — el formato real vive solo en el localStorage de Steel CRM, hay que corregirlo a mano con "Corregir N° de Presupuesto".
-- `BudgetModal` (Steel CRM) ahora muestra el vínculo y el estado de Steel Measurement en vivo (leído de `presupuestos_sm` vía el link), reemplaza al `estadoSM` estático para presupuestos nuevos.
+- `BudgetModal` (Steel CRM) ahora muestra el vínculo y el estado de Steel Costos en vivo (leído de `presupuestos_sm` vía el link), reemplaza al `estadoSM` estático para presupuestos nuevos.
 - **Sin verificar en vivo todavía** — armado y verificado por build, sin login real disponible en esta sesión.
 
 ---
 
-## 2026-08-29 — Cliente/Obra obligatorios (Steel CRM + Steel Measurement) + Obra llega a Steel Measurement
+## 2026-08-29 — Cliente/Obra obligatorios (Steel CRM + Steel Costos) + Obra llega a Steel Costos
 
 Pedido de Gino, aplicado en los dos sistemas para que tipear un cliente u
 obra nuevo en un Presupuesto/Solicitud/Cómputo/Anidado nunca quede como
 texto suelto ni se cree solo en silencio — siempre abre una ventana de
 alta real antes de dejar guardar (o, en pantallas de autoguardado por
-campo como Presupuesto de Steel Measurement, antes de "Enviar a Steel CRM").
+campo como Presupuesto de Steel Costos, antes de "Enviar a Steel CRM").
 
 - **Steel CRM**: `ClienteRapidoModal`/`ObraRapidaModal` nuevos en
   `shared.jsx`, wireados en `BudgetModal` (Presupuestos/Kanban/
@@ -137,7 +137,7 @@ campo como Presupuesto de Steel Measurement, antes de "Enviar a Steel CRM").
   afecta presupuestos viejos sin tocar ese campo). Empresa pasa a ser
   campo propio y editable en "Crear presupuesto nuevo" y Solicitudes
   (antes se heredaba en silencio del cliente elegido).
-- **Steel Measurement**: mismo mecanismo (`ClienteRapidoModal`/
+- **Steel Costos**: mismo mecanismo (`ClienteRapidoModal`/
   `ObraRapidaModal`/`AutocompleteObra` nuevos) en Cómputo, Anidado y
   Presupuesto — reemplaza la auto-creación silenciosa de `resolverClienteId`
   (que solo guardaba nombre+empresa, sin cargo/tel/email/zona).
@@ -153,7 +153,7 @@ campo como Presupuesto de Steel Measurement, antes de "Enviar a Steel CRM").
 - **Sin verificar en vivo todavía** — build limpio en los dos repos, sin
   login real disponible en esta sesión.
 
-## 2026-08-29 — 2 bugs reales de sync entre dispositivos (Steel CRM + Steel Measurement)
+## 2026-08-29 — 2 bugs reales de sync entre dispositivos (Steel CRM + Steel Costos)
 
 Encontrados investigando un reporte real de Gino: el mismo presupuesto se
 veía distinto en su PC de trabajo y su PC personal (dos presupuestos
@@ -164,9 +164,9 @@ directamente ausentes en una, un tercero con estado desactualizado).
   significaba que un presupuesto podía quedar guardado solo en un
   dispositivo sin ningún aviso — invisible para cualquier otro. Fix: se
   registra el fallo en localStorage (`scrm_sync_pendientes` en Steel CRM,
-  `smeas_sync_pendientes` en Steel Measurement) y se muestra un aviso con
+  `smeas_sync_pendientes` en Steel Costos) y se muestra un aviso con
   botón "Reintentar ahora" (Inicio en Steel CRM; arriba de la lista de
-  Presupuesto en Steel Measurement, que no tiene pantalla de Inicio). Por
+  Presupuesto en Steel Costos, que no tiene pantalla de Inicio). Por
   ahora solo conectado a Presupuestos en los dos sistemas.
 - **Bug B — Fase 5 nunca actualizaba lo ya existente.** La lectura desde
   la nube solo agregaba presupuestos nuevos — un presupuesto ya conocido
@@ -185,7 +185,7 @@ directamente ausentes en una, un tercero con estado desactualizado).
 
 ## 2026-08-29/30 — Empresa como entidad real ("igual que Cliente y Obra")
 
-- **Tabla `empresas` nueva** (compartida Steel CRM/Steel Measurement,
+- **Tabla `empresas` nueva** (compartida Steel CRM/Steel Costos,
   migración `20260829150000_empresas.sql`), reemplaza el texto libre que
   tenía Empresa hasta ahora en toda la plataforma. `empresa_id` agregada a
   `clientes`, `computos`, `anidados`, `presupuestos_sm` (FK directa, sin
@@ -195,7 +195,7 @@ directamente ausentes en una, un tercero con estado desactualizado).
   empresa nueva es `EmpresaRapidaModal`, obligatorio (mismo cartel "no
   existe todavía" que ya tenían Cliente y Obra) en BudgetModal/
   Presupuestos/Solicitudes (Steel CRM) y Cómputo/Anidado/Presupuesto
-  (Steel Measurement). Sin pantalla de administración propia — decisión
+  (Steel Costos). Sin pantalla de administración propia — decisión
   explícita de Gino, alta solo desde el cartel por ahora.
 - Migración backfillea automáticamente toda razón social ya en uso
   (`clientes`/`obras`/`presupuestos_crm`/`presupuestos_sm`/
@@ -238,7 +238,7 @@ directamente ausentes en una, un tercero con estado desactualizado).
 
 ## 2026-08-31 — 2 bugs reales de datos, sin cambio de esquema
 
-- **Steel Measurement** (`ff7d9bc`): sincronizar un presupuesto sin
+- **Steel Costos** (`ff7d9bc`): sincronizar un presupuesto sin
   Contacto cargado escribía el nombre de la Empresa en la tabla
   `clientes` (compartida con Steel CRM) como si fuera una persona —
   contaminaba el autocompletado de Cliente en los dos sistemas. Fix
@@ -255,7 +255,7 @@ directamente ausentes en una, un tercero con estado desactualizado).
 
 ## 2026-09-01 — Fix real: guardado sin debounce creaba clientes basura en cada tecla
 
-- **Steel Measurement** (`7cdbe6a`): `updPres` (detalle de Presupuesto)
+- **Steel Costos** (`7cdbe6a`): `updPres` (detalle de Presupuesto)
   disparaba `dualWritePresupuesto()` en cada `onChange` de cualquier
   campo, sin debounce — escribir en Cliente llamaba `resolverClienteId()`
   en cada tecla y creaba una fila real en `clientes` (compartida con
@@ -272,11 +272,11 @@ directamente ausentes en una, un tercero con estado desactualizado).
 ## 2026-09-02 — Dos bugs reales de sync silencioso en Insumos y Precios / Presupuesto
 
 - **`tarifario_mo_fab`/`tarifario_mo_mon`/`tarifario_mat_generales`/`tarifario_terceros`/`tarifario_traslados`/`tarifario_pinturas`** (`steel-backend` `20260902100000`): les faltaban `unidad`/`proveedor`/`fecha_precio`/`obs` desde la migración original (`20260822120200`) — el editor real (`CatalogoEditable`) siempre mandó esos 4 campos. Cada guardado de cualquiera de estos 6 catálogos fallaba en silencio (`console.warn`, "Could not find the 'fecha_precio' column ... in the schema cache") y, en la siguiente recarga, Fase 5 (que prefiere la nube en tarifario) pisaba el catálogo local correcto con la versión vacía/vieja de la nube. Confirmado en vivo, sin fix de código necesario — solo la migración.
-- **Steel Measurement** (`4a8f635`): `item_mat_generales`/`item_mo_fabricacion`/`item_mo_montajes`/`item_terc_fabricacion`/`item_terc_montajes`/`item_traslados`/`item_corte_pantografo` tienen `orden int not null default 0`, pero los `add()`/`addDesdeCatalogo()` de esos 6 rubros en `Presupuesto.jsx` nunca seteaban `orden` en la fila nueva — al guardar un ítem con una fila vieja (con `orden`) y una nueva (sin `orden`) mezcladas, el insert múltiple de PostgREST manda `NULL` explícito para la que no lo tiene en vez de aplicar el default, violando la restricción. Confirmado en vivo ("null value in column \"orden\" ... violates not-null constraint"). Fix: `orden: rows.length` en cada alta.
+- **Steel Costos** (`4a8f635`): `item_mat_generales`/`item_mo_fabricacion`/`item_mo_montajes`/`item_terc_fabricacion`/`item_terc_montajes`/`item_traslados`/`item_corte_pantografo` tienen `orden int not null default 0`, pero los `add()`/`addDesdeCatalogo()` de esos 6 rubros en `Presupuesto.jsx` nunca seteaban `orden` en la fila nueva — al guardar un ítem con una fila vieja (con `orden`) y una nueva (sin `orden`) mezcladas, el insert múltiple de PostgREST manda `NULL` explícito para la que no lo tiene en vez de aplicar el default, violando la restricción. Confirmado en vivo ("null value in column \"orden\" ... violates not-null constraint"). Fix: `orden: rows.length` en cada alta.
 
 ## 2026-09-02 (continuación) — Maquinado (Plegado/Cilindrado) + ficha consistente + historial de precios
 
-- **Steel Measurement** (`ededf06`) + **steel-backend** (`8e68fec`, migración `20260902110000`): nueva operación "Maquinado" — Plegado y Cilindrado, más las 8 máquinas de "Corte de máquina" (antes sueltas en la ficha de Cómputo, sin costo propio) — con catálogo de precios propio (`tarifario_maquinado`), toggles en Cómputo/Anidado, y nuevo rubro "Maquinado" en Presupuesto (`item_maquinado`) que se auto-completa al importar materiales de Anidado si la pieza tenía alguna marcada.
+- **Steel Costos** (`ededf06`) + **steel-backend** (`8e68fec`, migración `20260902110000`): nueva operación "Maquinado" — Plegado y Cilindrado, más las 8 máquinas de "Corte de máquina" (antes sueltas en la ficha de Cómputo, sin costo propio) — con catálogo de precios propio (`tarifario_maquinado`), toggles en Cómputo/Anidado, y nuevo rubro "Maquinado" en Presupuesto (`item_maquinado`) que se auto-completa al importar materiales de Anidado si la pieza tenía alguna marcada.
 - Fix real encontrado en el camino: `mergearFicha` (Anidado) solo copiaba el nombre de la máquina de Corte de máquina, nunca el flag `corte_maquina` en sí — nunca se veía en el resumen de Anidado aunque la pieza lo tuviera marcado.
 - Ficha consistente en los 4 valores "pineados" de tarifario (Arenado, Galvanizado, Corte 2D, Corte 3D): ganan proveedor/fecha del precio/observaciones, igual que cualquier fila de catálogo.
 - Historial de precios genérico: `material_historial_precios` se amplía a los 7 catálogos de tarifario + Maquinado + los 4 valores pineados, con `cambiado_por`. Botón "📜" por fila/valor.

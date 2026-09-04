@@ -269,7 +269,7 @@ a tener 0 o 1 elemento.
 de este documento Steel CRM **ya no es solo documentación** — tiene código
 React funcionando, con datos reales cargados (614 presupuestos +
 183 contactos históricos importados desde la planilla de Gestsoft). La
-integración Steel Measurement ↔ Steel CRM mencionada en `PLAN.md` §"pendiente"
+integración Steel Costos ↔ Steel CRM mencionada en `PLAN.md` §"pendiente"
 puede empezar a diseñarse sobre código real, no sobre un proyecto vacío.
 
 ---

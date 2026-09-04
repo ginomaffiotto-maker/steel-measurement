@@ -1,4 +1,4 @@
-# Backend compartido Steel CRM + Steel Measurement — diseño de esquema
+# Backend compartido Steel CRM + Steel Costos — diseño de esquema
 
 **Estado: Fase 0 (diseño) — sin implementar todavía.** Este documento es la fuente
 de verdad del esquema Postgres/Supabase compartido entre Steel CRM y Steel
@@ -17,13 +17,13 @@ proyecto de coordinación para la arquitectura de integración en 3 etapas.
 | Decisión | Elegido |
 |---|---|
 | Motivo | Preparar la base para vender como SaaS (no hay demanda multi-tenant real todavía) |
-| Alcance | Backend **compartido** entre Steel CRM y Steel Measurement (un solo proyecto, `tenant_id` desde el día uno) |
+| Alcance | Backend **compartido** entre Steel CRM y Steel Costos (un solo proyecto, `tenant_id` desde el día uno) |
 | Stack | **Supabase** (Postgres gestionado + Auth + API) |
 | Migración de datos existentes | **Dual-write**: la app sigue escribiendo a localStorage y también al backend en paralelo durante un tiempo, antes de cortar la lectura |
-| Clientes | **Unificados** en una sola tabla — Steel Measurement pasa de autocompletar texto libre a elegir un cliente real del CRM (cambio de UX real en ese sistema) |
+| Clientes | **Unificados** en una sola tabla — Steel Costos pasa de autocompletar texto libre a elegir un cliente real del CRM (cambio de UX real en ese sistema) |
 | Autenticación | **Supabase Auth con email real** por usuario (reemplaza selección de usuario + password en texto plano) |
 | Relación presupuesto↔cálculo | **Tabla de relación real** (`presupuesto_calculo_link`) — reemplaza el export/import manual de JSON (Punto E) y el array `idsCalc` de códigos string |
-| Items de Steel Measurement (rubros, piezas, grupos) | **Tablas normalizadas**, no JSONB — con dos excepciones puntuales (ver §4) |
+| Items de Steel Costos (rubros, piezas, grupos) | **Tablas normalizadas**, no JSONB — con dos excepciones puntuales (ver §4) |
 
 ---
 
@@ -60,7 +60,7 @@ clientes(id, tenant_id → tenants, nombre, empresa, cargo, celular, tel, tel_li
 ```
 
 Reemplaza tanto las fichas completas de Steel CRM como la lista simple de nombres
-de Steel Measurement (`smeas_clientes`). La convención `matchClienteBudget`
+de Steel Costos (`smeas_clientes`). La convención `matchClienteBudget`
 (clienteId exacto → nombre parcial → nunca por empresa sola) deja de hacer falta
 como heurística — con FK real, el match es directo por `cliente_id`.
 
@@ -133,7 +133,7 @@ Notas:
 
 ---
 
-## 4. Steel Measurement
+## 4. Steel Costos
 
 ```
 presupuestos_sm(id, tenant_id → tenants, nro, codigo_calculo UNIQUE, nombre,
@@ -239,11 +239,11 @@ presupuesto_calculo_link(id, tenant_id → tenants,
 Relación muchos a muchos real (un cálculo puede derivar en varios presupuestos;
 un presupuesto puede necesitar varios cálculos — mismo acuerdo de
 `TAXONOMIA-COMPARTIDA.md` §7). Con esto, el export/import manual de JSON
-entre Steel Measurement y Steel CRM (botón "⬇️ Steel CRM", `Importar.jsx` →
-"Cargar desde Steel Measurement") deja de hacer falta una vez que los dos
+entre Steel Costos y Steel CRM (botón "⬇️ Steel CRM", `Importar.jsx` →
+"Cargar desde Steel Costos") deja de hacer falta una vez que los dos
 sistemas escriben contra el mismo backend — queda pendiente decidir en Fase 2/3
 si se retira el importador manual o se deja como vía alternativa (ej. para
-cuando Steel Measurement se usa offline).
+cuando Steel Costos se usa offline).
 
 ---
 
@@ -267,5 +267,5 @@ cuando Steel Measurement se usa offline).
 3. Dual-write piloto en Steel CRM (localStorage sigue siendo fuente de verdad,
    cada guardado también escribe a Supabase) — verificar paridad.
 4. Migración de datos históricos (619 presupuestos Steel CRM + históricos de
-   Steel Measurement) a un solo tenant real.
+   Steel Costos) a un solo tenant real.
 5. Corte de lectura a Supabase, una vez verificada la paridad.

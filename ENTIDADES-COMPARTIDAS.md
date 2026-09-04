@@ -1,6 +1,6 @@
-# Árbol de entidades — Steel Platform (Steel CRM · Steel Measurement · backend compartido)
+# Árbol de entidades — Steel Platform (Steel CRM · Steel Costos · backend compartido)
 
-**Para:** cualquier sesión de Claude Code trabajando en Steel CRM, Steel Measurement o
+**Para:** cualquier sesión de Claude Code trabajando en Steel CRM, Steel Costos o
 steel-backend, y cualquier documento de manual/instalación/arquitectura que se
 construya a partir de este.
 **De:** sesión de documentación (`steelCRM - BUILDIING`)
@@ -11,7 +11,7 @@ construya a partir de este.
 changelog. Si algo de acá no coincide con el código actual, el código manda:
 este documento quedó desactualizado y hay que corregirlo (ver §8).
 
-**Por qué existe:** los dos sistemas (Steel CRM, Steel Measurement) y el
+**Por qué existe:** los dos sistemas (Steel CRM, Steel Costos) y el
 backend compartido (steel-backend/Supabase) crecieron con ~48 tablas entre
 los tres, casi todas agregadas de forma incremental durante agosto 2026. No
 existía hasta ahora un mapa único de qué entidad vive dónde, cómo se
@@ -100,7 +100,7 @@ flowchart TB
         COMFICHA[comentarios_ficha_aceptado]
     end
 
-    subgraph SM["Steel Measurement"]
+    subgraph SM["Steel Costos"]
         PSM[presupuestos_sm]
         ITEM[items_presupuesto_sm]
         RUBROS["10 tablas de rubro de costo<br/>(item_hierros, item_mat_generales,<br/>item_mo_fabricacion/montajes,<br/>item_terc_fabricacion/montajes,<br/>item_traslados, item_corte_pantografo,<br/>item_maquinado,<br/>item_trat_superficie → pinturas/otros)"]
@@ -178,16 +178,16 @@ el resto del diagrama.
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
-| `presupuestos_crm` | `id` | `cliente_id→clientes`, `vendedor_id→profiles`, `recotizacion_de_id→presupuestos_crm` (self) | `presupuestoCrmToDB`/`FromDB`, `savePresupuestoCrmDB` | ✅ (`eliminado`, `eliminado_por`, `eliminado_fecha`) | Entidad central. `nro` único por tenant. `ids_calc text[]` — ver §6. `estado_nativo` es el estado comercial (7 valores); no confundir con `estado_sm` de Steel Measurement, que es solo informativo. |
+| `presupuestos_crm` | `id` | `cliente_id→clientes`, `vendedor_id→profiles`, `recotizacion_de_id→presupuestos_crm` (self) | `presupuestoCrmToDB`/`FromDB`, `savePresupuestoCrmDB` | ✅ (`eliminado`, `eliminado_por`, `eliminado_fecha`) | Entidad central. `nro` único por tenant. `ids_calc text[]` — ver §6. `estado_nativo` es el estado comercial (7 valores); no confundir con `estado_sm` de Steel Costos, que es solo informativo. |
 | `comentarios_presupuesto` | `id` | `presupuesto_id→presupuestos_crm` | `comentarioToDB`/`FromDB` (genérica, `table` param) | ✅ (`eliminado`, `eliminado_por`) | Guardado directo al comentar, no espera al botón Guardar general. |
 | `descuentos_pendientes` | `id` | `presupuesto_id→presupuestos_crm`, `solicitado_por→profiles`, `resuelto_por→profiles` | `descuentoToDB`/`FromDB`, `saveDescuentoDB` | — (usa `estado`: `pendiente`/`aprobado`/`rechazado`, nunca se borra) | Es el único historial de descuentos del sistema — no se borra al resolver. |
 | `seguimientos` | `id` | `cliente_id→clientes`, `presupuesto_id→presupuestos_crm`, `solicitud_id→solicitudes` | `seguimientoToDB`/`FromDB` | ✅ | Agenda comercial. |
 | `historial_interacciones` | `id` | `cliente_id→clientes`, `presupuesto_id→presupuestos_crm` | `interaccionToDB`/`FromDB` | ✅ | |
 | `competencia` | `id` | `presupuesto_id→presupuestos_crm` | `competenciaToDB`/`FromDB` | — | Análisis de presupuestos perdidos. |
-| `obras` | `id` | — | `obraToDB`/`FromDB` | ✅ | Hasta 2026-08-29 solo la usaba Steel CRM (vía `obra_presupuestos`) — desde esa fecha, `computos`/`anidados`/`presupuestos_sm` de Steel Measurement también resuelven `obra_id` contra esta misma tabla (§5), sin tabla de vínculo intermedia (FK directa, no muchos-a-muchos como `obra_presupuestos`). |
+| `obras` | `id` | — | `obraToDB`/`FromDB` | ✅ | Hasta 2026-08-29 solo la usaba Steel CRM (vía `obra_presupuestos`) — desde esa fecha, `computos`/`anidados`/`presupuestos_sm` de Steel Costos también resuelven `obra_id` contra esta misma tabla (§5), sin tabla de vínculo intermedia (FK directa, no muchos-a-muchos como `obra_presupuestos`). |
 | `empresas` | `id` | — | `saveEmpresaDB`/`loadEmpresasDB` | ✅ | Nueva 2026-08-29 ("igual que Cliente y Obra", pedido de Gino) — antes Empresa era solo texto libre sin tabla propia. `clientes.empresa_id`, `computos.empresa_id`, `anidados.empresa_id` y `presupuestos_sm.empresa_id` la referencian, todas FK directa (sin tabla de vínculo intermedia). Sin auto-creación silenciosa al tipear en ningún lado — la única forma de crear una empresa nueva es `EmpresaRapidaModal`, obligatorio. Sin pantalla de administración propia (solo alta desde el cartel, decisión explícita de Gino). Migración `20260829150000_empresas.sql` backfillea automáticamente toda razón social ya en uso en `clientes`/`obras`/`presupuestos_crm`/`presupuestos_sm`/`historial_trabajos` para no bloquear datos existentes (`computos`/`anidados` quedan afuera del backfill: nunca tuvieron columna `empresa` en la base). |
 | `obra_presupuestos` | `id` | `obra_id→obras`, `presupuesto_id→presupuestos_crm` | `saveObraPresupuestosDB`/`syncObraPresupuestosDB` | — | Tabla de vínculo. El esquema permite muchos-a-muchos (`unique(obra_id, presupuesto_id)`) pero la UI actual (`BudgetModal`) solo deja un presupuesto vinculado a **una** obra a la vez — se desvincula de la anterior antes de vincular la nueva. |
-| `solicitudes` | `id` | `cliente_id→clientes`, `asignado_a→profiles`, `presupuesto_id→presupuestos_crm` | `solicitudToDB`/`FromDB` | ✅ | Solicitud entrante con scoring IA. `categoria` (2026-08-26, lista canónica de 32, obligatoria al guardar) y `creado_por` (texto, fijado una sola vez al crear — `asignado_a` es reasignable, este no) agregados. Al "ganar" se referencia el presupuesto creado; también se puede crear un presupuesto directo desde la solicitud antes de eso ("Crear presupuesto desde esta solicitud"). Leída directo por Steel Measurement — ver §6. |
+| `solicitudes` | `id` | `cliente_id→clientes`, `asignado_a→profiles`, `presupuesto_id→presupuestos_crm` | `solicitudToDB`/`FromDB` | ✅ | Solicitud entrante con scoring IA. `categoria` (2026-08-26, lista canónica de 32, obligatoria al guardar) y `creado_por` (texto, fijado una sola vez al crear — `asignado_a` es reasignable, este no) agregados. Al "ganar" se referencia el presupuesto creado; también se puede crear un presupuesto directo desde la solicitud antes de eso ("Crear presupuesto desde esta solicitud"). Leída directo por Steel Costos — ver §6. |
 | `solicitud_versiones` | `id` | `solicitud_id→solicitudes` | `versionSolicitudToDB`/`FromDB` | — | |
 | `metas` | `id` | — | `metaToDB`/`FromDB` | — | Meta de equipo o individual. |
 | `meta_usuarios` | `id` | `meta_id→metas`, `profile_id→profiles` | `saveMetaUsuariosDB`/`loadMetaUsuariosDB` | — | Solo se llena cuando la meta es individual (`asignadoA` array, no `"todos"`); solo alcanza a usuarios que ya iniciaron sesión real al menos una vez. |
@@ -198,7 +198,7 @@ el resto del diagrama.
 
 ---
 
-## 5. Steel Measurement — entidades y relaciones
+## 5. Steel Costos — entidades y relaciones
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
@@ -218,11 +218,11 @@ el resto del diagrama.
 | `material_historial_precios` | `id` | `material_id` (text, sin FK real — referencia lógica a una de las 4 tablas de arriba según `material_tipo`) | `loadDBHistorialPrecios` | — | |
 | `tarifario_mo_fab`, `tarifario_mo_mon`, `tarifario_mat_generales`, `tarifario_terceros`, `tarifario_traslados`, `tarifario_pinturas`, `tarifario_maquinado`, `tarifario_interes_financiero` | `id` c/u | — | `loadDBTarifario`/`saveDBTarifario` | — | `tarifario_maquinado` (2026-09-02): Plegado/Cilindrado + las 8 máquinas de "Corte de máquina", sembrado con esos 10 nombres la primera vez que se abre la pestaña. |
 | `tarifario_config` | `tenant_id` (PK directa) | `tenant_id→tenants` | `loadDBTarifario`/`saveDBTarifario` | — | Única fila por tenant (no lista): `arenado_usd_m2`, `galvanizado_usd_kg`, `panto_usd_kg_2d/3d`. |
-| `comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm` | `id` c/u | `computo_id→computos` / `anidado_id→anidados` / `presupuesto_id→presupuestos_sm` | `saveDBComentario` (genérica) | — | Guardado directo al comentar (diseño original de Steel Measurement, luego replicado a Steel CRM). |
+| `comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm` | `id` c/u | `computo_id→computos` / `anidado_id→anidados` / `presupuesto_id→presupuestos_sm` | `saveDBComentario` (genérica) | — | Guardado directo al comentar (diseño original de Steel Costos, luego replicado a Steel CRM). |
 
 ---
 
-## 6. El vínculo cruzado Steel CRM ↔ Steel Measurement
+## 6. El vínculo cruzado Steel CRM ↔ Steel Costos
 
 Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja:
 
@@ -230,9 +230,9 @@ Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja
    Tabla real (`presupuesto_crm_id`, `presupuesto_sm_id`, ambas FK con
    integridad referencial real) creada en la migración
    `20260822120300_link_table.sql` el 22/8, dejada a propósito sin conectar
-   hasta que Steel Measurement pasara un cálculo real al CRM. Ese momento
+   hasta que Steel Costos pasara un cálculo real al CRM. Ese momento
    llegó el 29/8: botón "☁️ Enviar a Steel CRM" en el detalle de Presupuesto
-   de Steel Measurement (`enviarPresupuestoASteelCRM`, `storage.js`) —
+   de Steel Costos (`enviarPresupuestoASteelCRM`, `storage.js`) —
    escribe directo a Supabase (sin archivo intermedio): crea la fila en
    `presupuestos_crm` con el resumen comercial (cliente, obra, categoría,
    kg, USD) e inserta la fila de vínculo. El botón queda deshabilitado
@@ -243,7 +243,7 @@ Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja
    que era una foto fija tomada al importar).
    **Límite conocido**: el `nro` de `presupuestos_crm` es único por tenant y
    sigue un formato configurable que sólo vive en el localStorage de Steel
-   CRM (Config > Sistema) — Steel Measurement no lo puede replicar, así que
+   CRM (Config > Sistema) — Steel Costos no lo puede replicar, así que
    el presupuesto se crea con un N° provisorio `SM-<código de cálculo>`. Hay
    que corregirlo a mano con "Corregir N° de Presupuesto" (Importar >
    Mantenimiento, ya existía para otro caso) — decisión explícita de Gino
@@ -253,7 +253,7 @@ Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja
    Texto libre, sin foreign key. Se llena a mano en el campo "ID Cálculo(s)"
    de `BudgetModal` — sigue siendo el mecanismo correcto para códigos de
    cálculo históricos o manuales sin ninguna fila real de `presupuestos_sm`
-   detrás (presupuestos de antes de que existiera Steel Measurement, o de
+   detrás (presupuestos de antes de que existiera Steel Costos, o de
    antes del 24/8 que ya lo sincroniza). No se toca al usar "Enviar a Steel
    CRM" — son dos mecanismos independientes, uno de texto libre y uno con
    integridad referencial real.
@@ -262,18 +262,18 @@ Hay **cuatro mecanismos** en el esquema — tres activos, uno viejo dado de baja
    Hasta esa fecha, el único camino era exportar un `.json` desde Steel
    Measurement e importarlo a mano en `Importar.jsx` ("Cargar desde Steel
    Measurement"). Reemplazado por completo por el punto 1 — se sacaron
-   `exportPresupuestoParaSteelCRM` (Steel Measurement) y el modo de import
+   `exportPresupuestoParaSteelCRM` (Steel Costos) y el modo de import
    correspondiente (Steel CRM). El campo local `estadoSM` (Steel CRM) queda
    sin escribirse para presupuestos nuevos, pero no se borró — presupuestos
    importados antes de esta fecha lo siguen mostrando como respaldo si no
    hay vínculo real todavía.
 
-4. **Lectura directa de `solicitudes` desde Steel Measurement — activo
-   (2026-08-26).** Steel Measurement lee la tabla `solicitudes` (propiedad de
+4. **Lectura directa de `solicitudes` desde Steel Costos — activo
+   (2026-08-26).** Steel Costos lee la tabla `solicitudes` (propiedad de
    Steel CRM) directo de Supabase, filtrada por `asignado_a = profileId` del
    usuario logueado — pantalla nueva "📥 Mis solicitudes asignadas"
    (`SolicitudesAsignadas.jsx`). Sin export/import de archivo — a diferencia
-   de `ids_calc` arriba, es lectura en vivo de una tabla que Steel Measurement
+   de `ids_calc` arriba, es lectura en vivo de una tabla que Steel Costos
    no posee ni escribe. El botón "📐 Crear cómputo" de esa pantalla deja un
    payload chico (nombre/cliente/categoría) en `sessionStorage` y navega a
    Cómputo, que lo consume una sola vez al montar para precargar el
@@ -325,7 +325,7 @@ un cliente cargado desde cualquiera de los dos aparece en el otro.
   arriba). Desde 2026-08-29, Presupuestos en los dos sistemas registra el
   fallo en localStorage (`scrm_sync_pendientes` / `smeas_sync_pendientes`)
   y muestra un aviso con botón "Reintentar ahora" — en Inicio (Steel CRM)
-  o arriba de la lista (Steel Measurement, que no tiene pantalla de
+  o arriba de la lista (Steel Costos, que no tiene pantalla de
   Inicio). Mecanismo genérico, pensado para sumar el resto de las
   entidades con dual-write más adelante si hace falta.
 - **Soft-delete**: las entidades marcadas ✅ en §4/§5 nunca se borran de
@@ -344,7 +344,7 @@ con `TAXONOMIA-COMPARTIDA.md` (Familia/Categoría) y
 `BACKEND-COMPARTIDO.md` (diseño de fase 0 del backend, más narrativo,
 este documento es el que queda al día con el esquema real).
 
-**Regla de sync** (Steel CRM: `CLAUDE.md` regla 9 · Steel Measurement:
+**Regla de sync** (Steel CRM: `CLAUDE.md` regla 9 · Steel Costos:
 `PLAN.md` §11 punto 7 · steel-backend: `CLAUDE.md` regla 9): toda sesión
 que agregue, borre o modifique una tabla, columna o relación en
 `steel-backend/supabase/migrations/`, o que cambie qué entidad local mapea

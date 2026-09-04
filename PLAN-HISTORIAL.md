@@ -183,9 +183,9 @@ Pedidos de Gino, ordenados por tamaño y dependencias (no por importancia).
       en un momento de esta sesión porque el navegador de pruebas no estaba
       renderizando visualmente; usé `javascript_tool` (dispatch de eventos DOM reales)
       como alternativa para poder seguir verificando sin bloquear el trabajo.
-- [ ] **Integración Steel Measurement ↔ Steel CRM**: exportar un presupuesto de Steel Measurement
+- [ ] **Integración Steel Costos ↔ Steel CRM**: exportar un presupuesto de Steel Costos
       a Steel CRM para redacción y seguimiento comercial desde ahí; sync de estado bidireccional
-      (si en Steel CRM se marca Aprobado/Rechazado/etc., debe reflejarse en Steel Measurement).
+      (si en Steel CRM se marca Aprobado/Rechazado/etc., debe reflejarse en Steel Costos).
       **Actualizado 2026-08-15 — ya no es "recién a estudiar":** Steel CRM
       (`C:\Users\Gino\Documents\steelcrm`) tiene código React funcionando, con 614 presupuestos +
       183 contactos reales importados desde Gestsoft, y el esquema mínimo de IDs
@@ -1567,7 +1567,7 @@ diseñar, no copiado de memoria. Aprobado el plan, implementado.
 
 Ver `steel-backend/CLAUDE.md` y `BACKEND-COMPARTIDO.md` (raíz de este
 repo) para el detalle completo de esquema y decisiones — acá sólo lo que
-tocó código de Steel Measurement.
+tocó código de Steel Costos.
 
 - **`@supabase/supabase-js` instalado**, `src/utils/supabaseClient.js`
   nuevo (cliente inicializado desde `REACT_APP_SUPABASE_URL`/
