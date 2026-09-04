@@ -678,21 +678,42 @@ const QuickPick = ({ catalogo, onPick }) => {
 // directas en la fila, así que no hacía falta duplicarlas acá.
 const MAQUINAS_OPTS_HIERRO = ["Plasma / Pantógrafo","Láser","Oxicorte","Cizalla","Sierra","Torno","Fresadora","Otro"];
 const CATALOGOS_HIERRO = [["smeas_perfiles","Perfil"],["smeas_planchuelas","Planchuela"],["smeas_planchas","Plancha"]];
+// Igual que useBibliotecaHierros() más arriba — el catálogo real incluye lo
+// que ya está en localStorage FUSIONADO con el seed precargado
+// (PERFILES_DATA/etc.). Un material "de fábrica" (ej. UPN 160) puede existir
+// solo en el seed, sin fila propia en localStorage todavía. Bug real
+// encontrado 2026-09-03: este modal buscaba con loadLS() puro, sin el seed,
+// y decía "no existe en el catálogo" para materiales que sí estaban.
+const CATALOGOS_HIERRO_SEED = [
+  ["smeas_perfiles","Perfil", PERFILES_DATA, IDS_UNIFICADOS_GM],
+  ["smeas_planchuelas","Planchuela", PLANCHUELAS_DATA, undefined],
+  ["smeas_planchas","Plancha", PLANCHAS_DATA, undefined],
+];
 
 function FichaHierroModal({ row, onChange, onClose }) {
   const [, setTick] = useState(0); // fuerza re-leer el catálogo después de crear/guardar
   const nombre = (row.nombre || "").trim();
-  let catKey = null, catItem = null;
-  for (const [key] of CATALOGOS_HIERRO) {
-    const found = loadLS(key, []).find(m => (m.nombre || "").trim().toLowerCase() === nombre.toLowerCase());
-    if (found) { catKey = key; catItem = found; break; }
+  let catKey = null, catItem = null, catEnLocal = false;
+  for (const [key, , seedData, ids] of CATALOGOS_HIERRO_SEED) {
+    const combinado = migrar(mergeSeed(loadLS(key, null), seedData, ids));
+    const found = combinado.find(m => (m.nombre || "").trim().toLowerCase() === nombre.toLowerCase());
+    if (found) {
+      catKey = key; catItem = found;
+      catEnLocal = loadLS(key, []).some(it => it.id === found.id);
+      break;
+    }
   }
   const [tipoCrear, setTipoCrear] = useState("smeas_perfiles");
   const [precioEdit, setPrecioEdit] = useState(catItem?.precio_usd_kg ?? row.usd_kg ?? 0);
 
   const guardarPrecioCatalogo = () => {
     if (!catKey || !catItem) return;
-    saveLS(catKey, loadLS(catKey, []).map(it => it.id === catItem.id ? { ...it, precio_usd_kg: +precioEdit || 0 } : it));
+    const actuales = loadLS(catKey, []);
+    // El material puede venir solo del seed (nunca tuvo fila propia en
+    // localStorage) — en ese caso hay que agregarlo, no buscar para actualizar.
+    saveLS(catKey, catEnLocal
+      ? actuales.map(it => it.id === catItem.id ? { ...it, precio_usd_kg: +precioEdit || 0 } : it)
+      : [...actuales, { ...catItem, precio_usd_kg: +precioEdit || 0 }]);
     setTick(t => t + 1);
   };
   const crearEnCatalogo = () => {
@@ -813,7 +834,13 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
 
   const anidados = loadLS("smeas_anidados", []);
   const anidadoSelId = item.anidado_id || "";
-  const anidadoSel = anidados.find(a => a.id === anidadoSelId) || null;
+  const anidadoSel = anidados.find(a => String(a.id) === String(anidadoSelId)) || null;
+  // El presupuesto tiene un anidado_id guardado, pero no aparece en la lista
+  // actual de anidados (borrado, o desincronizado por Fase 5) — sin esto, el
+  // <select> cae en silencio a "— Ninguno —" y parece que nunca hubo vínculo,
+  // aunque las filas de Hierros ya importadas sigan con su % de desperdicio
+  // real (bug real reportado por Gino, 2026-09-03).
+  const anidadoPerdido = !!anidadoSelId && !anidadoSel;
   const { kg3D: anidKg3D, kg2D: anidKg2D } = anidadoSel ? anidadoKg(anidadoSel) : { kg3D:0, kg2D:0 };
   const materialesAnidado = anidadoSel ? materialesUnificadosAnidado(anidadoSel) : [];
   const anidM2Arenar    = materialesAnidado.filter(m=>m.ficha.granallado).reduce((s,m)=>s+m.sup,0);
@@ -832,13 +859,18 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
             {!anidadoExpandido && anidadoSel && <span style={{ color:C.muted, fontWeight:400 }}>— {anidadoSel.nombre}</span>}
           </div>
           {anidadoExpandido && <>
-          <select value={anidadoSelId} onChange={e=>{
+          {anidadoPerdido && (
+            <div style={{ fontSize:12, color:C.warn, marginBottom:8 }}>
+              ⚠ Este ítem tenía un anidado vinculado (id {anidadoSelId}) que ya no está en la lista — puede haber sido borrado. Las filas de Hierros ya importadas conservan su % de desperdicio real; elegí otro anidado o dejalo así si no hace falta re-vincular.
+            </div>
+          )}
+          <select value={String(anidadoSelId)} onChange={e=>{
               set("anidado_id", e.target.value);
-              const a = anidados.find(x => x.id === e.target.value);
+              const a = anidados.find(x => String(x.id) === e.target.value);
               if (a && (a.categoria || a.tipo_trabajo)) onAnidadoVinculado?.(a.categoria, a.tipo_trabajo);
             }} style={{...INP, marginBottom: anidadoSel ? 10 : 0}}>
             <option value="">— Ninguno —</option>
-            {anidados.map(a => <option key={a.id} value={a.id}>{a.nombre} ({a.fecha})</option>)}
+            {anidados.map(a => <option key={a.id} value={String(a.id)}>{a.nombre} ({a.fecha})</option>)}
           </select>
           {anidadoSel && (
             <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
@@ -1146,13 +1178,20 @@ function TabMatGenerales({ item, set }) {
   );
 }
 
-// ─── TAB: MAQUINADO (Corte de máquina / Plegado / Cilindrado) ───────
+// ─── TAB: MAQUINADO (Pantógrafo / Corte de máquina / Plegado / Cilindrado) ──
 // 2026-09-02, a pedido de Gino: mismo patrón que Mat. Generales — filas
 // que se agregan a mano o "Desde catálogo (Maquinado)". Las filas que
 // vienen de Anidado (pieza con corte_maquina/plegado/cilindrado marcado)
 // se auto-agregan acá al importar materiales (ver importarMateriales/
 // importarMaterialesComoPresNuevo más abajo), sin que el usuario tenga
 // que repetir el trabajo hecho en Cómputo/Anidado.
+// 2026-09-03, a pedido de Gino: "Pantógrafo" era un tab propio al mismo
+// nivel que Maquinado — es una herramienta de corte más, así que pasa a
+// ser una sub-sección de acá (TabPanto se sigue renderizando igual, solo
+// que ya no tiene su propio tab). El rubro/campo de datos
+// `item.corte_pantografo` y su cálculo (panto_usd) NO se tocaron — sigue
+// siendo su propia línea en el desglose de costos, solo cambia dónde vive
+// en la UI, para no romper presupuestos ya cargados ni el resumen interno.
 function TabMaquinado({ item, set }) {
   const rows = item.maquinado || [];
   const tarifario = loadTarifario();
@@ -1169,6 +1208,9 @@ function TabMaquinado({ item, set }) {
 
   return (
     <div>
+      <div style={{ fontSize:13, fontWeight:700, color:C.pur, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>✂️ Corte Pantógrafo</div>
+      <TabPanto item={item} set={set} />
+      <div style={{ fontSize:13, fontWeight:700, color:C.text, margin:"20px 0 8px", paddingTop:14, borderTop:`1px solid ${C.border}` }}>🔧 Otras operaciones de maquinado</div>
       <QuickPick catalogo={tarifario.maquinado} onPick={addDesdeCatalogo} />
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
@@ -1781,7 +1823,8 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
     { id:"terc_montajes",    icon:"🚛",  label:"Terc. Mon."   },
     { id:"trat_superficie",  icon:"🎨",  label:"Trat. Sup."   },
     { id:"traslados",        icon:"🚚",  label:"Traslados"    },
-    { id:"corte_pantografo", icon:"✂️",  label:"Pantógrafo"   },
+    // "Pantógrafo" (corte_pantografo) dejó de ser un tab propio (2026-09-03,
+    // ver TabMaquinado más abajo) — vive como sub-sección adentro de Maquinado.
     { id:"maquinado",        icon:"🔧",  label:"Maquinado"    },
   ];
 
@@ -1820,8 +1863,8 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
     terc_montajes:    (item.terc_montajes||[]).length,
     trat_superficie:  ((item.trat_superficie?.pinturas||[]).length + (item.trat_superficie?.arenado_m2 > 0 ? 1 : 0)),
     traslados:        (item.traslados||[]).length,
-    corte_pantografo: (item.corte_pantografo||[]).length,
-    maquinado:        (item.maquinado||[]).length,
+    // Badge del tab "Maquinado" combinado — suma Pantógrafo (sub-sección) + el resto.
+    maquinado:        (item.corte_pantografo||[]).length + (item.maquinado||[]).length,
   };
 
   return (
@@ -1953,7 +1996,6 @@ function EditorRubros({ item, onChange, onClose, onClonar, onAnidadoVinculado, p
           {tab === "terc_montajes"    && <TabTerc         item={item} set={set} tipo="montaje" />}
           {tab === "trat_superficie"  && <TabTrat         item={item} set={set} />}
           {tab === "traslados"        && <TabTraslados    item={item} set={set} />}
-          {tab === "corte_pantografo" && <TabPanto        item={item} set={set} />}
           {tab === "maquinado"        && <TabMaquinado    item={item} set={set} />}
         </fieldset>
 
@@ -2026,13 +2068,23 @@ function FilaItem({ item, onChange, onDelete, onClonar, onAnidadoVinculado, pres
 
         {c.total_usd > 0 && (
           <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+            {/* 2026-09-03, bug real reportado por Gino: esta fila solo
+                mostraba 6 de los 11 rubros que calcItem() ya calcula —
+                faltaban Horas especiales/Terceros Fab/Terceros Mon, y
+                Maquinado no aparecía nunca (aunque tuviera datos cargados).
+                Pantógrafo se suma junto con Maquinado en un solo badge,
+                mismo criterio que la fusión de tabs de más arriba. */}
             {[
-              ["⚙️ Hier",  c.hier_usd,  C.info],
-              ["📦 Mat",   c.mat_usd,   C.steel],
-              ["🔨 MOFab", c.moFab_usd, C.pur],
-              ["🏗️ MOMon", c.moMon_usd, C.teal],
-              ["🎨 Trat",  c.trat_usd,  C.warn],
-              ["🚚 Trasl", c.trasl_usd, C.muted],
+              ["⚙️ Hier",   c.hier_usd,  C.info],
+              ["📦 Mat",    c.mat_usd,   C.steel],
+              ["🔨 MOFab",  c.moFab_usd, C.pur],
+              ["🏗️ MOMon",  c.moMon_usd, C.teal],
+              ["⏰ HEsp",   c.hesp_usd,  C.warn],
+              ["🏭 TFab",   c.tFab_usd,  C.steel],
+              ["🚛 TMon",   c.tMon_usd,  C.steel],
+              ["🎨 Trat",   c.trat_usd,  C.warn],
+              ["🚚 Trasl",  c.trasl_usd, C.muted],
+              ["🔧 Maquin", c.panto_usd + c.maquinado_usd, C.pur],
             ].filter(([,v]) => v > 0).map(([lbl, v, col]) => (
               <span key={lbl} style={BDG(col, true)}>{lbl} ${n2(v)}</span>
             ))}

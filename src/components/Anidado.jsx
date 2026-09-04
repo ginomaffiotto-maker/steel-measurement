@@ -376,11 +376,11 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
               <span style={{ fontSize:16,color:C.ok,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>b.útiles </span>{r.resumen.b_util}</span>
               <span style={{ fontSize:16,color:col_desp,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>b.desp </span>{r.resumen.b_desp}</span>
               <span style={{ fontSize:14,color:col_desp,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>kg desp </span>{r.resumen.kg_desp}</span>
-              {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px"}}>{incidencia}%</span>}
-              <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>🔩 {r.resumen.b_total} barras</span>
-              <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
-              {calculado && <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>⚠ {r.resumen.pct_desp}% desp.</span>}
-              {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>${n2(monto)}</span>}
+              {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
+              <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.b_total} barras</span>
+              <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
+              {calculado && <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>}
+              {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
             </>}
           </div>
           <button onClick={onEliminar} style={{ background:"transparent",border:"none",color:C.err,cursor:"pointer",fontSize:14,padding:"0 4px",marginLeft:"auto",flexShrink:0 }}>✕</button>
@@ -555,12 +555,12 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
               <span style={{ fontSize:16,color:col_desp,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>hojas desp </span>{r.resumen.area_total_m2>0 ? Math.round((r.resumen.n_hojas - (r.resumen.area_util_m2/r.resumen.area_total_m2)*r.resumen.n_hojas)*100)/100 : 0}</span>
               <span style={{ fontSize:14,color:col_desp,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>m² desp </span>{r.resumen.area_desp_m2}</span>
               <span style={{ fontSize:14,color:col_desp,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>kg desp </span>{n2(kg_desp)}</span>
-              {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px"}}>{incidencia}%</span>}
-              <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>🔩 {r.resumen.n_hojas} hojas</span>
-              <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>▦ {r.resumen.area_total_m2} m²</span>
-              <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>⚖ {n2(kg_total)} kg</span>
-              <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>⚠ {r.resumen.pct_desp}% desp.</span>
-              {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px"}}>${n2(monto)}</span>}
+              {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
+              <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.n_hojas} hojas</span>
+              <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>▦ {r.resumen.area_total_m2} m²</span>
+              <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(kg_total)} kg</span>
+              <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>
+              {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
             </>}
           </div>
           <button onClick={onEliminar} style={{ background:"transparent",border:"none",color:C.err,cursor:"pointer",fontSize:14,padding:"0 4px",marginLeft:"auto",flexShrink:0 }}>✕</button>
@@ -1126,6 +1126,15 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   };
 
   const hayResultados = actual?.grupos?.some(g=>g.resultado);
+  const todoAnidado = !!actual?.grupos?.length && actual.grupos.every(g=>g.resultado);
+
+  // colapsarSenal: incrementarlo cambia el `key` de cada Grupo/GrupoPlancha
+  // (ver .map() más abajo), forzando su remount — así el estado local
+  // `expanded` de cada tarjeta se re-evalúa desde cero (`useState(!g.resultado)`)
+  // y, como el cálculo ya corrió, arrancan colapsadas. A pedido de Gino
+  // (2026-09-03): "Anidar todo" pliega los materiales, el usuario los
+  // despliega a mano si quiere revisar el detalle.
+  const [colapsarSenal, setColapsarSenal] = useState(0);
 
   // Calcula el anidado de TODOS los grupos de una sola vez (en vez de uno por uno).
   const calcularTodo = () => {
@@ -1140,6 +1149,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       return { ...g, resultado: runFFD(g.piezas, parseFloat(g.largo_barra_mm)||6000, parseFloat(g.kerf_mm)||0, g.kg_m) };
     });
     upd({ ...actual, grupos: nuevosGrupos });
+    setColapsarSenal(s => s + 1);
   };
 
   // Total kg útil de todos los grupos (para calcular incidencia %)
@@ -1357,8 +1367,10 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 {/* "Eliminar" se movió a la lista de anidados (2026-09-02,
                     a pedido de Gino) — ya no vive acá adentro. */}
                 {actual.grupos.length>0&&(
-                  <button onClick={calcularTodo} style={{ ...BTN("primary"),fontSize:12 }}>
-                    ⚡ Calcular todo ({actual.grupos.length})
+                  <button onClick={calcularTodo} disabled={todoAnidado}
+                    style={{ ...BTN(todoAnidado?"ok":"primary"),fontSize:12,
+                      ...(todoAnidado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`,cursor:"default"}:{}) }}>
+                    {todoAnidado ? "✓ Todo anidado" : `⚡ Anidar todo (${actual.grupos.length})`}
                   </button>
                 )}
                 {hayResultados&&(
@@ -1429,8 +1441,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             {actual.grupos.map((g,i)=>{
               const cambiar=updated=>upd({...actual,grupos:actual.grupos.map((x,j)=>j===i?updated:x)});
               return g.tipo==="plancha"
-                ? <GrupoPlancha key={g.id} g={g} bib={bibPlanchas} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>
-                : <Grupo        key={g.id} g={g} bib={bibLineales} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>;
+                ? <GrupoPlancha key={`${g.id}-${colapsarSenal}`} g={g} bib={bibPlanchas} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>
+                : <Grupo        key={`${g.id}-${colapsarSenal}`} g={g} bib={bibLineales} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>;
             })}
             {confirmarGrupoId && (
               <ModalConfirmarBorrado
