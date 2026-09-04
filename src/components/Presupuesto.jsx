@@ -2447,6 +2447,12 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
   const [vinculoCRM, setVinculoCRM] = useState(null); // {crmId, nro} | null
   const [enviandoCRM, setEnviandoCRM] = useState(false);
+  const [confirmReabrirSM, setConfirmReabrirSM] = useState(false);
+  // Si el presupuesto vinculado ya está aceptado o facturado en Steel CRM
+  // (2026-09-04, a pedido de Gino), el estado acá queda fijo — la decisión
+  // comercial real ya se cerró del otro lado, no tiene sentido que alguien
+  // lo mueva de "enviado" a "borrador" (o a cualquier otro) desde Costos.
+  const crmCerrado = !!(vinculoCRM?.estado && ["aceptado", "facturado"].includes(vinculoCRM.estado));
 
   // Chequea si este presupuesto ya tiene un presupuesto real vinculado en
   // Steel CRM (tabla presupuesto_calculo_link) — evita reenviarlo dos veces.
@@ -2457,6 +2463,13 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   }, [pres?.id]);
 
   const cambiarEstado = (k) => {
+    if (crmCerrado) return; // ya está bloqueado en la UI (pills disabled) — red de seguridad extra
+    // Volver a "borrador" reabre la edición de kg/precios ya cotizados (ver
+    // bloqueadoPres más arriba) — no es un click más entre pills, pide
+    // confirmación (2026-09-04, mismo criterio que "Reabrir presupuesto" en
+    // Steel CRM). Moverse entre enviado/aprobado/rechazado no cambia el
+    // candado de edición, así que sigue siendo un solo click.
+    if (k === "borrador" && pres.estado !== "borrador") { setConfirmReabrirSM(true); return; }
     if (k === "aprobado" && pres.estado !== "aprobado") {
       const cambios = calcularCambiosPrecios(pres);
       if (cambios.length > 0) setConfirmarSyncPrecios({ cambios });
@@ -2500,6 +2513,18 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           color={C.gold}
           onConfirm={() => { aplicarCambiosPrecios(pres, confirmarSyncPrecios.cambios); setConfirmarSyncPrecios(null); }}
           onClose={() => setConfirmarSyncPrecios(null)}
+        />
+      )}
+      {confirmReabrirSM && (
+        <ModalConfirmarBorrado
+          titulo={`"${pres.nombre || pres.nro}"`}
+          subtitulo={`Vuelve a "Borrador" — se destraba la edición de kg y precios ya cotizados. Usalo solo si hace falta corregir algo antes de reenviar.`}
+          verbo="Reabrir"
+          checkboxLabel="Sí, quiero reabrir este presupuesto para editarlo"
+          labelBoton="↩️ Reabrir"
+          color={C.warn}
+          onConfirm={() => { set("estado", "borrador"); setConfirmReabrirSM(false); }}
+          onClose={() => setConfirmReabrirSM(false)}
         />
       )}
       {showClienteRapido && (
@@ -2554,9 +2579,15 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
               {enviandoCRM ? "Enviando…" : "☁️ Enviar a Steel CRM"}
             </button>
           )}
+          {crmCerrado && (
+            <span style={{ ...BDG(C.muted, true), fontSize:13 }} title="El presupuesto vinculado ya está aceptado/facturado en Steel CRM — el estado acá queda fijo">
+              🔒 Cerrado en Steel CRM
+            </span>
+          )}
           {Object.entries(ESTADO_CFG).map(([k,v]) => (
-            <button key={k} onClick={() => cambiarEstado(k)}
+            <button key={k} disabled={crmCerrado} onClick={() => cambiarEstado(k)}
               style={{ ...BTN("ghost"), padding:"4px 12px", fontSize:13,
+                opacity: crmCerrado ? 0.5 : 1, cursor: crmCerrado ? "not-allowed" : "pointer",
                 ...(pres.estado===k ? { background:v.color+"22", color:v.color, border:`1px solid ${v.color}44` } : {}) }}>
               {v.icon} {v.label}
             </button>
