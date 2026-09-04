@@ -3172,6 +3172,9 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
+    // 2026-09-04, a pedido de Gino: mismo criterio que Cómputo/Anidado —
+    // clonar también queda en el registro de actividad.
+    logear?.("Presupuesto clonado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
   };
   const presAEliminar = confirmarDelId ? presupuestos.find(p=>p.id===confirmarDelId) : null;
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, BDG, BTN } from "../styles/colors";
 import {
   loadLS, saveLS,
@@ -66,14 +66,23 @@ export default function Buscador({ onIrA, usuarios = [] }) {
   const [abierto, setAbierto] = useState(true);
   const [tipoFiltro, setTipoFiltro] = useState("");
 
+  // Mismo bug real que tenía Dashboard.jsx (2026-09-04): el merge de Fase 5
+  // traía todo de la nube a estado de React pero nunca lo guardaba de vuelta
+  // en localStorage — cada vez que se reabría el Buscador Global, arrancaba
+  // de cero desde el localStorage viejo y volvía a pedir todo a la nube de
+  // nuevo, en vez de partir de lo que ya se había traído la vez anterior.
   const [computos, setComputos] = useState(() => loadLS("smeas_computos", []));
   useMergeComputosNube(computos, setComputos, usuarios);
+  useEffect(() => { saveLS("smeas_computos", computos); }, [computos]);
   const [anidados, setAnidados] = useState(() => loadLS("smeas_anidados", []));
   useMergeAnidadosNube(anidados, setAnidados, usuarios);
+  useEffect(() => { saveLS("smeas_anidados", anidados); }, [anidados]);
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(presupuestos, setPresupuestos, usuarios);
+  useEffect(() => { saveLS("smeas_presupuestos", presupuestos); }, [presupuestos]);
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", []));
   useMergeHistorialNube(setHistorial);
+  useEffect(() => { saveLS("smeas_historial", historial); }, [historial]);
 
   const todas = normalizar(computos, anidados, presupuestos, historial);
   const activo = filt.texto.trim() || filt.cliente.trim() || filt.desde || filt.hasta || filt.familia || filt.tipo || filt.vendedor || tipoFiltro;

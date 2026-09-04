@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, CARD } from "../styles/colors";
-import { loadLS, useMergePresupuestosNube, useMergeHistorialNube } from "../utils/storage";
+import { loadLS, saveLS, useMergePresupuestosNube, useMergeHistorialNube } from "../utils/storage";
 import FiltrosBar from "./FiltrosBar";
 import { FAMILIAS, TIPOS_TRABAJO, familiaDe } from "../utils/taxonomia";
 import { calcPresupuesto } from "./Presupuesto";
@@ -254,8 +254,16 @@ export default function Dashboard({ usuarios = [] }) {
   // autocomplete sin depender del orden de navegación.
   const [presupuestos, setPresupuestos] = useState(() => loadLS("smeas_presupuestos", []));
   useMergePresupuestosNube(presupuestos, setPresupuestos, usuarios);
+  // Bug real (2026-09-04): esta pantalla nunca guardaba de vuelta a
+  // localStorage lo que el merge de arriba iba trayendo — cada vez que se
+  // volvía a montar (cambiar de pestaña y volver), arrancaba de nuevo desde
+  // el localStorage viejo y volvía a traer TODO de la nube de cero, con el
+  // contador de presupuestos subiendo de a uno en vivo (4→5→6...→11) cada
+  // vez. Mismo patrón que ya usan bien Presupuesto.jsx/Historial.jsx.
+  useEffect(() => { saveLS("smeas_presupuestos", presupuestos); }, [presupuestos]);
   const [historial, setHistorial] = useState(() => loadLS("smeas_historial", HISTORIAL_SEED));
   useMergeHistorialNube(setHistorial);
+  useEffect(() => { saveLS("smeas_historial", historial); }, [historial]);
 
   let registros = [];
   if (filt.fuente !== "historial") registros = registros.concat(presupuestos.map(normalizarPresupuesto));

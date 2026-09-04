@@ -1078,6 +1078,9 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     };
     setComputos(prev=>[nuevoC,...prev]);
     setSelId(nuevoC.id);
+    // 2026-09-04, a pedido de Gino: clonar no quedaba en el registro de
+    // actividad (a diferencia de crear/eliminar/restaurar, que sí).
+    logear?.("Cómputo clonado", nro + " — " + (nuevoC.nombre||""));
   };
 
   const computosFiltradosBase = computos.filter(c => !c.eliminado).filter(c => {

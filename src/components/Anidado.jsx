@@ -999,6 +999,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const { show: showUndo, Toast } = useUndoToast();
   const [anidados,   setAnidados]   = useState(()=>loadLS("smeas_anidados",[]));
   useMergeAnidadosNube(anidados, setAnidados, usuarios);
+  // Bug real (2026-09-04, mismo patrón encontrado en Dashboard.jsx/
+  // Buscador.jsx): esta pantalla solo guardaba en localStorage en acciones
+  // explícitas (crear/editar/eliminar/restaurar) — lo que trae el merge de
+  // Fase 5 (anidados creados/editados desde otro dispositivo) quedaba solo
+  // en memoria, así que se volvía a pedir de la nube desde cero cada vez
+  // que se reabría esta pantalla. Efecto genérico como el que ya tienen
+  // Computo.jsx/Presupuesto.jsx, cubre cualquier cambio del array.
+  useEffect(() => { saveLS("smeas_anidados", anidados); }, [anidados]);
   const [selId,      setSelId]      = useState(null);
   const [creando,    setCreando]    = useState(false);
   const [nombre,     setNombre]     = useState("");
@@ -1189,6 +1197,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     save([nuevo, ...anidados]);
     setSelId(nuevo.id);
     dualWriteAnidado(nuevo);
+    // 2026-09-04, a pedido de Gino: mismo criterio que Cómputo — clonar
+    // también queda en el registro de actividad.
+    logear?.("Anidado clonado", nuevo.nombre||"");
   };
 
   const addGrupoPerf=()=>{ if(!actual)return; upd({...actual,grupos:[...actual.grupos,{id:uid(),tipo:"perfil",material_id:"",material_nombre:"",kg_m:0,sup_m2m:0,largo_barra_mm:6000,kerf_mm:0,piezas:[],resultado:null}]}); };
