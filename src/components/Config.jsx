@@ -370,6 +370,48 @@ function SimboloMoneda({ soloLectura }) {
 // relación visual con el resto de la configuración del sistema).
 const FREQ_MS = { "1h": 3600000, "1d": 86400000, "1w": 604800000 };
 function BackupYDatos({ usuario }) {
+  // Backup automático real (2026-09-04, pedido de Gino: "parejar" con
+  // Steel CRM). Steel Costos nunca tuvo esto — el único mecanismo hasta
+  // ahora era exportar/cargar un .json a mano más abajo. Corre server-side
+  // vía un cron de Vercel en el proyecto de Steel CRM (api/backup-cron.js,
+  // cubre las dos apps de una sola pasada porque comparten backend) — acá
+  // solo se lee el estado real (api/backup-status.js, misma URL de
+  // producción de Steel CRM) y se puede forzar uno a mano.
+  const [backupStatus, setBackupStatus] = useState({ cargando: true, ultimo: null, total: 0, error: null });
+  const [backupForzando, setBackupForzando] = useState(false);
+  const cargarBackupStatus = useCallback(async () => {
+    if (!supabase) { setBackupStatus({ cargando: false, ultimo: null, total: 0, error: "Backend no configurado" }); return; }
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) { setBackupStatus({ cargando: false, ultimo: null, total: 0, error: "Sesión no lista" }); return; }
+      const r = await fetch("https://steelcostos.vercel.app/api/backup-status", { headers: { Authorization: "Bearer " + token } });
+      const d = await r.json();
+      if (!r.ok) { setBackupStatus({ cargando: false, ultimo: null, total: 0, error: d.error || "No se pudo consultar" }); return; }
+      setBackupStatus({ cargando: false, ultimo: d.ultimo, total: d.total, error: null });
+    } catch (e) {
+      setBackupStatus({ cargando: false, ultimo: null, total: 0, error: e.message });
+    }
+  }, []);
+  useEffect(() => { cargarBackupStatus(); }, [cargarBackupStatus]);
+  async function forzarBackup() {
+    if (!supabase) return;
+    setBackupForzando(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) { alert("Tu sesión no tiene token real — volvé a iniciar sesión."); setBackupForzando(false); return; }
+      const r = await fetch("https://steelcrm.vercel.app/api/backup-cron", { method: "POST", headers: { Authorization: "Bearer " + token } });
+      const d = await r.json();
+      if (!r.ok) { alert("❌ " + (d.error || "No se pudo hacer el backup")); setBackupForzando(false); return; }
+      await cargarBackupStatus();
+      alert("✅ Backup hecho — " + d.fecha);
+    } catch (e) {
+      alert("❌ No se pudo hacer el backup: " + e.message);
+    }
+    setBackupForzando(false);
+  }
+
   const [pendingBackup, setPendingBackup] = useState(null);
   const [importErr, setImportErr] = useState("");
   const fileInputRef = useRef(null);
@@ -488,6 +530,34 @@ function BackupYDatos({ usuario }) {
       </div>
       <input ref={fileInputRef} type="file" accept="application/json" onChange={onArchivo} style={{ display:"none" }} />
       {importErr && <div style={{ color:C.err, fontSize:11, fontWeight:600, marginTop:10 }}>⚠ {importErr}</div>}
+
+      {/* Backup automático (servidor) — nuevo 2026-09-04, mismo estado real
+          que muestra Steel CRM (un solo cron cubre las dos apps) */}
+      <div style={{ marginTop:20, paddingTop:16, borderTop:`1px dashed ${C.border}` }}>
+        <div style={{ fontWeight:700, color:C.teal || C.accent, fontSize:12, marginBottom:4 }}>💾 Backup Automático (servidor)</div>
+        <div style={{ fontSize:11, color:C.muted, marginBottom:10, lineHeight:1.6 }}>
+          Corre solo, una vez por día, en el servidor — no depende de que nadie tenga la app abierta.
+          Guarda un snapshot completo de todos los datos de la empresa (Steel CRM y Steel Costos) en un lugar seguro aparte. Se conservan los últimos 30 días.
+        </div>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <button onClick={forzarBackup} disabled={backupForzando} style={{ ...BTN("ghost"), opacity: backupForzando?0.6:1 }}>{backupForzando ? "Haciendo backup..." : "💾 Backup ahora"}</button>
+          {backupStatus.cargando ? (
+            <span style={{ fontSize:11, color:C.muted }}>Consultando estado...</span>
+          ) : backupStatus.error ? (
+            <span style={{ fontSize:11, color:C.err }}>⚠️ {backupStatus.error}</span>
+          ) : (() => {
+            const dias = backupStatus.ultimo ? Math.floor((new Date() - new Date(backupStatus.ultimo)) / 864e5) : null;
+            const stale = dias === null || dias > 1;
+            return (
+              <span style={{ fontSize:11, color: stale ? C.err : C.muted }}>
+                Último: <strong style={{ color: stale ? C.err : C.text }}>{backupStatus.ultimo || "nunca"}</strong>
+                {stale && backupStatus.ultimo && ` (hace ${dias} día${dias===1?"":"s"})`}
+                {backupStatus.total > 0 && ` · ${backupStatus.total} respaldo(s) guardados`}
+              </span>
+            );
+          })()}
+        </div>
+      </div>
 
       {/* Google Drive (2026-09-03) — mismo mecanismo que ya tiene Steel CRM */}
       <div style={{ marginTop:20, paddingTop:16, borderTop:`1px dashed ${C.border}` }}>
