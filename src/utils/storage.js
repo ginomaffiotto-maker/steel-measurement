@@ -82,7 +82,7 @@ const soloColumnas = (obj, columnas) => {
 // causa concreta acá). `getSession()` espera esa inicialización si todavía
 // está en curso — usar esto como primera línea de cualquier efecto de
 // Fase 5 antes de consultar la base.
-const esperarSesion = async () => {
+export const esperarSesion = async () => {
   if (!supabase) return false;
   const { data } = await supabase.auth.getSession();
   return !!data?.session;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculoCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -3078,6 +3078,21 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // contra la tabla `clientes` — mismo helper que usa registrarCliente.
   const dualWritePresupuesto = async (p, intentoRegen = false) => {
     if (!supabase) return;
+    // Fix real (2026-09-04, reportado por Gino): un mismo presupuesto
+    // fallaba en distintas tablas en cada reintento (a veces
+    // presupuestos_sm, a veces clientes) mientras el resto sincronizaba
+    // bien — señal de sesión no lista (token vencido/refrescando) en el
+    // instante exacto del intento, no un problema de esa fila puntual.
+    // Se verifica la sesión antes de escribir; si no está lista, se deja
+    // pendiente sin mostrar un error de RLS confuso — el próximo
+    // "Reintentar ahora" (o el próximo guardado real) la va a encontrar
+    // ya lista.
+    if (!intentoRegen && !(await esperarSesion())) {
+      marcarSyncPendiente("presupuesto", p.id);
+      refrescarSyncPendientes();
+      setSyncError(`"${p.nro || p.id}": tu sesión no está lista todavía — probá recargar la página y reintentar.`);
+      return;
+    }
     try {
       // A diferencia de Cómputo/Anidado/Historial, acá "cliente" siempre fue
       // la razón social (empresa) y "contacto" el nombre de la persona —
