@@ -14,6 +14,15 @@
 //   calc,          // el objeto devuelto por calcPresupuesto(pres) — rubros/detalle/totales
 //   comentarios,   // pres.comentarios tal cual
 // }
+//
+// Seguridad (2026-09-04): empresa/cliente/obra/vendedor/nro y los
+// comentarios internos son texto cargado por el usuario, interpolado acá
+// dentro de HTML crudo que termina en un window.open del mismo origen —
+// sin escapar, era un XSS almacenado real. Ninguno de estos campos debe
+// llevar HTML propio, así que se escapan todos (a diferencia del "notas"
+// de steelCRM, que sí sanitiza en vez de escapar porque ese sí es HTML
+// legítimo de un editor de redacción — acá no existe ese caso).
+import { escapeHtml } from "./sanitizeHtml";
 
 const _sepM = n => Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 const fmtN = v => (v || v === 0 ? _sepM(v) : "—");
@@ -105,8 +114,8 @@ function leyendaHTML(entries, rubros, totalUsd) {
 function filaComentario(c) {
   return `
     <div class="comentario">
-      <div class="comentario-meta"><strong>${c.autor || "?"}</strong> · ${fmtD(c.fecha)}${c.hora ? " " + c.hora : ""}</div>
-      <div class="comentario-texto">${(c.texto || "").replace(/\n/g, "<br>")}</div>
+      <div class="comentario-meta"><strong>${escapeHtml(c.autor) || "?"}</strong> · ${fmtD(c.fecha)}${c.hora ? " " + escapeHtml(c.hora) : ""}</div>
+      <div class="comentario-texto">${escapeHtml(c.texto).replace(/\n/g, "<br>")}</div>
     </div>`;
 }
 
@@ -127,7 +136,7 @@ export function buildResumenInternoHTML(data) {
   const comentarios = (data.comentarios || []).map(filaComentario).join("") || `<div class="sin-comentarios">Sin comentarios internos cargados.</div>`;
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-  <title>Resumen interno ${data.nro || ""}</title>
+  <title>Resumen interno ${escapeHtml(data.nro)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;padding:32px;background:#fff}
@@ -172,19 +181,19 @@ export function buildResumenInternoHTML(data) {
   <div class="aviso">⚠️ Uso interno — no enviar al cliente</div>
   <div class="header">
     <div>
-      <div class="co-name">${data.empresa || ""}</div>
+      <div class="co-name">${escapeHtml(data.empresa)}</div>
     </div>
     <div>
       <div class="pres-label">Resumen interno</div>
-      <div class="pres-num">${data.nro || "—"}</div>
+      <div class="pres-num">${escapeHtml(data.nro) || "—"}</div>
       <div class="pres-fecha">Fecha: ${fmtD(data.fecha)}</div>
     </div>
   </div>
 
   <div class="info-grid">
-    <div class="info-box"><div class="k">Cliente</div><div class="v">${data.cliente || "—"}</div></div>
-    <div class="info-box"><div class="k">Obra</div><div class="v">${data.obra || "—"}</div></div>
-    <div class="info-box"><div class="k">Vendedor</div><div class="v">${data.vendedor || "—"}</div></div>
+    <div class="info-box"><div class="k">Cliente</div><div class="v">${escapeHtml(data.cliente) || "—"}</div></div>
+    <div class="info-box"><div class="k">Obra</div><div class="v">${escapeHtml(data.obra) || "—"}</div></div>
+    <div class="info-box"><div class="k">Vendedor</div><div class="v">${escapeHtml(data.vendedor) || "—"}</div></div>
   </div>
 
   <div class="section-title">Resumen</div>
