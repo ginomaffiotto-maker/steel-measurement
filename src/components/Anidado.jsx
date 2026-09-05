@@ -387,11 +387,11 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
                   las mantiene juntas y alineadas a la derecha siempre, sea
                   cual sea el ancho del texto que las precede. */}
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto" }}>
-                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
-                <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.b_total} barras</span>
-                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
-                <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>
-                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
+                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",minWidth:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
+                <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.b_total} barras</span>
+                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
+                <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>
+                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
               </div>
             </>}
           </div>
@@ -571,12 +571,12 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
                   empujado al borde derecho, para que no dependa del ancho
                   del texto que lo precede (2026-09-05). */}
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto" }}>
-                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
-                <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.n_hojas} hojas</span>
-                <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>▦ {r.resumen.area_total_m2} m²</span>
-                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(kg_total)} kg</span>
-                <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>
-                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
+                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",minWidth:50,boxSizing:"border-box",textAlign:"center"}}>{incidencia}%</span>}
+                <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:100,boxSizing:"border-box",textAlign:"center"}}>🔩 {r.resumen.n_hojas} hojas</span>
+                <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:100,boxSizing:"border-box",textAlign:"center"}}>▦ {r.resumen.area_total_m2} m²</span>
+                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:110,boxSizing:"border-box",textAlign:"center"}}>⚖ {n2(kg_total)} kg</span>
+                <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:110,boxSizing:"border-box",textAlign:"center"}}>⚠ {r.resumen.pct_desp}% desp.</span>
+                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",minWidth:100,boxSizing:"border-box",textAlign:"center"}}>${n2(monto)}</span>}
               </div>
             </>}
           </div>
