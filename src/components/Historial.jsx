@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, resolverEmpresaId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
 import AutocompleteEmpresa from "./AutocompleteEmpresa";
@@ -530,11 +530,12 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     if (!supabase) return;
     try {
       const cliente_id = t.cliente ? await resolverClienteId(t.cliente, t.empresa) : null;
+      const empresa_id = t.empresa ? await resolverEmpresaId(t.empresa) : null;
       const vendedor = usuarios.find(u => String(u.id) === String(t.vendedor))?.profileId || null;
       const { cliente, desglose_pct, ...resto } = t;
       const pct = desglose_pct || {};
       await saveDBTrabajoHistorico({
-        ...resto, cliente_id, vendedor,
+        ...resto, cliente_id, empresa_id, vendedor,
         eliminado_por: t.eliminadoPor ?? null, eliminado_fecha: t.eliminadoFecha ?? null,
         pct_hier: pct.hier, pct_mat: pct.mat, pct_mo_fab: pct.moFab, pct_mo_mon: pct.moMon,
         pct_hesp: pct.hesp, pct_t_fab: pct.tFab, pct_t_mon: pct.tMon, pct_trat: pct.trat,

@@ -241,6 +241,21 @@ export const useListaClientes = () => {
 // memoria durante la sesión para no repetir la búsqueda en cada tipeo.
 // `empresa` (2026-08-23) es opcional: si el contacto ya existe pero sin
 // empresa cargada, se la completa; nunca pisa una empresa ya cargada.
+// Resuelve el uuid real de una Empresa por nombre exacto — solo busca,
+// nunca crea (2026-09-05, wireado empresa_id en clientes/historial_trabajos,
+// preparando terreno para futuros módulos de producción/administración
+// que van a necesitar la empresa real, no solo el texto libre). Mismo
+// criterio que ya usa Steel CRM. No crea porque el flujo real
+// (EmpresaField + "empresaSinResolver") ya bloquea el guardado hasta que
+// la Empresa se cree con "+ Crear empresa nueva" si todavía no existe.
+export const resolverEmpresaId = async (nombre) => {
+  const n = (nombre || "").trim();
+  if (!supabase || !n) return null;
+  const { data, error } = await supabase.from("empresas").select("id, nombre").ilike("nombre", n);
+  if (error || !data) return null;
+  return data.find((e) => (e.nombre || "").trim().toLowerCase() === n.toLowerCase())?.id || null;
+};
+
 const _cacheClienteIds = new Map();
 export const resolverClienteId = async (nombre, empresa) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
@@ -258,11 +273,13 @@ export const resolverClienteId = async (nombre, empresa) => {
   if (match) {
     id = match.id;
     if (emp && !match.empresa) {
-      const { error: eUpd } = await supabase.from("clientes").update({ empresa: emp }).eq("id", id);
+      const empresa_id = await resolverEmpresaId(emp);
+      const { error: eUpd } = await supabase.from("clientes").update({ empresa: emp, empresa_id }).eq("id", id);
       if (eUpd) throw eUpd;
     }
   } else {
-    const { data: creado, error: eIns } = await supabase.from("clientes").insert({ nombre: n, empresa: emp }).select("id").single();
+    const empresa_id = await resolverEmpresaId(emp);
+    const { data: creado, error: eIns } = await supabase.from("clientes").insert({ nombre: n, empresa: emp, empresa_id }).select("id").single();
     if (eIns) throw eIns;
     id = creado.id;
   }
@@ -910,7 +927,7 @@ export const loadDBHistorialTrabajos = async () => {
 // columna en historial_trabajos. Elegir explícitamente evita que aparezca
 // un campo nuevo mañana y rompa el insert otra vez.
 const COLUMNAS_HISTORIAL_TRABAJO = [
-  "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "obra", "categoria",
+  "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "empresa_id", "obra", "categoria",
   "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha",
   "kg_total", "metros_total", "usd_total",
   "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
