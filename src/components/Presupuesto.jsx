@@ -3089,7 +3089,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // puede romper el guardado local (localStorage sigue siendo la fuente de
   // verdad). Resuelve `cliente` (texto libre local) a `cliente_id` real
   // contra la tabla `clientes` — mismo helper que usa registrarCliente.
-  const dualWritePresupuesto = async (p, intentoRegen = false) => {
+  const dualWritePresupuesto = async (p, intentosRegen = 0) => {
     if (!supabase) return;
     // Fix real (2026-09-04, reportado por Gino): un mismo presupuesto
     // fallaba en distintas tablas en cada reintento (a veces
@@ -3100,7 +3100,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     // pendiente sin mostrar un error de RLS confuso — el próximo
     // "Reintentar ahora" (o el próximo guardado real) la va a encontrar
     // ya lista.
-    if (!intentoRegen && !(await esperarSesion())) {
+    if (intentosRegen === 0 && !(await esperarSesion())) {
       marcarSyncPendiente("presupuesto", p.id);
       refrescarSyncPendientes();
       setSyncError(`"${p.nro || p.id}": tu sesión no está lista todavía — probá recargar la página y reintentar.`);
@@ -3144,14 +3144,17 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       // desalineado con lo ya usado en Supabase (otro dispositivo, datos
       // de prueba, etc.) el guardado choca contra la unicidad real de la
       // columna (uq_presupuestos_sm_codigo). Se autocura: se regenera un
-      // código nuevo y se reintenta una sola vez, en vez de quedar
-      // trabado esperando que alguien note el cartel de sync pendiente.
-      if (!intentoRegen && (e.message || "").includes("uq_presupuestos_sm_codigo")) {
+      // código nuevo y se reintenta — hasta 5 veces (2026-09-05: un solo
+      // reintento no alcanzaba si el contador local venía muy desalineado
+      // del real, ej. un navegador nuevo contra una base con datos de
+      // producción — el segundo código generado también podía chocar,
+      // y ahí se rendía dejando el presupuesto en sync pendiente).
+      if (intentosRegen < 5 && (e.message || "").includes("uq_presupuestos_sm_codigo")) {
         const nuevoCodigo = newCodigoCalculo();
-        console.warn(`[Fase 3] Código de cálculo duplicado en presupuesto "${p.nro || p.id}" — regenerado a ${nuevoCodigo}, reintentando.`);
+        console.warn(`[Fase 3] Código de cálculo duplicado en presupuesto "${p.nro || p.id}" — regenerado a ${nuevoCodigo}, reintentando (${intentosRegen + 1}/5).`);
         const corregido = { ...p, codigo_calculo: nuevoCodigo };
         setPres(prev => prev.map(x => x.id === p.id ? corregido : x));
-        return dualWritePresupuesto(corregido, true);
+        return dualWritePresupuesto(corregido, intentosRegen + 1);
       }
       console.warn(`[Fase 3] No se pudo sincronizar presupuesto "${p.nro || p.id}" con el backend:`, e.message || e);
       // Bug real detectado 2026-08-29 (mismo del lado de Steel CRM): sin

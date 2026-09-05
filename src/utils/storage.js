@@ -1382,8 +1382,13 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
   const empresaParaClientes = pres.cliente || null;
   const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
 
+  // 2026-09-05: `pres.codigo_calculo` ya viene con el prefijo "SM-" propio
+  // (newCodigoCalculo genera "SM-AAAA-NNNN") — anteponer otro acá duplicaba
+  // el prefijo ("SM-SM-2026-0002"), bug real encontrado en vivo. El
+  // comentario de arriba ("N° provisorio SM-<código de cálculo>") ya se
+  // satisface con el código tal cual, sin agregar nada.
   const rowCrm = saneado({
-    nro: `SM-${pres.codigo_calculo}`,
+    nro: pres.codigo_calculo,
     cliente_id,
     cliente_nombre: pres.contacto || pres.cliente || "",
     empresa: pres.contacto ? pres.cliente : "",
@@ -1402,7 +1407,17 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
   const { error: errLink } = await supabase
     .from("presupuesto_calculo_link")
     .insert({ presupuesto_crm_id: crmRow.id, presupuesto_sm_id: pres.id });
-  if (errLink) throw errLink;
+  if (errLink) {
+    // 2026-09-05, bug real encontrado en vivo: si este insert falla (ej.
+    // el presupuesto de Costos todavía no terminó de sincronizar y
+    // presupuesto_sm_id no existe de verdad en la tabla remota — FK
+    // violation), la fila de presupuestos_crm de arriba ya había quedado
+    // creada, huérfana, sin vínculo real, visible en Steel CRM como un
+    // presupuesto fantasma. Se deshace esa fila antes de propagar el
+    // error, en vez de dejar basura a mitad de camino.
+    await supabase.from("presupuestos_crm").delete().eq("id", crmRow.id);
+    throw errLink;
+  }
 
   return { crmId: crmRow.id, nro: crmRow.nro };
 };
