@@ -1800,6 +1800,34 @@ export const newCodigoCalculo = () => {
   return `SM-${anio}-${String(next).padStart(4, "0")}`;
 };
 
+// 2026-09-05, bug real encontrado en vivo: el retry-con-regenerar de
+// dualWritePresupuesto (Presupuesto.jsx) reintentaba incrementando de a 1
+// desde donde chocó — si el contador local viene bien por detrás del real
+// (típico en un navegador nuevo, o después de mucho uso real en
+// producción sin que ESE dispositivo haya generado códigos), 5 reintentos
+// ni se acercan a superar la brecha (confirmado en vivo: contador local en
+// 2, real ya en 10 — los 5 reintentos solo llegaron a 7, seguían
+// chocando). En vez de aumentar el número de reintentos a ciegas (sigue
+// sin ser robusto si la brecha crece), esta función consulta el máximo
+// real usado este año y adelanta el contador local hasta ahí antes de
+// generar — se usa solo en el momento de un choque real, no en cada
+// alta, para no sumar una consulta de más al camino común.
+export const catchUpCodigoCalculo = async () => {
+  const anio = new Date().getFullYear();
+  const key = `smeas_last_codigo_calculo_${anio}`;
+  if (!supabase) return newCodigoCalculo();
+  const { data } = await supabase
+    .from("presupuestos_sm")
+    .select("codigo_calculo")
+    .like("codigo_calculo", `SM-${anio}-%`)
+    .order("codigo_calculo", { ascending: false })
+    .limit(1);
+  const maxRemoto = Number(data?.[0]?.codigo_calculo?.split("-")[2]) || 0;
+  const actual = Number(localStorage.getItem(key) || "0");
+  if (maxRemoto > actual) localStorage.setItem(key, String(maxRemoto));
+  return newCodigoCalculo();
+};
+
 // ─── BLOQUES DEL PDF ─────────────────────────────────────────────────
 // Qué secciones se imprimen y en qué orden (Sistema > Config). Si no hay
 // nada guardado, abrirPDFPresupuesto usa BLOQUES_DEFAULT del generador.

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, catchUpCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -3143,14 +3143,17 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       // este navegador (ver newCodigoCalculo, storage.js) — si quedó
       // desalineado con lo ya usado en Supabase (otro dispositivo, datos
       // de prueba, etc.) el guardado choca contra la unicidad real de la
-      // columna (uq_presupuestos_sm_codigo). Se autocura: se regenera un
-      // código nuevo y se reintenta — hasta 5 veces (2026-09-05: un solo
-      // reintento no alcanzaba si el contador local venía muy desalineado
-      // del real, ej. un navegador nuevo contra una base con datos de
-      // producción — el segundo código generado también podía chocar,
-      // y ahí se rendía dejando el presupuesto en sync pendiente).
+      // columna (uq_presupuestos_sm_codigo). Se autocura: en el primer
+      // choque, consulta el máximo real usado este año y adelanta el
+      // contador local hasta ahí (catchUpCodigoCalculo) — un simple +1
+      // por reintento (como se hizo primero, 2026-09-05) no alcanzaba si
+      // la brecha era de varios códigos: confirmado en vivo, contador
+      // local en 2 contra un real en 10, 5 reintentos de a uno solo
+      // llegaban a 7 y seguían chocando. Los reintentos siguientes (hasta
+      // 5) usan el incremento simple, como red de seguridad ante una
+      // carrera real con otro dispositivo escribiendo al mismo tiempo.
       if (intentosRegen < 5 && (e.message || "").includes("uq_presupuestos_sm_codigo")) {
-        const nuevoCodigo = newCodigoCalculo();
+        const nuevoCodigo = intentosRegen === 0 ? await catchUpCodigoCalculo() : newCodigoCalculo();
         console.warn(`[Fase 3] Código de cálculo duplicado en presupuesto "${p.nro || p.id}" — regenerado a ${nuevoCodigo}, reintentando (${intentosRegen + 1}/5).`);
         const corregido = { ...p, codigo_calculo: nuevoCodigo };
         setPres(prev => prev.map(x => x.id === p.id ? corregido : x));
