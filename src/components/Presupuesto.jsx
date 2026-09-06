@@ -249,7 +249,7 @@ export const iPresupuesto = () => ({
   id: uid(), nro: "", codigo_calculo: "", nombre: "", cliente: "", contacto: "", comentarios: [],
   obra: "", detalle: "", tipo_trabajo: "Fabricación", categoria: "",
   estado: "borrador", clonado_de: null,
-  vendedor: "",
+  vendedor: "", link_archivos: "",
   eliminado: false, eliminadoPor: null, eliminadoFecha: null,
   negociacion_pct: 0, negociacion_usd: 0, neg_modo: "pct",
   interes_pct: 0, interes_dias: 30,
@@ -933,7 +933,7 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
           <select value={String(anidadoSelId)} onChange={e=>{
               set("anidado_id", e.target.value);
               const a = anidados.find(x => String(x.id) === e.target.value);
-              if (a && (a.categoria || a.tipo_trabajo)) onAnidadoVinculado?.(a.categoria, a.tipo_trabajo);
+              if (a && (a.categoria || a.tipo_trabajo || a.link_archivos)) onAnidadoVinculado?.(a.categoria, a.tipo_trabajo, a.link_archivos);
             }} style={{...INP, marginBottom: anidadoSel ? 10 : 0}}>
             <option value="">— Ninguno —</option>
             {anidados.map(a => <option key={a.id} value={String(a.id)}>{a.nombre} ({a.fecha})</option>)}
@@ -2788,6 +2788,13 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
                 <input style={INP} value={pres.forma_pago||""} placeholder="ej: Contado, 30 días..." onChange={e=>set("forma_pago",e.target.value)}/></div>
               <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Notas / Cláusulas</label>
                 <input style={INP} value={pres.notas||""} placeholder="Observaciones, condiciones, cláusulas..." onChange={e=>set("notas",e.target.value)}/></div>
+              <div style={{ gridColumn:"1 / -1" }}>
+                <label style={LBL}>🔗 Carpeta de archivos (se hereda sola del Anidado si está vinculado)</label>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input style={{ ...INP, flex:1 }} value={pres.link_archivos||""} placeholder="https://..." onChange={e=>set("link_archivos",e.target.value)}/>
+                  {pres.link_archivos && <a href={pres.link_archivos} target="_blank" rel="noreferrer" style={{ ...BTN("ghost"), whiteSpace:"nowrap" }}>📁 Abrir</a>}
+                </div>
+              </div>
             </div>
             </fieldset>
             )}
@@ -2819,12 +2826,13 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
             )}
             {(pres.items||[]).map(it => (
               <FilaItem key={it.id} item={it} onChange={updItem} onDelete={() => delItem(it.id)} onClonar={() => clonarItem(it)} bloqueado={bloqueado} pres={pres}
-                onAnidadoVinculado={(categoria, tipo) => {
+                onAnidadoVinculado={(categoria, tipo, linkArchivos) => {
                   // Traspaso automático desde el Anidado — solo si el
                   // presupuesto todavía no tiene su propia clasificación
                   // (nunca pisa lo que el usuario ya haya elegido a mano).
                   if (categoria && !pres.categoria) set("categoria", categoria);
                   if (tipo && !pres.tipo_trabajo) set("tipo_trabajo", tipo);
+                  if (linkArchivos && !pres.link_archivos) set("link_archivos", linkArchivos);
                 }} />
             ))}
           </div>

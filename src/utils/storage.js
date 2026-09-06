@@ -45,12 +45,12 @@ const COLUMNAS_PRESUPUESTO_SM = [
   "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "empresa", "empresa_id", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
   "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor", "costo_real_usd",
-  "eliminado", "eliminado_por", "eliminado_fecha",
+  "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos",
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
-  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "solicitud_id"];
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "solicitud_id", "link_archivos"];
 const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id", "empresa", "empresa_id",
-  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha"];
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];
@@ -1425,6 +1425,10 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
     precio_usd_kg: calc.usd_kg,
     monto_usd: calc.gran_total,
     vendedor_id: usuario?.profileId || null,
+    // Fase 3 (2026-09-06): mismo criterio que categoria/tipo — se copia una
+    // sola vez al enviar, sin pisar lo que ya tenga cargado el presupuesto
+    // de CRM si este envío es un reintento sobre uno ya existente.
+    link_archivos: pres.link_archivos || null,
   });
   const { data: crmRow, error: errCrm } = await supabase.from("presupuestos_crm").insert(rowCrm).select().single();
   if (errCrm) throw errCrm;

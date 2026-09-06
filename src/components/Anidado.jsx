@@ -1174,6 +1174,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),
       categoria:computoOrigen?.categoria||"", tipo_trabajo:computoOrigen?.tipo_trabajo||"Fabricación",
       vendedor:computoOrigen?.vendedor||usuario?.id||"",
+      // Fase 3 (2026-09-06): mismo criterio que categoria/tipo_trabajo.
+      link_archivos:computoOrigen?.link_archivos||"",
       grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);
@@ -1499,6 +1501,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   <option value="">— Sin asignar —</option>
                   {usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
                 </select>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>🔗 Archivos</span>
+                <div style={{ display:"flex", gap:4 }}>
+                  <input value={actual.link_archivos||""} onChange={e=>upd({...actual,link_archivos:e.target.value})}
+                    placeholder="https://..." style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }} />
+                  {actual.link_archivos && <a href={actual.link_archivos} target="_blank" rel="noreferrer" style={{ ...BTN("ghost"), padding:"3px 8px", fontSize:11 }}>📁</a>}
+                </div>
               </div>
               <div style={{ marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
                 {/* "Eliminar" se movió a la lista de anidados (2026-09-02,

@@ -100,6 +100,10 @@ const itemVacio = (n = 1) => ({
 const computoVacio = () => ({
   id: uid(), nombre: "", fecha: new Date().toISOString().split("T")[0], cliente: "", empresa: "",
   categoria: "", tipo_trabajo: "Fabricación", vendedor: "",
+  // Fase 3 (2026-09-06): enlace a la carpeta con los archivos que se están
+  // computando — llega copiado de la Solicitud si el cómputo nace de una
+  // ("Mis solicitudes asignadas" → "Crear cómputo"), o se carga directo acá.
+  link_archivos: "",
   cantidad_total: 1,
   items: [itemVacio(1)],
   comentarios: [],
@@ -1091,7 +1095,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);
-    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"", solicitud_id: nuevo.solicitudId || null };
+    const c = { ...computoVacio(), nro, nombre:nuevo.nombre.trim(), fecha:nuevo.fecha, cliente:(nuevo.cliente||"").trim(), empresa:(nuevo.empresa||"").trim(), obra:(nuevo.obra||"").trim(), categoria:nuevo.categoria||"", tipo_trabajo:nuevo.tipo_trabajo||"Fabricación", vendedor:usuario?.id||"", solicitud_id: nuevo.solicitudId || null, link_archivos: nuevo.linkArchivos || "" };
     setComputos(prev=>[c,...prev]);
     setSelId(c.id); setCreando(false);
     setNuevo({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });
@@ -1507,6 +1511,17 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <option value="">— Sin asignar —</option>
             {usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
           </select>
+        </div>
+
+        {/* Carpeta de archivos — se hereda solo en Anidado/Presupuesto,
+            mismo criterio que Tipo/Categoría (Fase 3, 2026-09-06) */}
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+          <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>🔗 Archivos</span>
+          <div style={{ display:"flex", gap:4 }}>
+            <input value={computo.link_archivos||""} onChange={e=>updateComputo({...computo,link_archivos:e.target.value})}
+              placeholder="https://..." style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }} />
+            {computo.link_archivos && <a href={computo.link_archivos} target="_blank" rel="noreferrer" style={{ ...BTN("ghost"), padding:"3px 8px", fontSize:11 }}>📁</a>}
+          </div>
         </div>
 
         {/* Cantidad total del cómputo — multiplicador de estructuras iguales */}

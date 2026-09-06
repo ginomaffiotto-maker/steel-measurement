@@ -75,6 +75,10 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
         obra: s.obra || "",
         categoria: s.categoria || "",
         solicitudId: s.id,
+        // Fase 3 (2026-09-06, enlace a carpeta de archivos): mismo criterio
+        // que categoria/obra — se copia una sola vez al crear, no es un
+        // vínculo en vivo con la Solicitud.
+        linkArchivos: s.link_archivos || "",
       }));
     } catch {}
     irATab("Computo");
