@@ -426,6 +426,11 @@ export default function App() {
   const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
   const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
+  // Cuántas de "Mis solicitudes asignadas" todavía no tienen cómputo — lo
+  // calcula SolicitudesAsignadas.jsx (ya tiene los datos cargados) y lo
+  // sube acá solo para mostrarlo como número en el menú lateral (2026-09-05,
+  // a pedido de Gino).
+  const [solicitudesSinComputo, setSolicitudesSinComputo] = useState(0);
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
   // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con
   // ?type=invite o ?type=recovery en el hash de la URL. Se lee una sola vez
@@ -552,6 +557,13 @@ export default function App() {
                           {!collapsed && t.pronto && (
                             <span style={{ marginLeft: "auto", fontSize: 9, color: C.muted, background: C.iron, padding: "1px 5px", borderRadius: 3, border: `1px solid ${C.border}` }}>pronto</span>
                           )}
+                          {!collapsed && t.tab === "Solicitudes" && solicitudesSinComputo > 0 && (
+                            <span title={`${solicitudesSinComputo} solicitud(es) sin cómputo todavía`}
+                              style={{ marginLeft: "auto", fontSize: 10, fontWeight: 800, color: "#fff",
+                                background: C.warn, padding: "1px 6px", borderRadius: 10, minWidth: 16, textAlign: "center" }}>
+                              {solicitudesSinComputo}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -608,7 +620,7 @@ export default function App() {
         {/* Tab activo */}
         <div style={{ padding: 24, flex: 1 }}>
           {tab === "Buscador"    && <Buscador onIrA={irATab} usuarios={usuarios} />}
-          {tab === "Solicitudes" && <SolicitudesAsignadas usuario={usuario} irATab={irATab} />}
+          {tab === "Solicitudes" && <SolicitudesAsignadas usuario={usuario} irATab={irATab} onSinComputoChange={setSolicitudesSinComputo} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
           {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} />}
           {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} onExportarPresupuesto={() => irATab("Presupuesto")} />}

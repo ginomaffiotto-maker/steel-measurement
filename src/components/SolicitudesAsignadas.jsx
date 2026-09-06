@@ -11,14 +11,17 @@ import { useSortable } from "../utils/useSortable";
 // (meta_usuarios, vendedor_id) hasta que el resto del equipo la tenga.
 const ESTADO_COLOR = { recibida: C.info, "en elaboración": C.warn, enviada: C.pur, ganada: C.ok, perdida: C.err };
 
-export default function SolicitudesAsignadas({ usuario, irATab }) {
+export default function SolicitudesAsignadas({ usuario, irATab, onSinComputoChange }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
-  // ids de solicitud que ya tienen al menos un cómputo vinculado
-  // (solicitud_id, 2026-09-05) — para avisar antes de crear otro por
-  // error, sin bloquear (puede haber un caso real para un segundo cómputo).
-  const [conComputo, setConComputo] = useState(new Set());
+  // solicitud_id → id del cómputo vinculado (2026-09-05) — para avisar
+  // antes de crear otro por error, sin bloquear (puede haber un caso real
+  // para un segundo cómputo), y para poder abrir directo ese cómputo en
+  // vez de sólo mostrar un badge. Si hay más de uno vinculado, guarda el
+  // primero — "ver cómputo" ya está pensado como atajo, no como listado
+  // completo.
+  const [conComputo, setConComputo] = useState(new Map());
 
   useEffect(() => {
     if (!supabase || !usuario?.profileId) { setCargando(false); return; }
@@ -34,25 +37,55 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
         setCargando(false);
         const ids = (data || []).map(s => s.id);
         if (ids.length) {
-          supabase.from("computos").select("solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
-            .then(({ data: cs }) => setConComputo(new Set((cs || []).map(c => c.solicitud_id))));
+          supabase.from("computos").select("id, solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
+            .then(({ data: cs }) => {
+              const m = new Map();
+              (cs || []).forEach(c => { if (!m.has(c.solicitud_id)) m.set(c.solicitud_id, c.id); });
+              setConComputo(m);
+            });
         }
       });
   }, [usuario?.profileId]);
+
+  // Avisa a App.js cuántas quedan sin cómputo, para el número en el menú
+  // lateral (2026-09-05, a pedido de Gino) — se recalcula solo, sin volver
+  // a pedirle nada a Supabase.
+  useEffect(() => {
+    onSinComputoChange?.(solicitudes.filter(s => !conComputo.has(s.id)).length);
+  }, [solicitudes, conComputo]); // eslint-disable-line
 
   // Deja un payload chico para que Computo.jsx lo levante al montar y abra
   // el formulario de "nuevo" precargado — mismo criterio liviano que el
   // resto de la navegación cruzada de esta app (onNidar/onExportarPresupuesto
   // solo cambian de tab), sin lifetear estado nuevo a App.js.
+  //
+  // 2026-09-05, bug real reportado por Gino: `solicitudes` (Steel CRM)
+  // nunca guardaba `producto` ni `empresa` en Supabase (columnas
+  // agregadas recién ahora) — sin esos dos campos acá, no había nombre
+  // real para el cómputo ni forma de traer la Obra sin pisarla, así que
+  // se usaba la Obra como nombre y la Obra real quedaba vacía. Ahora:
+  // Producto → nombre (el campo sigue editable a mano después — una
+  // misma Solicitud puede pedir cosas de tipo distinto y Gino puede
+  // querer un cómputo/presupuesto separado para cada una).
   function crearComputoDesde(s) {
     try {
       sessionStorage.setItem("smeas_prefill_computo", JSON.stringify({
-        nombre: s.obra || s.cliente_nombre || "Solicitud",
+        nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
         cliente: s.cliente_nombre || "",
+        empresa: s.empresa || "",
+        obra: s.obra || "",
         categoria: s.categoria || "",
         solicitudId: s.id,
       }));
     } catch {}
+    irATab("Computo");
+  }
+
+  // Abre directo el cómputo ya vinculado (evita crear un segundo cómputo
+  // por error) — mismo criterio liviano de sessionStorage, consumido una
+  // sola vez al montar Computo.jsx.
+  function abrirComputoDesde(computoId) {
+    try { sessionStorage.setItem("smeas_abrir_computo_id", computoId); } catch {}
     irATab("Computo");
   }
 
@@ -113,7 +146,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   <td style={TD}>{s.fecha_limite || "—"}</td>
                   <td style={TD}>
                     {conComputo.has(s.id) && (
-                      <span style={{ ...BDG(C.ok, true), marginRight: 8, fontSize: 11 }} title="Ya tiene al menos un cómputo vinculado — revisá antes de crear otro">✅ Ya tiene cómputo</span>
+                      <button onClick={() => abrirComputoDesde(conComputo.get(s.id))} style={{ ...BDG(C.ok, true), marginRight: 8, fontSize: 11, cursor: "pointer", border: "none" }} title="Abrir el cómputo ya vinculado">✅ Ver cómputo</button>
                     )}
                     <button onClick={() => crearComputoDesde(s)} style={BTN("primary")}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
                   </td>

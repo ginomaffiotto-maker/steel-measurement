@@ -28,10 +28,11 @@ const TH_TOOLTIPS = {
 
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
-const HIST_FILT_DEFAULTS = { cliente: "", obra: "", ot: "", categoria: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "", usdKgMin: "", usdKgMax: "" };
+const HIST_FILT_DEFAULTS = { cliente: "", empresa: "", obra: "", ot: "", categoria: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "", usdKgMin: "", usdKgMax: "" };
 function histCampos(usuarios, categorias) {
   const campos = [
     { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 160 },
+    { key: "empresa", label: "Empresa", type: "empresaAuto", placeholder: "Buscar…", minWidth: 160 },
     { key: "obra", label: "Obra", type: "text", placeholder: "Buscar…", minWidth: 150 },
     { key: "ot", label: "N° OT", type: "text", placeholder: "Buscar…", minWidth: 120 },
     { key: "categoria", label: "Categoría", type: "select", options: categorias, placeholder: "Todas las categorías", minWidth: 180 },
@@ -513,6 +514,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .filter(t => !filt.usdKgMin || (usdKgDe(t) >= +filt.usdKgMin))
     .filter(t => !filt.usdKgMax || (usdKgDe(t) <= +filt.usdKgMax))
     .filter(t => !filt.cliente || (t.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase()))
+    .filter(t => !filt.empresa || (t.empresa||"").toLowerCase().includes(filt.empresa.toLowerCase()))
     .filter(t => !filt.obra    || (t.obra||"").toLowerCase().includes(filt.obra.toLowerCase()))
     .filter(t => !filt.ot      || (t.nro_ot||"").toLowerCase().includes(filt.ot.toLowerCase()))
     .filter(t => !filt.desde || (t.fecha||"") >= filt.desde)

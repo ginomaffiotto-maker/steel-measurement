@@ -802,7 +802,7 @@ const PLANCHAS_GM_DATA = [
 PLANCHAS_DATA.push(...PLANCHAS_GM_DATA);
 
 // ─── REJILLAS ELECTROSOLDADAS Y METAL DESPLEGADO (Planilla GM V26) ───
-const REJILLAS_DATA = [
+export const REJILLAS_DATA = [
   { id:"REJ_MALLA_15X15_4_2MM", nombre:"Malla 15x15 Ø4,2mm", kg_m2:1.45, largo_mm:6000, ancho_mm:2400, area_m2:14.4, kg_ud:20.9, precio_usd_kg:0, historial_precios:[], notas:"Malla electrosoldada estándar plaza (Gerdau), Ø4,2 c/150mm ambas dir., panel 2,40x6,00m" },
   { id:"REJ_MALLA_15X15_5_5MM", nombre:"Malla 15x15 Ø5,5mm", kg_m2:2.49, largo_mm:6000, ancho_mm:2400, area_m2:14.4, kg_ud:35.9, precio_usd_kg:0, historial_precios:[], notas:"Malla electrosoldada estándar plaza (Gerdau), Ø5,5 c/150mm ambas dir." },
   { id:"REJ_MALLA_15X15_6MM", nombre:"Malla 15x15 Ø6mm", kg_m2:2.96, largo_mm:6000, ancho_mm:2400, area_m2:14.4, kg_ud:42.6, precio_usd_kg:0, historial_precios:[], notas:"Malla electrosoldada estándar plaza (Gerdau), Ø6 c/150mm ambas dir." },

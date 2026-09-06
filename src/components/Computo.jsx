@@ -14,14 +14,15 @@ import { useSortable, OrdenarControl } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
-import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
+import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, REJILLAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
 import { Combobox, normalizarTexto } from "./Combobox";
 
-const COMPUTO_FILT_DEFAULTS = { nombre: "", cliente: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
+const COMPUTO_FILT_DEFAULTS = { nombre: "", cliente: "", empresa: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function computoCampos(usuarios) {
   const campos = [
     { key: "nombre", label: "Nombre / N°", type: "text", placeholder: "Buscar…", minWidth: 170 },
     { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 150 },
+    { key: "empresa", label: "Empresa", type: "empresaAuto", placeholder: "Buscar…", minWidth: 150 },
     { key: "desde", label: "Desde", type: "date", minWidth: 140 },
     { key: "hasta", label: "Hasta", type: "date", minWidth: 140 },
     { key: "tipo", label: "Tipo", type: "select", options: TIPOS_TRABAJO, minWidth: 140 },
@@ -167,14 +168,21 @@ function useBiblioteca() {
     const perfiles    = migrar(mergeSeed(loadLS("smeas_perfiles",    null), PERFILES_DATA,    IDS_UNIFICADOS_GM));
     const planchuelas = migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA));
     const planchas    = migrar(mergeSeed(loadLS("smeas_planchas",    null), PLANCHAS_DATA));
+    // 2026-09-05, bug real reportado por Gino: Rejillas (Insumos y
+    // Precios > Materiales > Rejillas) nunca entraba acá — el buscador de
+    // material al cargar un ítem de Cómputo sólo conocía perfiles/
+    // planchuelas/planchas, así que una rejilla nunca aparecía como
+    // opción. Por forma (panel rectangular, precio por kg/m²) se suma al
+    // mismo bucket que las planchas, no a los lineales.
+    const rejillas    = migrar(mergeSeed(loadLS("smeas_rejillas",    null), REJILLAS_DATA));
     const lineales = [...perfiles, ...planchuelas].map(p => ({
       id:p.id, nombre:p.nombre, cat:p.cat, kg_m:p.kg_m, sup_m2m:p.sup||0,
       largo_mm:(p.largo||6)*1000,
       precio_kg: parseFloat(p.precio||p.precio_usd_kg||p.precio_kg||0)||0,
     }));
-    const chapas = planchas.map(p => ({
+    const chapas = [...planchas, ...rejillas].map(p => ({
       id:p.id, nombre:p.nombre, espesor:p.espesor, kg_m2:p.kg_m2,
-      sheet_w:p.largo_mm, sheet_h:p.ancho_mm,
+      sheet_w:p.sheet_w||p.largo_mm, sheet_h:p.sheet_h||p.ancho_mm,
       precio_kg: parseFloat(p.precio||p.precio_usd_kg||p.precio_kg||0)||0,
     }));
     return { lineales, chapas };
@@ -674,7 +682,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
             <span style={{ fontSize:10,color:C.muted }}>Plano:</span>
             <input type="text" placeholder="352-S-001" value={item.n_plano||""}
               onChange={e=>onChange({...item,n_plano:e.target.value})}
-              style={{ ...INP,width:90,padding:"3px 6px",fontSize:11,background:"transparent",border:`1px solid ${C.border}66` }} />
+              style={{ ...INP,width:180,padding:"3px 6px",fontSize:11,background:"transparent",border:`1px solid ${C.border}66` }} />
           </div>
 
           {/* Cantidad unidades */}
@@ -953,6 +961,21 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       }
     } catch {}
   }, []);
+  // "Ver cómputo" desde Mis solicitudes asignadas (2026-09-05) — a
+  // diferencia del prefill de arriba, el cómputo ya existe pero puede no
+  // estar todavía en el estado local (recién llegó por Fase 5) — reintenta
+  // en cada cambio de `computos` en vez de solo al montar, y recién ahí
+  // limpia la bandera.
+  useEffect(() => {
+    let raw;
+    try { raw = sessionStorage.getItem("smeas_abrir_computo_id"); } catch { raw = null; }
+    if (!raw) return;
+    const c = computos.find(x => x.id === raw);
+    if (c) {
+      setSelId(c.id);
+      try { sessionStorage.removeItem("smeas_abrir_computo_id"); } catch {}
+    }
+  }, [computos]);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
   // cómputos a la vez — mismo criterio que el borrado individual.
@@ -1092,12 +1115,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const computosFiltradosBase = computos.filter(c => !c.eliminado).filter(c => {
     const enNombre   = !filt.nombre  || [c.nombre,c.nro].join(" ").toLowerCase().includes(filt.nombre.toLowerCase());
     const enCliente  = !filt.cliente || (c.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase());
+    const enEmpresa  = !filt.empresa || (c.empresa||"").toLowerCase().includes(filt.empresa.toLowerCase());
     const enDesde    = !filt.desde || (c.fecha||"") >= filt.desde;
     const enHasta    = !filt.hasta || (c.fecha||"") <= filt.hasta;
     const enVendedor = !filt.vendedor || String(c.vendedor) === filt.vendedor;
     const enTipo     = !filt.tipo || c.tipo_trabajo === filt.tipo;
     const enFamilia  = !filt.familia || familiaDe(c.categoria) === filt.familia;
-    return enNombre && enCliente && enDesde && enHasta && enVendedor && enTipo && enFamilia;
+    return enNombre && enCliente && enEmpresa && enDesde && enHasta && enVendedor && enTipo && enFamilia;
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 

@@ -213,11 +213,18 @@ const ESTADO_CRM_CFG = {
 };
 const TIPOS = ["Fabricación", "Montaje", "Fab+Mont"];
 
-const PRES_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "" };
+const PRES_FILT_DEFAULTS = { nombre: "", cliente: "", empresa: "", obra: "", tipo: "", familia: "", vendedor: "", desde: "", hasta: "" };
 function presCampos(usuarios) {
   const campos = [
     { key: "nombre", label: "Nombre / N°", type: "text", placeholder: "Buscar…", minWidth: 190 },
     { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 170 },
+    // 2026-09-05, a pedido de Gino: acá "cliente" (contacto) y "empresa"
+    // (razón social) son dos textos libres distintos en el modelo local
+    // (ver dualWritePresupuesto — `empresa` en la fila remota sale de
+    // `pres.cliente` cuando hay contacto cargado) — este filtro busca
+    // sobre el mismo campo `cliente` que ya guarda la razón social, solo
+    // que con el autocompletado real de Empresas en vez de Clientes.
+    { key: "empresa", label: "Empresa", type: "empresaAuto", placeholder: "Buscar…", minWidth: 170 },
     { key: "obra", label: "Obra", type: "text", placeholder: "Buscar…", minWidth: 170 },
     { key: "tipo", label: "Tipo", type: "select", options: TIPOS, minWidth: 150 },
     { key: "familia", label: "Familia", type: "select", options: Object.keys(FAMILIAS), minWidth: 170 },
@@ -3048,6 +3055,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     .filter(p => !filtEst || p.estado === filtEst)
     .filter(p => !filt.nombre  || [p.nombre,p.nro].join(" ").toLowerCase().includes(filt.nombre.toLowerCase()))
     .filter(p => !filt.cliente || (p.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase()))
+    .filter(p => !filt.empresa || (p.cliente||"").toLowerCase().includes(filt.empresa.toLowerCase()))
     .filter(p => !filt.obra    || (p.obra||"").toLowerCase().includes(filt.obra.toLowerCase()))
     .filter(p => !filt.tipo    || p.tipo_trabajo === filt.tipo)
     .filter(p => !filt.familia || familiaDe(p.categoria) === filt.familia)

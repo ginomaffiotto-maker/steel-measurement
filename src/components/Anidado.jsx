@@ -18,11 +18,12 @@ import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import { Combobox, normalizarTexto } from "./Combobox";
 
-const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
+const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", empresa: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function anidadoCampos(usuarios) {
   const campos = [
     { key: "nombre", label: "Nombre", type: "text", placeholder: "Buscar…", minWidth: 170 },
     { key: "cliente", label: "Cliente", type: "clienteAuto", placeholder: "Buscar…", minWidth: 150 },
+    { key: "empresa", label: "Empresa", type: "empresaAuto", placeholder: "Buscar…", minWidth: 150 },
     { key: "obra", label: "Obra", type: "text", placeholder: "Buscar…", minWidth: 150 },
     { key: "desde", label: "Desde", type: "date", minWidth: 140 },
     { key: "hasta", label: "Hasta", type: "date", minWidth: 140 },
@@ -1174,13 +1175,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const anidadosFiltradosBase = anidados.filter(a => !a.eliminado).filter(a => {
     const enNombre   = !filt.nombre  || (a.nombre||"").toLowerCase().includes(filt.nombre.toLowerCase());
     const enCliente  = !filt.cliente || (a.cliente||"").toLowerCase().includes(filt.cliente.toLowerCase());
+    const enEmpresa  = !filt.empresa || (a.empresa||"").toLowerCase().includes(filt.empresa.toLowerCase());
     const enObra     = !filt.obra    || (a.obra||"").toLowerCase().includes(filt.obra.toLowerCase());
     const enDesde    = !filt.desde || (a.fecha||"") >= filt.desde;
     const enHasta    = !filt.hasta || (a.fecha||"") <= filt.hasta;
     const enVendedor = !filt.vendedor || String(a.vendedor) === filt.vendedor;
     const enTipo     = !filt.tipo || a.tipo_trabajo === filt.tipo;
     const enFamilia  = !filt.familia || familiaDe(a.categoria) === filt.familia;
-    return enNombre && enCliente && enObra && enDesde && enHasta && enVendedor && enTipo && enFamilia;
+    return enNombre && enCliente && enEmpresa && enObra && enDesde && enHasta && enVendedor && enTipo && enFamilia;
   });
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
 
