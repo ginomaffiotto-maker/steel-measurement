@@ -930,6 +930,11 @@ const COLUMNAS_HISTORIAL_TRABAJO = [
   "id", "tenant_id", "nro_ot", "fecha", "cliente_id", "empresa", "empresa_id", "obra", "categoria",
   "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha",
   "kg_total", "metros_total", "usd_total",
+  // Horas est./real de fabricación y montaje — ya se calculaban en pantalla
+  // (kg/hora real, desvío %) pero se perdían al sincronizar porque la tabla
+  // real nunca tuvo estas 4 columnas (cerrado 2026-09, ver migración
+  // 20260905200000_horas_reales_historial_trabajos.sql).
+  "horas_fab_est", "horas_fab_real", "horas_mon_est", "horas_mon_real",
   "pct_hier", "pct_mat", "pct_mo_fab", "pct_mo_mon", "pct_hesp",
   "pct_t_fab", "pct_t_mon", "pct_trat", "pct_trasl", "pct_panto",
 ];
