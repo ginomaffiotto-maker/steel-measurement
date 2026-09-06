@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, migrarTodoALaNube, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda, loadTenantSettingDB, saveTenantSettingDB } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda, loadTenantSettingDB, saveTenantSettingDB } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { seedTestData } from "../utils/seedTestData";
@@ -401,6 +401,13 @@ function BackupYDatos({ usuario }) {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) { alert("Tu sesión no tiene token real — volvé a iniciar sesión."); setBackupForzando(false); return; }
+      // Apunta a steelcrm.vercel.app a propósito, no es un descuido: el cron
+      // (api/backup-cron.js, con el schedule real en vercel.json) solo existe
+      // desplegado en el proyecto de Steel CRM — cubre los dos sistemas de
+      // una sola pasada porque comparten backend. Steel Costos no tiene su
+      // propia copia de esta función. api/backup-status.js sí está
+      // duplicado en los dos repos, por eso arriba se puede consultar contra
+      // steelcostos.vercel.app sin problema.
       const r = await fetch("https://steelcrm.vercel.app/api/backup-cron", { method: "POST", headers: { Authorization: "Bearer " + token } });
       const d = await r.json();
       if (!r.ok) { alert("❌ " + (d.error || "No se pudo hacer el backup")); setBackupForzando(false); return; }
@@ -415,23 +422,6 @@ function BackupYDatos({ usuario }) {
   const [pendingBackup, setPendingBackup] = useState(null);
   const [importErr, setImportErr] = useState("");
   const fileInputRef = useRef(null);
-  const [migrando, setMigrando] = useState(false);
-  const [logMigracion, setLogMigracion] = useState([]);
-  const [resumenMigracion, setResumenMigracion] = useState(null);
-
-  const correrMigracion = async () => {
-    setMigrando(true);
-    setLogMigracion([]);
-    setResumenMigracion(null);
-    try {
-      const resumen = await migrarTodoALaNube((msg) => setLogMigracion((prev) => [...prev, msg]));
-      setResumenMigracion(resumen);
-    } catch (e) {
-      setLogMigracion((prev) => [...prev, `❌ Error general: ${e.message || e}`]);
-    }
-    setMigrando(false);
-  };
-
   const elegirArchivo = () => { setImportErr(""); fileInputRef.current?.click(); };
   const onArchivo = (e) => {
     const file = e.target.files?.[0];
@@ -603,42 +593,6 @@ function BackupYDatos({ usuario }) {
         {lastBackup && <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Último respaldo: <strong style={{ color:C.text }}>{formatBackupDate(lastBackup)}</strong></div>}
         {driveStatus && <div style={{ marginTop:8, fontSize:12, color: driveStatus.startsWith("✅") ? "#34a853" : driveStatus.startsWith("❌") ? C.err : C.info, fontWeight:600 }}>{driveLoading && "⏳ "}{driveStatus}</div>}
       </div>
-
-      {/* Fase 4 (piloto, 2026-08-23) — MIGRACIÓN DE UNA SOLA VEZ.
-          Sube todo lo que ya está en localStorage al backend real. Una vez
-          confirmado que funcionó, este bloque entero se puede borrar — no
-          es una función permanente de la app. */}
-      {puedeEliminar(usuario) && supabase && (
-        <div style={{ marginTop:20, paddingTop:16, borderTop:`1px dashed ${C.border}` }}>
-          <div style={{ fontWeight:700, color:C.accent, fontSize:12, marginBottom:4 }}>☁️ Migrar datos históricos a la nube</div>
-          <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>
-            Sube TODO lo que ya está cargado (clientes, presupuestos, cómputos, anidados, historial, biblioteca, tarifario) al backend real, una sola vez. Puede tardar varios minutos si hay mucho volumen — no cierres esta pantalla mientras corre.
-          </div>
-          <button onClick={correrMigracion} disabled={migrando}
-            style={{ ...BTN("ghost"), borderColor:C.accent+"66", color:C.accent, opacity: migrando?0.6:1, cursor: migrando?"default":"pointer" }}>
-            {migrando ? "⏳ Migrando…" : "☁️ Migrar todo a la nube"}
-          </button>
-          {logMigracion.length > 0 && (
-            <div style={{ marginTop:10, background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:10, fontSize:11, fontFamily:"monospace", maxHeight:180, overflowY:"auto" }}>
-              {logMigracion.map((l, i) => <div key={i}>{l}</div>)}
-            </div>
-          )}
-          {resumenMigracion && (
-            <div style={{ marginTop:10, fontSize:11 }}>
-              {resumenMigracion.errores.length === 0
-                ? <div style={{ color:C.ok, fontWeight:700 }}>✅ Migración completa, sin errores.</div>
-                : (
-                  <div>
-                    <div style={{ color:C.warn, fontWeight:700, marginBottom:4 }}>⚠ Terminó con {resumenMigracion.errores.length} error(es):</div>
-                    <div style={{ maxHeight:120, overflowY:"auto", color:C.err }}>
-                      {resumenMigracion.errores.map((e, i) => <div key={i}>· {e}</div>)}
-                    </div>
-                  </div>
-                )}
-            </div>
-          )}
-        </div>
-      )}
 
       {pendingBackup && (
         <ModalConfirmarEliminar
