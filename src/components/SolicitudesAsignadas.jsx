@@ -11,7 +11,7 @@ import { useSortable } from "../utils/useSortable";
 // (meta_usuarios, vendedor_id) hasta que el resto del equipo la tenga.
 const ESTADO_COLOR = { recibida: C.info, "en elaboración": C.warn, enviada: C.pur, ganada: C.ok, perdida: C.err };
 
-export default function SolicitudesAsignadas({ usuario, irATab, onSinComputoChange }) {
+export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -47,12 +47,11 @@ export default function SolicitudesAsignadas({ usuario, irATab, onSinComputoChan
       });
   }, [usuario?.profileId]);
 
-  // Avisa a App.js cuántas quedan sin cómputo, para el número en el menú
-  // lateral (2026-09-05, a pedido de Gino) — se recalcula solo, sin volver
-  // a pedirle nada a Supabase.
-  useEffect(() => {
-    onSinComputoChange?.(solicitudes.filter(s => !conComputo.has(s.id)).length);
-  }, [solicitudes, conComputo]); // eslint-disable-line
+  // El número de "sin cómputo" del menú lateral se calcula aparte, en
+  // App.js — antes se calculaba acá y se subía por prop, pero este
+  // componente solo existe montado cuando la pestaña está activa, así que
+  // el número quedaba en 0 hasta la primera visita (bug real reportado por
+  // Gino, 2026-09-06).
 
   // Deja un payload chico para que Computo.jsx lo levante al montar y abra
   // el formulario de "nuevo" precargado — mismo criterio liviano que el

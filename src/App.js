@@ -426,11 +426,35 @@ export default function App() {
   const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
   const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
-  // Cuántas de "Mis solicitudes asignadas" todavía no tienen cómputo — lo
-  // calcula SolicitudesAsignadas.jsx (ya tiene los datos cargados) y lo
-  // sube acá solo para mostrarlo como número en el menú lateral (2026-09-05,
-  // a pedido de Gino).
+  // Cuántas de "Mis solicitudes asignadas" todavía no tienen cómputo — para
+  // el número en el menú lateral (2026-09-05, a pedido de Gino). Al
+  // principio esto lo calculaba SolicitudesAsignadas.jsx y lo subía acá,
+  // pero ese componente solo existe montado cuando la pestaña Solicitudes
+  // está activa — el número quedaba en 0 hasta que Gino la visitaba una vez.
+  // Ahora se consulta acá directo, apenas hay sesión, sin depender de qué
+  // pestaña esté abierta (mismo criterio de consulta liviana, se repite la
+  // consulta chica en vez de forzar montado el componente completo).
   const [solicitudesSinComputo, setSolicitudesSinComputo] = useState(0);
+  useEffect(() => {
+    if (!supabase || !usuario?.profileId) { setSolicitudesSinComputo(0); return; }
+    let vivo = true;
+    supabase.from("solicitudes").select("id")
+      .eq("asignado_a", usuario.profileId)
+      .eq("eliminado", false)
+      .not("estado", "in", '("ganada","perdida","no cotizado")')
+      .then(({ data, error }) => {
+        if (!vivo || error) return;
+        const ids = (data || []).map(s => s.id);
+        if (!ids.length) { setSolicitudesSinComputo(0); return; }
+        supabase.from("computos").select("solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
+          .then(({ data: cs }) => {
+            if (!vivo) return;
+            const conComputo = new Set((cs || []).map(c => c.solicitud_id));
+            setSolicitudesSinComputo(ids.filter(id => !conComputo.has(id)).length);
+          });
+      });
+    return () => { vivo = false; };
+  }, [usuario?.profileId]);
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
   // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con
   // ?type=invite o ?type=recovery en el hash de la URL. Se lee una sola vez
@@ -620,7 +644,7 @@ export default function App() {
         {/* Tab activo */}
         <div style={{ padding: 24, flex: 1 }}>
           {tab === "Buscador"    && <Buscador onIrA={irATab} usuarios={usuarios} />}
-          {tab === "Solicitudes" && <SolicitudesAsignadas usuario={usuario} irATab={irATab} onSinComputoChange={setSolicitudesSinComputo} />}
+          {tab === "Solicitudes" && <SolicitudesAsignadas usuario={usuario} irATab={irATab} />}
           {tab === "Biblioteca"  && <BibliotecaMateriales usuario={usuario} />}
           {tab === "Computo"     && <Computo onNidar={() => irATab("Anidado")} onExportarPresupuesto={() => irATab("Presupuesto")} usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} />}
           {tab === "Anidado"     && <Anidado usuario={usuario} usuarios={usuarios} tcGlobal={tcGlobal} logear={logear} onExportarPresupuesto={() => irATab("Presupuesto")} />}
