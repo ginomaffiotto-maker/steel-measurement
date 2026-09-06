@@ -11,6 +11,7 @@ import Dashboard from "./components/Dashboard";
 import Config from "./components/Config";
 import Buscador from "./components/Buscador";
 import SolicitudesAsignadas from "./components/SolicitudesAsignadas";
+import { hidratarFamiliasDesdeNube } from "./utils/taxonomia";
 
 // ─── MÓDULOS / NAVEGACIÓN ────────────────────────────────────────
 const GRUPOS = [
@@ -454,6 +455,16 @@ export default function App() {
           });
       });
     return () => { vivo = false; };
+  }, [usuario?.profileId]);
+  // Familias/Categorías de trabajo (2026-09-06): se hidratan una vez desde
+  // Supabase apenas hay sesión — `familiasTick` no se lee en ningún lado,
+  // solo fuerza un re-render de este árbol para que las pantallas que ya
+  // estaban montadas (y habían leído FAMILIAS antes de que la consulta
+  // resolviera) muestren las categorías reales sin necesitar F5.
+  const [, setFamiliasTick] = useState(0);
+  useEffect(() => {
+    if (!usuario?.profileId) return;
+    hidratarFamiliasDesdeNube().then(cambio => { if (cambio) setFamiliasTick(t => t + 1); });
   }, [usuario?.profileId]);
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
   // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con

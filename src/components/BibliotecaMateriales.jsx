@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, loadDBHistorialPrecios, saveDBTarifario, useTarifarioConNube, useMergeBibliotecaNube, obtenerTenantId } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBMaterial, addDBHistorialPrecio, loadDBHistorialPrecios, saveDBTarifario, useTarifarioConNube, useMergeBibliotecaNube, obtenerTenantId, saveDBCategoriaTrabajo } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarBorrado } from "./ConfirmarEliminar";
+import { CATEGORIAS_FILAS, hidratarFamiliasDesdeNube } from "../utils/taxonomia";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
 const hoy = () => new Date().toISOString().split("T")[0];
@@ -2149,6 +2150,153 @@ function SeccionMateriales({ sub, setSub }) {
   );
 }
 
+// ─── FAMILIAS Y CATEGORÍAS DE TRABAJO (2026-09-06, a pedido de Gino) ─
+// Antes vivían fijas en el código (utils/taxonomia.js) — acá se pueden
+// crear Familias/Categorías nuevas, o editar el nombre de una existente
+// (las 32 canónicas incluidas — todas son filas reales por igual desde
+// la migración 20260906100000, no hay "seed protegido" aparte). Se
+// comparte con Steel CRM (misma tabla, `categorias_trabajo`).
+const CARD_ITEM = { background:C.iron, border:`1px solid ${C.border}`, borderRadius:8, padding:"12px 16px" };
+function SeccionFamiliasCategorias() {
+  const [filas, setFilas] = useState(CATEGORIAS_FILAS);
+  const [cargando, setCargando] = useState(true);
+  const [editando, setEditando] = useState(null); // { tipo:"familia"|"categoria", key, valor }
+  const [nuevaCatEn, setNuevaCatEn] = useState(null); // nombre de familia donde se está agregando
+  const [nuevaCatTexto, setNuevaCatTexto] = useState("");
+  const [nuevaFamilia, setNuevaFamilia] = useState(false);
+  const [nuevaFamiliaNombre, setNuevaFamiliaNombre] = useState("");
+  const [nuevaFamiliaCat, setNuevaFamiliaCat] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const refrescar = async () => {
+    setCargando(true);
+    await hidratarFamiliasDesdeNube();
+    setFilas(CATEGORIAS_FILAS);
+    setCargando(false);
+  };
+  useEffect(() => { refrescar(); }, []); // eslint-disable-line
+
+  const porFamilia = {};
+  filas.forEach(f => { (porFamilia[f.familia] = porFamilia[f.familia] || []).push(f); });
+  // Familias sin ninguna fila todavía no pueden existir con este modelo
+  // (una familia es, ni más ni menos, el valor de `familia` en al menos
+  // una fila) — no hace falta un caso especial para "familia vacía".
+
+  const guardarCategoria = async (fila, nuevoNombre) => {
+    if (!nuevoNombre.trim() || nuevoNombre === fila.categoria) { setEditando(null); return; }
+    setGuardando(true);
+    await saveDBCategoriaTrabajo({ ...fila, categoria: nuevoNombre.trim() });
+    setEditando(null);
+    await refrescar();
+    setGuardando(false);
+  };
+
+  const renombrarFamilia = async (familiaVieja, nuevoNombre) => {
+    if (!nuevoNombre.trim() || nuevoNombre === familiaVieja) { setEditando(null); return; }
+    setGuardando(true);
+    const deEsaFamilia = filas.filter(f => f.familia === familiaVieja);
+    await Promise.all(deEsaFamilia.map(f => saveDBCategoriaTrabajo({ ...f, familia: nuevoNombre.trim() })));
+    setEditando(null);
+    await refrescar();
+    setGuardando(false);
+  };
+
+  const agregarCategoria = async (familia) => {
+    if (!nuevaCatTexto.trim()) return;
+    setGuardando(true);
+    const orden = (porFamilia[familia] || []).length;
+    await saveDBCategoriaTrabajo({ familia, categoria: nuevaCatTexto.trim(), orden });
+    setNuevaCatEn(null); setNuevaCatTexto("");
+    await refrescar();
+    setGuardando(false);
+  };
+
+  const crearFamilia = async () => {
+    if (!nuevaFamiliaNombre.trim() || !nuevaFamiliaCat.trim()) return;
+    setGuardando(true);
+    await saveDBCategoriaTrabajo({ familia: nuevaFamiliaNombre.trim(), categoria: nuevaFamiliaCat.trim(), orden: 0 });
+    setNuevaFamilia(false); setNuevaFamiliaNombre(""); setNuevaFamiliaCat("");
+    await refrescar();
+    setGuardando(false);
+  };
+
+  const chipCat = { padding:"5px 10px", borderRadius:6, background:C.bg, border:`1px solid ${C.border}`, fontSize:12, color:C.text, cursor:"pointer", display:"flex", alignItems:"center", gap:6 };
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ fontSize:12, color:C.muted, maxWidth:560 }}>
+          Familia (nivel 1) → Categoría (nivel 2) — usadas en Cómputo, Anidado, Presupuesto, Historial y Solicitudes de los dos sistemas. Click en cualquier nombre para editarlo.
+        </div>
+        <button onClick={()=>setNuevaFamilia(true)} style={BTN("primary")}>+ Nueva familia</button>
+      </div>
+
+      {cargando && <div style={{ color:C.muted, fontSize:13 }}>Cargando…</div>}
+      {!cargando && filas.length===0 && (
+        <div style={{ ...CARD_ITEM, marginBottom:14, color:C.warn, fontSize:13 }}>
+          ⚠️ No se pudo leer ninguna Familia/Categoría de la nube — puede ser que la tabla todavía no esté creada (falta correr la migración) o un problema de conexión. Creá una familia nueva de abajo para empezar, o probá recargar la página.
+        </div>
+      )}
+
+      {nuevaFamilia && (
+        <div style={{ ...CARD_ITEM, marginBottom:14, display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <input autoFocus placeholder="Nombre de la familia" value={nuevaFamiliaNombre}
+            onChange={e=>setNuevaFamiliaNombre(e.target.value)} style={{ ...INP, width:220 }} />
+          <input placeholder="Primera categoría" value={nuevaFamiliaCat}
+            onChange={e=>setNuevaFamiliaCat(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&crearFamilia()} style={{ ...INP, width:220 }} />
+          <button onClick={crearFamilia} disabled={guardando} style={BTN("ok")}>Crear</button>
+          <button onClick={()=>{ setNuevaFamilia(false); setNuevaFamiliaNombre(""); setNuevaFamiliaCat(""); }} style={BTN("ghost")}>Cancelar</button>
+        </div>
+      )}
+
+      {Object.entries(porFamilia).map(([familia, cats]) => (
+        <div key={familia} style={{ ...CARD_ITEM, marginBottom:14 }}>
+          {editando?.tipo==="familia" && editando.key===familia ? (
+            <input autoFocus defaultValue={familia}
+              onBlur={e=>renombrarFamilia(familia, e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditando(null); }}
+              style={{ ...INP, fontWeight:800, fontSize:14, width:280, marginBottom:10 }} />
+          ) : (
+            <div onClick={()=>setEditando({ tipo:"familia", key:familia })}
+              title="Click para renombrar la familia"
+              style={{ fontWeight:800, fontSize:14, color:C.accent, marginBottom:10, cursor:"pointer" }}>
+              {familia}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {cats.map(f => (
+              editando?.tipo==="categoria" && editando.key===f.id ? (
+                <input key={f.id} autoFocus defaultValue={f.categoria}
+                  onBlur={e=>guardarCategoria(f, e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditando(null); }}
+                  style={{ ...INP, width:180, fontSize:12 }} />
+              ) : (
+                <span key={f.id} style={chipCat} title="Click para renombrar"
+                  onClick={()=>setEditando({ tipo:"categoria", key:f.id })}>
+                  {f.categoria}
+                </span>
+              )
+            ))}
+            {nuevaCatEn===familia ? (
+              <span style={{ display:"flex", gap:6 }}>
+                <input autoFocus placeholder="Nueva categoría" value={nuevaCatTexto}
+                  onChange={e=>setNuevaCatTexto(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&agregarCategoria(familia)}
+                  style={{ ...INP, width:160, fontSize:12 }} />
+                <button onClick={()=>agregarCategoria(familia)} disabled={guardando} style={{ ...BTN("ok"), padding:"5px 10px", fontSize:12 }}>✓</button>
+                <button onClick={()=>{ setNuevaCatEn(null); setNuevaCatTexto(""); }} style={{ ...BTN("ghost"), padding:"5px 10px", fontSize:12 }}>✕</button>
+              </span>
+            ) : (
+              <span onClick={()=>setNuevaCatEn(familia)} style={{ ...chipCat, borderStyle:"dashed", color:C.muted }}>+ Categoría</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // COMPONENTE RAÍZ
 // ═══════════════════════════════════════════════════════════════════
@@ -2164,6 +2312,7 @@ const SECCIONES = [
   { id:"trat_sup",       label:"Trat. Superficie", icon:"🎨" },
   { id:"pantografo",     label:"Pantógrafo",       icon:"✂️" },
   { id:"maquinado",      label:"Maquinado",        icon:"🔧" },
+  { id:"familias",       label:"Familias y Categorías", icon:"🗂️" },
 ];
 
 // ─── Buscador propio de Insumos y Precios (busca en TODOS los rubros a la vez) ─
@@ -2268,6 +2417,7 @@ export default function BibliotecaMateriales({ usuario }) {
       {sec === "interes"       && <SeccionInteresFinanciero usuario={usuario} />}
       {sec === "trat_sup"      && <SeccionTratSuperficie usuario={usuario} />}
       {sec === "pantografo"    && <SeccionPantografo usuario={usuario} />}
+      {sec === "familias"      && <SeccionFamiliasCategorias />}
     </div>
   );
 }

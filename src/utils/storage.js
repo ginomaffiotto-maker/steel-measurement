@@ -1004,6 +1004,26 @@ export const saveDBMaterial = async (tipo, material) => {
   return data;
 };
 
+// ─── FAMILIAS Y CATEGORÍAS DE TRABAJO (2026-09-06, a pedido de Gino) ──
+// Antes era una constante fija en utils/taxonomia.js — ahora vive acá,
+// creable desde Steel Costos (pestaña "Familias y Categorías" en Insumos
+// y Precios) y compartida con Steel CRM (mismo backend). Las 32
+// categorías canónicas de siempre ya están backfilleadas como filas
+// reales (migración 20260906100000) — no hay seed hardcodeado aparte,
+// todas tienen las mismas propiedades (editables por igual).
+export const loadDBCategoriasTrabajo = async () => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("categorias_trabajo").select("*").order("orden");
+  if (error) throw error;
+  return data;
+};
+export const saveDBCategoriaTrabajo = async (row) => {
+  if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
+  const { data, error } = await supabase.from("categorias_trabajo").upsert(saneado(row)).select().single();
+  if (error) throw error;
+  return data;
+};
+
 export const loadDBHistorialPrecios = async (tipo, materialId) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
   const { data, error } = await supabase
