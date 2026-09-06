@@ -444,12 +444,14 @@ export default function App() {
       .eq("eliminado", false)
       .not("estado", "in", '("ganada","perdida","no cotizado")')
       .then(({ data, error }) => {
-        if (!vivo || error) return;
+        if (!vivo) return;
+        if (error) { console.error("badge solicitudesSinComputo (solicitudes):", error); setSolicitudesSinComputo(0); return; }
         const ids = (data || []).map(s => s.id);
         if (!ids.length) { setSolicitudesSinComputo(0); return; }
         supabase.from("computos").select("solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
-          .then(({ data: cs }) => {
+          .then(({ data: cs, error: err2 }) => {
             if (!vivo) return;
+            if (err2) { console.error("badge solicitudesSinComputo (computos):", err2); setSolicitudesSinComputo(0); return; }
             const conComputo = new Set((cs || []).map(c => c.solicitud_id));
             setSolicitudesSinComputo(ids.filter(id => !conComputo.has(id)).length);
           });
@@ -562,7 +564,7 @@ export default function App() {
             const active = grupo === g.id;
             return (
               <div key={g.id}>
-                <button onClick={() => navGrupo(g.id)} title={g.label} style={{
+                <button onClick={() => navGrupo(g.id)} title={g.id === "solicitudes" && solicitudesSinComputo > 0 ? `${g.label} (${solicitudesSinComputo} sin cómputo)` : g.label} style={{
                   width: "100%", display: "flex", alignItems: "center",
                   gap: 10, padding: collapsed ? "10px 0" : "10px 14px",
                   justifyContent: collapsed ? "center" : "flex-start",
@@ -570,8 +572,23 @@ export default function App() {
                   border: "none", borderLeft: active ? `3px solid ${C.accent}` : "3px solid transparent",
                   cursor: "pointer", color: active ? C.accent : C.muted, transition: "all .15s",
                 }}>
-                  <span style={{ fontSize: 17, flexShrink: 0 }}>{g.icon}</span>
+                  <span style={{ fontSize: 17, flexShrink: 0, position: "relative" }}>
+                    {g.icon}
+                    {g.id === "solicitudes" && solicitudesSinComputo > 0 && (
+                      <span style={{ position: "absolute", top: -6, right: -8, fontSize: 9, fontWeight: 800, color: "#fff",
+                        background: C.warn, padding: "0 4px", borderRadius: 8, minWidth: 14, lineHeight: "14px", textAlign: "center" }}>
+                        {solicitudesSinComputo}
+                      </span>
+                    )}
+                  </span>
                   {!collapsed && <span style={{ fontSize: 12, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{g.label}</span>}
+                  {!collapsed && g.id === "solicitudes" && solicitudesSinComputo > 0 && (
+                    <span title={`${solicitudesSinComputo} solicitud(es) sin cómputo todavía`}
+                      style={{ marginLeft: "auto", fontSize: 10, fontWeight: 800, color: "#fff",
+                        background: C.warn, padding: "1px 6px", borderRadius: 10, minWidth: 16, textAlign: "center" }}>
+                      {solicitudesSinComputo}
+                    </span>
+                  )}
                 </button>
 
                 {active && (
@@ -591,13 +608,6 @@ export default function App() {
                           {!collapsed && <span style={{ fontSize: 12, fontWeight: isTab ? 700 : 400, whiteSpace: "nowrap" }}>{t.label}</span>}
                           {!collapsed && t.pronto && (
                             <span style={{ marginLeft: "auto", fontSize: 9, color: C.muted, background: C.iron, padding: "1px 5px", borderRadius: 3, border: `1px solid ${C.border}` }}>pronto</span>
-                          )}
-                          {!collapsed && t.tab === "Solicitudes" && solicitudesSinComputo > 0 && (
-                            <span title={`${solicitudesSinComputo} solicitud(es) sin cómputo todavía`}
-                              style={{ marginLeft: "auto", fontSize: 10, fontWeight: 800, color: "#fff",
-                                background: C.warn, padding: "1px 6px", borderRadius: 10, minWidth: 16, textAlign: "center" }}>
-                              {solicitudesSinComputo}
-                            </span>
                           )}
                         </button>
                       );

@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { INP } from "../styles/colors";
-import { loadLS, saveLS, loadDBCategoriasTrabajo } from "./storage";
+import { useEffect, useState } from "react";
+import { C, INP, LBL, BTN } from "../styles/colors";
+import { loadLS, saveLS, loadDBCategoriasTrabajo, saveDBCategoriaTrabajo } from "./storage";
 import { supabase } from "./supabaseClient";
 
 // Taxonomía de Familia (nivel 1) → Categoría (nivel 2).
@@ -83,19 +83,120 @@ export function useFamiliasActualizadas(onChange) {
 
 export const TIPOS_TRABAJO = ["Fabricación", "Montaje", "Fab+Mont"];
 
-// Dropdown de Categoría reusado en Cómputo, Anidado y Presupuesto (2026-08-24,
-// pedido de Gino: clasificar desde el arranque del flujo — Cómputo → Anidado
-// → Presupuesto — en vez de recién al final) — centralizado acá en vez de
-// vivir solo en Presupuesto.jsx para que las 3 pantallas lo importen igual.
-export function SelectCategoria({ value, onChange, style }) {
+// Agrega una Categoría (a una Familia existente o nueva) y la refleja en
+// FAMILIAS al instante — usado por el "+ Crear categoría nueva" de acá
+// abajo. Mutación in-place del objeto exportado (no reasignación del
+// binding), válido desde cualquier módulo que lo importe.
+async function crearCategoriaTrabajo(familia, categoria) {
+  const orden = (FAMILIAS[familia] || []).length;
+  const saved = await saveDBCategoriaTrabajo({ familia, categoria, orden }).catch(() => null);
+  if (!saved) return false;
+  if (!FAMILIAS[familia]) FAMILIAS[familia] = [];
+  if (!FAMILIAS[familia].includes(categoria)) FAMILIAS[familia] = [...FAMILIAS[familia], categoria];
+  categoriaAFamilia[categoria] = familia;
+  saveLS("smeas_familias_categorias", FAMILIAS);
+  return true;
+}
+
+// Ficha rápida (2026-09-06, mismo criterio que Cliente/Obra/Empresa): si la
+// Categoría tipeada no existe, permite crearla al vuelo — pide también la
+// Familia (existente, o una nueva) porque una Categoría no puede existir
+// sin una.
+function CategoriaRapidaModal({ categoriaInicial, onCreated, onClose }) {
+  const [categoria, setCategoria] = useState(categoriaInicial || "");
+  const [familiaSel, setFamiliaSel] = useState("");
+  const [familiaNueva, setFamiliaNueva] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const crear = async () => {
+    const cat = categoria.trim();
+    const fam = (familiaSel === "__nueva__" ? familiaNueva : familiaSel).trim();
+    if (!cat) return alert("Ingresá el nombre de la categoría");
+    if (!fam) return alert("Elegí una Familia o escribí una nueva");
+    setGuardando(true);
+    const ok = await crearCategoriaTrabajo(fam, cat);
+    setGuardando(false);
+    if (!ok) return alert("No se pudo crear la categoría. Revisá tu conexión.");
+    onCreated(cat);
+    onClose();
+  };
   return (
-    <select style={{ ...INP, ...style }} value={value || ""} onChange={e => onChange(e.target.value)}>
-      <option value="">— Sin categoría —</option>
-      {Object.entries(FAMILIAS).map(([familia, cats]) => (
-        <optgroup key={familia} label={familia}>
-          {cats.map(c => <option key={c} value={c}>{c}</option>)}
-        </optgroup>
-      ))}
-    </select>
+    <div style={{ position: "fixed", inset: 0, background: "#000c", zIndex: 3500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, width: "100%", maxWidth: 400 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: C.ok }}>🗂️ Categoría nueva</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 20 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>No existe todavía — completá los datos para crearla.</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div><label style={LBL}>Categoría *</label><input autoFocus style={INP} value={categoria} onChange={e => setCategoria(e.target.value)} /></div>
+          <div>
+            <label style={LBL}>Familia *</label>
+            <select style={INP} value={familiaSel} onChange={e => setFamiliaSel(e.target.value)}>
+              <option value="">-- Elegir --</option>
+              {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
+              <option value="__nueva__">+ Familia nueva…</option>
+            </select>
+          </div>
+          {familiaSel === "__nueva__" && (
+            <div><label style={LBL}>Nombre de la familia nueva</label><input autoFocus style={INP} value={familiaNueva} onChange={e => setFamiliaNueva(e.target.value)} /></div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={BTN("ghost")}>Cancelar</button>
+          <button onClick={crear} disabled={guardando} style={BTN("ok")}>Crear</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Buscador de Categoría con autocompletar (2026-09-06, a pedido de Gino —
+// antes era un <select> con optgroup por Familia; ahora es texto libre con
+// sugerencias, mismo criterio que Cliente/Obra/Empresa) — reusado en
+// Cómputo, Anidado y Presupuesto. Si lo tipeado no matchea ninguna
+// Categoría existente, ofrece crearla al vuelo (con su Familia) sin salir
+// de la pantalla. Autocontenido: los 3 llamadores no necesitan saber nada
+// de esto, siguen pasando solo value/onChange/style.
+export function SelectCategoria({ value, onChange, style }) {
+  const [open, setOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const q = (value || "").trim().toLowerCase();
+  const todas = Object.entries(FAMILIAS).flatMap(([familia, cats]) => cats.map(c => ({ categoria: c, familia })));
+  const sugeridas = (q ? todas.filter(t => t.categoria.toLowerCase().includes(q)) : todas).slice(0, 10);
+  const sinResolver = !!q && !todas.some(t => t.categoria.toLowerCase() === q);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        style={{ ...INP, ...style }}
+        placeholder="Buscar categoría…"
+        value={value || ""}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        autoComplete="off"
+      />
+      {open && sugeridas.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, zIndex: 20, maxHeight: 220, overflowY: "auto", boxShadow: "0 4px 12px #0006" }}>
+          {sugeridas.map(t => (
+            <div key={t.familia + "|" + t.categoria} onMouseDown={() => { onChange(t.categoria); setOpen(false); }}
+              style={{ padding: "7px 10px", cursor: "pointer", fontSize: 13, color: C.text, display: "flex", justifyContent: "space-between", gap: 8 }}
+              onMouseEnter={e => e.currentTarget.style.background = C.accent + "18"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <span>{t.categoria}</span>
+              <span style={{ color: C.muted, fontSize: 11 }}>{t.familia}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {sinResolver && (
+        <div style={{ fontSize: 11, color: C.warn, marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+          ⚠️ Esta categoría no existe todavía
+          <button type="button" onClick={() => setShowModal(true)} style={{ background: "none", border: `1px solid ${C.warn}55`, color: C.warn, borderRadius: 5, padding: "1px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Crear categoría nueva</button>
+        </div>
+      )}
+      {showModal && (
+        <CategoriaRapidaModal categoriaInicial={value} onCreated={(cat) => onChange(cat)} onClose={() => setShowModal(false)} />
+      )}
+    </div>
   );
 }
