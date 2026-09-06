@@ -427,7 +427,7 @@ function Benchmark({ trabajos }) {
   const colLabel = agruparPor === "familia" ? "Familia" : "Categoría";
   if (bm.length === 0) return (
     <div style={{ textAlign:"center", padding:40, color:C.muted, fontSize:13 }}>
-      Sin datos suficientes todavía para el benchmark.
+      Sin datos suficientes todavía para la comparativa.
     </div>
   );
   return (
@@ -439,8 +439,18 @@ function Benchmark({ trabajos }) {
       <div style={{ overflowX:"auto" }}>
       <table style={{ width:"100%", borderCollapse:"collapse" }}>
         <thead><tr>
-          {[colLabel,"N° trabajos","USD/kg Min","USD/kg Prom","USD/kg Max","Kg/h Min","Kg/h Prom","Kg/h Max"].map(h=>(
-            <th key={h} title={TH_TOOLTIPS[h]||TH_TOOLTIPS[colLabel]} style={TH}>{h}</th>
+          {/* Fix real (2026-09-05, reportado por Gino con captura): los
+              títulos numéricos quedaban a la izquierda de una columna ancha
+              mientras el dato de abajo está alineado a la derecha (TD lo
+              pisa por columna) — con eso se veían "desfasados" aunque la
+              columna fuera la correcta. Cada header ahora usa la misma
+              alineación que su columna de datos. */}
+          {[
+            [colLabel, "left"], ["N° trabajos", "center"],
+            ["USD/kg Min", "right"], ["USD/kg Prom", "right"], ["USD/kg Max", "right"],
+            ["Kg/h Min", "right"], ["Kg/h Prom", "right"], ["Kg/h Max", "right"],
+          ].map(([h, align]) => (
+            <th key={h} title={TH_TOOLTIPS[h]||TH_TOOLTIPS[colLabel]} style={{ ...TH, textAlign: align }}>{h}</th>
           ))}
         </tr></thead>
         <tbody>
@@ -631,7 +641,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
       {/* Toggle Lista / Benchmark */}
       <div style={{ display:"flex", gap:8, marginBottom:16 }}>
         <button onClick={() => setVista("lista")} style={{ ...BTN(vista==="lista"?"ok":"ghost"), padding:"5px 14px" }}>📋 Tabla</button>
-        <button onClick={() => setVista("benchmark")} style={{ ...BTN(vista==="benchmark"?"ok":"ghost"), padding:"5px 14px" }}>📈 Benchmark</button>
+        <button onClick={() => setVista("benchmark")} style={{ ...BTN(vista==="benchmark"?"ok":"ghost"), padding:"5px 14px" }}>📈 Comparativa</button>
       </div>
 
       {vista === "benchmark" && <Benchmark trabajos={trabajosActivos} />}
