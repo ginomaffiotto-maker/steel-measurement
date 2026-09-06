@@ -2423,7 +2423,85 @@ function ModalResumenCompleto({ pres, onClose }) {
 }
 
 // ─── VISTA DETALLE ────────────────────────────────────────────────
-function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, usuarios, onAgregarComentario, onEliminarComentario }) {
+// Comparador de presupuestos (2026-09, pedido de Gino): elegir uno o más
+// presupuestos ya cargados y ver sus resúmenes al lado del que se está
+// editando ahora, marcando con una flecha si cada valor quedó más alto o
+// más bajo que el actual. Reusa calcPresupuesto — no duplica ningún
+// cálculo, solo lo compara.
+function ComparadorPresupuestos({ pres, presupuestos, onClose }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [seleccionados, setSeleccionados] = useState(() => new Set());
+  const candidatos = (presupuestos || []).filter(p => p.id !== pres.id);
+  const q = norm(busqueda);
+  const filtrados = q
+    ? candidatos.filter(p => norm(`${p.nombre||""} ${p.nro||""} ${p.cliente||""} ${p.categoria||""}`).includes(q))
+    : candidatos;
+  const actual = calcPresupuesto(pres);
+  const toggleSel = (id) => setSeleccionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  return createPortal(
+    <div style={{ position:"fixed", inset:0, background:"#000c", zIndex:4000, display:"flex", alignItems:"flex-start", justifyContent:"center", overflowY:"auto", padding:20 }}>
+      <div style={{ background:C.card, border:"1px solid "+C.border, borderRadius:12, padding:24, width:"100%", maxWidth:960, marginTop:20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:16, color:C.accent }}>⚖️ Comparar presupuestos</div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:20 }}>✕</button>
+        </div>
+        <input style={INP} placeholder="Buscar por nombre, N°, cliente o categoría…" value={busqueda} onChange={e=>setBusqueda(e.target.value)} />
+        <div style={{ marginTop:10, maxHeight:180, overflowY:"auto", border:"1px solid "+C.border, borderRadius:8, marginBottom:16 }}>
+          {filtrados.length === 0
+            ? <div style={{ padding:14, fontSize:13, color:C.muted }}>Sin resultados.</div>
+            : filtrados.map(p => (
+              <label key={p.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", borderBottom:"1px solid "+C.border, cursor:"pointer", fontSize:13 }}>
+                <input type="checkbox" checked={seleccionados.has(p.id)} onChange={() => toggleSel(p.id)} />
+                <span style={{ fontWeight:700, color:C.accent }}>{p.nro}</span> {p.nombre||"(sin nombre)"} <span style={{ color:C.muted }}>— {p.cliente||"sin cliente"}</span>
+              </label>
+            ))
+          }
+        </div>
+        {seleccionados.size === 0
+          ? <div style={{ fontSize:13, color:C.muted, textAlign:"center", padding:20 }}>Elegí uno o más presupuestos arriba para comparar.</div>
+          : <div style={{ display:"flex", gap:12, overflowX:"auto", paddingBottom:6 }}>
+            <TarjetaComparacion titulo="Este presupuesto (actual)" c={actual} esActual />
+            {[...seleccionados].map(id => {
+              const p = presupuestos.find(x => x.id === id);
+              if (!p) return null;
+              return <TarjetaComparacion key={id} titulo={`${p.nro} — ${p.nombre||"sin nombre"}`} c={calcPresupuesto(p)} vsActual={actual} />;
+            })}
+          </div>
+        }
+      </div>
+    </div>,
+    document.body
+  );
+}
+function TarjetaComparacion({ titulo, c, esActual, vsActual }) {
+  function fila(label, valor, valorActual, formato) {
+    let flecha = null;
+    if (!esActual && valorActual) {
+      const delta = ((valor - valorActual) / valorActual) * 100;
+      if (Math.abs(delta) > 0.5) {
+        flecha = delta > 0
+          ? <span style={{ color:C.warn, fontWeight:700 }}> ▲{n2(Math.abs(delta))}%</span>
+          : <span style={{ color:C.info, fontWeight:700 }}> ▼{n2(Math.abs(delta))}%</span>;
+      }
+    }
+    return <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"5px 0", borderBottom:"1px solid "+C.border }}>
+      <span style={{ color:C.muted }}>{label}</span>
+      <span style={{ textAlign:"right" }}>{formato(valor)}{flecha}</span>
+    </div>;
+  }
+  const horas = c.detalle.moFab_h + c.detalle.moMon_h;
+  const horasActual = vsActual ? vsActual.detalle.moFab_h + vsActual.detalle.moMon_h : null;
+  return <div style={{ background:C.iron, borderRadius:8, padding:12, minWidth:200, flex:"1 0 200px", border: esActual ? `2px solid ${C.accent}` : `1px solid ${C.border}` }}>
+    <div style={{ fontWeight:700, fontSize:12, color: esActual?C.accent:C.text, marginBottom:8, minHeight:32 }}>{titulo}</div>
+    {fila("Kg total", c.total_kg, vsActual?.total_kg, v => n2(v)+" kg")}
+    {fila("USD total", c.gran_total, vsActual?.gran_total, v => "U$S "+n2(v))}
+    {fila("USD/kg", c.usd_kg, vsActual?.usd_kg, v => "U$S "+n2(v))}
+    {fila("Horas (fab+mont)", horas, horasActual, v => n2(v)+"h")}
+  </div>;
+}
+
+function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuario, usuarios, onAgregarComentario, onEliminarComentario, presupuestos = [] }) {
   const set = (k, v) => onChange({ ...pres, [k]: v });
   const c   = calcPresupuesto(pres);
   // 2026-08-31, a pedido de Gino: una vez que sale de "borrador" (enviado,
@@ -2443,6 +2521,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // A pedido de Gino (2026-08-30): clonar un ítem dentro del mismo presupuesto.
   const clonarItem = (it) => { if (bloqueado) return; set("items", [...pres.items, { ...it, id: uid(), titulo: `${it.titulo} (copia)` }]); };
   const [confirmarSyncPrecios, setConfirmarSyncPrecios] = useState(null); // {cambios} | null
+  const [showComparador, setShowComparador] = useState(false);
   // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
   // pantalla para los ítems, que es lo que se edita más seguido.
   const [datosAbiertos, setDatosAbiertos] = useState(false);
@@ -2575,6 +2654,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
           onCreated={e => set("cliente", e.nombre)}
         />
       )}
+      {showComparador && (
+        <ComparadorPresupuestos pres={pres} presupuestos={presupuestos} onClose={() => setShowComparador(false)} />
+      )}
       {/* Topbar */}
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18, flexWrap:"wrap" }}>
         <button style={BTN("ghost")} onClick={onBack}>← Volver</button>
@@ -2588,6 +2670,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
         </div>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <button style={BTN("ghost")} onClick={() => generarResumenInterno(pres, usuarios)} title="Resumen de uso interno con desglose de costos — no se envía al cliente">📊 Resumen interno</button>
+          <button style={BTN("ghost")} onClick={() => setShowComparador(true)} title="Comparar este presupuesto con otros ya cargados">⚖️ Comparar</button>
           {vinculosCRM.length > 0 ? (
             // Un mismo cálculo puede terminar en más de un presupuesto de
             // Steel CRM (2026-09-04) — se muestra un badge por cada uno,
@@ -3291,7 +3374,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
     return (
       <>
-        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} usuarios={usuarios} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} />
+        <DetallePresupuesto pres={selPres} onChange={updPres} onBack={() => { setVista("lista"); setSelId(null); }} origenNro={origenNro} tcGlobal={tcGlobal} usuario={usuario} usuarios={usuarios} onAgregarComentario={(c) => agregarComentario(selPres, c)} onEliminarComentario={(c) => eliminarComentario(selPres, c)} presupuestos={presupuestos} />
         {materialesPend && (
           <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} precarga={precargaPend} onImportar={importarMateriales} onImportarNuevoPres={importarMaterialesComoPresNuevo} onClose={cerrarImportMateriales} />
         )}
