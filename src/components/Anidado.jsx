@@ -1036,6 +1036,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
   const [showEmpresaRapida, setShowEmpresaRapida] = useState(false);
+  // Obligatorios reales al crear (2026-09-05, a pedido de Gino, mismo
+  // criterio ya usado en Steel CRM) — antes "crear" no hacía nada si
+  // faltaba el nombre, sin ningún aviso ni borde rojo.
+  const [errNombre,  setErrNombre]  = useState(false);
+  const [errCliente, setErrCliente] = useState(false);
   const listaClientes = useListaClientes();
   const listaObras = useListaObras();
   const listaEmpresas = useListaEmpresas();
@@ -1144,7 +1149,10 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   },[]);
 
   const crear=()=>{
-    if (!nombre.trim()) return;
+    const faltaNombre = !nombre.trim();
+    const faltaCliente = !clienteTexto;
+    setErrNombre(faltaNombre); setErrCliente(faltaCliente);
+    if (faltaNombre || faltaCliente) return;
     if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
@@ -1328,12 +1336,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       {!actual && creando&&(
         <div style={{ background:C.iron,border:`1px solid ${C.accent}44`,borderRadius:10,padding:20,marginBottom:20,maxWidth:480 }}>
           <div style={{ fontWeight:700, fontSize:14, color:C.accent, marginBottom:14 }}>Nuevo anidado</div>
-          <label style={LBL}>Nombre</label>
-          <input type="text" placeholder="Ej: Pilares CCFC" value={nombre} onChange={e=>setNombre(e.target.value)} onKeyDown={e=>e.key==="Enter"&&crear()} autoFocus style={{ ...INP,marginBottom:10 }}/>
+          <label style={LBL}>Nombre *</label>
+          <input type="text" placeholder="Ej: Pilares CCFC" value={nombre} onChange={e=>{ setNombre(e.target.value); if (e.target.value.trim()) setErrNombre(false); }} onKeyDown={e=>e.key==="Enter"&&crear()} autoFocus style={{ ...INP,marginBottom: errNombre?4:10, ...(errNombre?{border:"1px solid "+C.err}:{}) }}/>
+          {errNombre && <div style={{ fontSize:11, color:C.err, fontWeight:500, marginBottom:10 }}>⚠ Indicá el nombre del anidado</div>}
           <label style={LBL}>Fecha</label>
           <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ ...INP,marginBottom:10 }}/>
-          <label style={LBL}>Cliente</label>
-          <AutocompleteCliente placeholder="Ej: Juan Pérez" value={cliente} onChange={setCliente} style={{ ...INP,marginBottom: clienteSinResolver ? 4 : 10 }}/>
+          <label style={LBL}>Cliente *</label>
+          <AutocompleteCliente placeholder="Ej: Juan Pérez" value={cliente} onChange={v=>{ setCliente(v); if (v.trim()) setErrCliente(false); }} style={{ ...INP,marginBottom: (clienteSinResolver||errCliente) ? 4 : 10, ...(errCliente?{border:"1px solid "+C.err}:{}) }}/>
+          {errCliente && !clienteSinResolver && <div style={{ fontSize:11, color:C.err, fontWeight:500, marginBottom:10 }}>⚠ Indicá el Cliente</div>}
           {clienteSinResolver && (
             <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
               ⚠️ Este cliente no existe todavía
@@ -1368,7 +1378,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
           )}
           <div style={{ display:"flex",gap:8 }}>
             <button onClick={crear} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
-            <button onClick={()=>setCreando(false)} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
+            <button onClick={()=>{ setCreando(false); setErrNombre(false); setErrCliente(false); }} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
           </div>
         </div>
       )}

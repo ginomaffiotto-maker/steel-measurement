@@ -928,6 +928,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   const [expandedItems, setExpandedItems] = useState(new Set());
   const [creando,       setCreando]       = useState(false);
   const [nuevo,         setNuevo]         = useState({ nombre:"", fecha:new Date().toISOString().split("T")[0], nro:"", cliente:"", empresa:"", obra:"", categoria:"", tipo_trabajo:"Fabricación" });
+  // Obligatorios reales al crear (2026-09-05, a pedido de Gino, mismo
+  // criterio ya usado en Steel CRM) — antes "crear" no hacía nada si
+  // faltaba el nombre, sin ningún aviso ni borde rojo.
+  const [errNombre,    setErrNombre]    = useState(false);
+  const [errCliente,   setErrCliente]   = useState(false);
+  const [errCategoria, setErrCategoria] = useState(false);
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
   const [showEmpresaRapida, setShowEmpresaRapida] = useState(false);
@@ -1062,7 +1068,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   };
 
   const crearComputo = () => {
-    if (!nuevo.nombre.trim()) return;
+    const faltaNombre = !nuevo.nombre.trim();
+    const faltaCliente = !clienteTexto;
+    const faltaCategoria = !nuevo.categoria;
+    setErrNombre(faltaNombre); setErrCliente(faltaCliente); setErrCategoria(faltaCategoria);
+    if (faltaNombre || faltaCliente || faltaCategoria) return;
     if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
@@ -1260,11 +1270,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <div style={{ background:C.iron, border:`1px solid ${C.accent}44`, borderRadius:10,
             padding:20, marginBottom:20, maxWidth:480 }}>
             <div style={{ fontWeight:700, fontSize:14, color:C.accent, marginBottom:14 }}>Nuevo cómputo</div>
-            <label style={LBL}>Nombre cómputo</label>
+            <label style={LBL}>Nombre cómputo *</label>
             <input type="text" placeholder="Ej: Galpón CCFC" value={nuevo.nombre}
-              onChange={e=>setNuevo(v=>({...v,nombre:e.target.value}))}
+              onChange={e=>{ setNuevo(v=>({...v,nombre:e.target.value})); if (e.target.value.trim()) setErrNombre(false); }}
               onKeyDown={e=>e.key==="Enter"&&crearComputo()}
-              autoFocus style={{ ...INP,marginBottom:10 }} />
+              autoFocus style={{ ...INP,marginBottom: errNombre ? 4 : 10, ...(errNombre ? { border: "1px solid "+C.err } : {}) }} />
+            {errNombre && <div style={{ fontSize:11, color:C.err, fontWeight:500, marginBottom:10 }}>⚠ Indicá el nombre del cómputo</div>}
             <label style={LBL}>N° Cómputo <span style={{ fontWeight:400 }}>(se genera solo)</span></label>
             <input type="text"
               placeholder={`C-${String((loadLS("smeas_computo_nro",0))+1).padStart(3,"0")}`}
@@ -1274,10 +1285,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <input type="date" value={nuevo.fecha}
               onChange={e=>setNuevo(v=>({...v,fecha:e.target.value}))}
               style={{ ...INP,marginBottom:10 }} />
-            <label style={LBL}>Cliente</label>
+            <label style={LBL}>Cliente *</label>
             <AutocompleteCliente placeholder="Ej: Juan Pérez" value={nuevo.cliente}
-              onChange={v=>setNuevo(s=>({...s,cliente:v}))}
-              style={{ ...INP,marginBottom: clienteSinResolver ? 4 : 10 }} />
+              onChange={v=>{ setNuevo(s=>({...s,cliente:v})); if (v.trim()) setErrCliente(false); }}
+              style={{ ...INP,marginBottom: (clienteSinResolver || errCliente) ? 4 : 10, ...(errCliente ? { border: "1px solid "+C.err } : {}) }} />
+            {errCliente && !clienteSinResolver && <div style={{ fontSize:11, color:C.err, fontWeight:500, marginBottom:10 }}>⚠ Indicá el Cliente</div>}
             {clienteSinResolver && (
               <div style={{ fontSize:11, color:C.warn, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
                 ⚠️ Este cliente no existe todavía
@@ -1309,12 +1321,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
               style={{ ...INP,marginBottom:10 }}>
               {TIPOS_TRABAJO.map(t=><option key={t}>{t}</option>)}
             </select>
-            <label style={LBL}>Categoría</label>
-            <SelectCategoria value={nuevo.categoria} onChange={v=>setNuevo(s=>({...s,categoria:v}))}
-              style={{ marginBottom:14 }} />
+            <label style={LBL}>Categoría *</label>
+            <SelectCategoria value={nuevo.categoria} onChange={v=>{ setNuevo(s=>({...s,categoria:v})); if (v) setErrCategoria(false); }}
+              style={{ marginBottom: errCategoria ? 4 : 14, ...(errCategoria ? { border: "1px solid "+C.err } : {}) }} />
+            {errCategoria && <div style={{ fontSize:11, color:C.err, fontWeight:500, marginBottom:10 }}>⚠ Seleccioná una categoría</div>}
             <div style={{ display:"flex",gap:8 }}>
               <button onClick={crearComputo} style={{ ...BTN("ok"),flex:1 }}>Crear</button>
-              <button onClick={()=>setCreando(false)} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
+              <button onClick={()=>{ setCreando(false); setErrNombre(false); setErrCliente(false); setErrCategoria(false); }} style={{ ...BTN("ghost"),flex:1 }}>Cancelar</button>
             </div>
           </div>
         )}

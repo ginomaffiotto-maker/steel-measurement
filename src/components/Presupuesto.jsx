@@ -478,8 +478,17 @@ function ModalNuevo({ onSave, onClose }) {
   const obraSinResolver = obraTexto && !listaObras.some(o => (o.nombre || "").trim().toLowerCase() === obraTexto.toLowerCase());
   const empresaTexto = (form.cliente || "").trim();
   const empresaSinResolver = empresaTexto && !listaEmpresas.some(e => (e.nombre || "").trim().toLowerCase() === empresaTexto.toLowerCase());
+  // Obligatorios reales al crear (2026-09-05, a pedido de Gino, mismo
+  // criterio ya usado en Steel CRM) — Nombre ya bloqueaba (con asterisco y
+  // botón deshabilitado); se suman Cliente y Categoría, con el mismo aviso
+  // en rojo que ya usa Steel CRM.
+  const [errContacto, setErrContacto] = useState(false);
+  const [errCategoria, setErrCategoria] = useState(false);
   const crear = () => {
-    if (!form.nombre.trim()) return;
+    const faltaContacto = !contactoTexto;
+    const faltaCategoria = !form.categoria;
+    setErrContacto(faltaContacto); setErrCategoria(faltaCategoria);
+    if (!form.nombre.trim() || faltaContacto || faltaCategoria) return;
     if (contactoSinResolver) { alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
     if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
     if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
@@ -508,8 +517,9 @@ function ModalNuevo({ onSave, onClose }) {
             )}
           </div>
           <div>
-            <label style={LBL}>Cliente</label>
-            <AutocompleteCliente style={INP} value={form.contacto} placeholder="Nombre" onChange={v=>set("contacto",v)}/>
+            <label style={LBL}>Cliente *</label>
+            <AutocompleteCliente style={{ ...INP, ...(errContacto?{border:"1px solid "+C.err}:{}) }} value={form.contacto} placeholder="Nombre" onChange={v=>{ set("contacto",v); if (v.trim()) setErrContacto(false); }}/>
+            {errContacto && !contactoSinResolver && <div style={{ fontSize:13, color:C.err, fontWeight:500, marginTop:4 }}>⚠ Indicá el Cliente</div>}
             {contactoSinResolver && (
               <div style={{ fontSize:13, color:C.warn, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                 ⚠️ No existe todavía
@@ -531,14 +541,15 @@ function ModalNuevo({ onSave, onClose }) {
             <select style={INP} value={form.tipo_trabajo} onChange={e=>set("tipo_trabajo",e.target.value)}>
               {TIPOS.map(t=><option key={t}>{t}</option>)}
             </select></div>
-          <div><label style={LBL}>Categoría</label>
-            <SelectCategoria value={form.categoria} onChange={v=>set("categoria",v)} /></div>
+          <div><label style={LBL}>Categoría *</label>
+            <SelectCategoria value={form.categoria} onChange={v=>{ set("categoria",v); if (v) setErrCategoria(false); }} style={errCategoria?{border:"1px solid "+C.err}:{}} />
+            {errCategoria && <div style={{ fontSize:13, color:C.err, fontWeight:500, marginTop:4 }}>⚠ Seleccioná una categoría</div>}</div>
           <div style={{ gridColumn:"1 / -1" }}><label style={LBL}>Detalle</label>
             <input style={INP} value={form.detalle} placeholder="Descripción breve" onChange={e=>set("detalle",e.target.value)}/></div>
         </div>
         <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
           <button style={BTN("ghost")} onClick={onClose}>Cancelar</button>
-          <button style={{ ...BTN("primary"),opacity:form.nombre.trim()?1:0.5 }}
+          <button style={{ ...BTN("primary"),opacity:(form.nombre.trim() && contactoTexto && form.categoria)?1:0.5 }}
             onClick={crear}>Crear →</button>
         </div>
       </div>
