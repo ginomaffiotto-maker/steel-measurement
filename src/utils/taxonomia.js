@@ -107,15 +107,18 @@ function CategoriaRapidaModal({ categoriaInicial, onCreated, onClose }) {
   const [familiaSel, setFamiliaSel] = useState("");
   const [familiaNueva, setFamiliaNueva] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [errCat, setErrCat] = useState(false);
+  const [errFam, setErrFam] = useState(false);
+  const [errGuardar, setErrGuardar] = useState("");
   const crear = async () => {
     const cat = categoria.trim();
     const fam = (familiaSel === "__nueva__" ? familiaNueva : familiaSel).trim();
-    if (!cat) return alert("Ingresá el nombre de la categoría");
-    if (!fam) return alert("Elegí una Familia o escribí una nueva");
+    setErrCat(!cat); setErrFam(!fam); setErrGuardar("");
+    if (!cat || !fam) return;
     setGuardando(true);
     const ok = await crearCategoriaTrabajo(fam, cat);
     setGuardando(false);
-    if (!ok) return alert("No se pudo crear la categoría. Revisá tu conexión.");
+    if (!ok) return setErrGuardar("No se pudo crear la categoría. Revisá tu conexión.");
     onCreated(cat);
     onClose();
   };
@@ -127,15 +130,21 @@ function CategoriaRapidaModal({ categoriaInicial, onCreated, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 20 }}>✕</button>
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>No existe todavía — completá los datos para crearla.</div>
+        {errGuardar && <div style={{ fontSize: 12, color: C.err, fontWeight: 500, marginBottom: 10 }}>⚠ {errGuardar}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div><label style={LBL}>Categoría *</label><input autoFocus style={INP} value={categoria} onChange={e => setCategoria(e.target.value)} /></div>
+          <div>
+            <label style={LBL}>Categoría *</label>
+            <input autoFocus style={{ ...INP, ...(errCat ? { border: "1px solid " + C.err } : {}) }} value={categoria} onChange={e => { setCategoria(e.target.value); if (e.target.value.trim()) setErrCat(false); }} />
+            {errCat && <div style={{ fontSize: 12, color: C.err, fontWeight: 500, marginTop: 4 }}>⚠ Ingresá el nombre de la categoría</div>}
+          </div>
           <div>
             <label style={LBL}>Familia *</label>
-            <select style={INP} value={familiaSel} onChange={e => setFamiliaSel(e.target.value)}>
+            <select style={{ ...INP, ...(errFam ? { border: "1px solid " + C.err } : {}) }} value={familiaSel} onChange={e => { setFamiliaSel(e.target.value); if (e.target.value) setErrFam(false); }}>
               <option value="">-- Elegir --</option>
               {Object.keys(FAMILIAS).map(f => <option key={f} value={f}>{f}</option>)}
               <option value="__nueva__">+ Familia nueva…</option>
             </select>
+            {errFam && <div style={{ fontSize: 12, color: C.err, fontWeight: 500, marginTop: 4 }}>⚠ Elegí una Familia o escribí una nueva</div>}
           </div>
           {familiaSel === "__nueva__" && (
             <div><label style={LBL}>Nombre de la familia nueva</label><input autoFocus style={INP} value={familiaNueva} onChange={e => setFamiliaNueva(e.target.value)} /></div>

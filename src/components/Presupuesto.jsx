@@ -17,6 +17,7 @@ import { abrirResumenInterno } from "../utils/resumenInterno";
 import { useSortable } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 import { useUndoToast } from "./Toast";
+import { toastWarn, toastError } from "../utils/toastBus";
 import FiltrosBar from "./FiltrosBar";
 
 // ─── HELPERS ─────────────────────────────────────────────────────
@@ -489,9 +490,9 @@ function ModalNuevo({ onSave, onClose }) {
     const faltaCategoria = !form.categoria;
     setErrContacto(faltaContacto); setErrCategoria(faltaCategoria);
     if (!form.nombre.trim() || faltaContacto || faltaCategoria) return;
-    if (contactoSinResolver) { alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
-    if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
-    if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
+    if (contactoSinResolver) { toastWarn(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (obraSinResolver) { toastWarn(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    if (empresaSinResolver) { toastWarn(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
     onSave(form);
   };
   return (
@@ -2586,9 +2587,9 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // en el momento en que hace falta enviarlos a Steel CRM.
   const enviarSteelCRM = async () => {
     if (vinculosCRM.length > 0 || enviandoCRM) return;
-    if (contactoSinResolver) return alert(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
-    if (obraSinResolver) return alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de enviar a Steel CRM.`);
-    if (empresaSinResolver) return alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de enviar a Steel CRM.`);
+    if (contactoSinResolver) return toastWarn(`El cliente "${contactoTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de enviar a Steel CRM.`);
+    if (obraSinResolver) return toastWarn(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de enviar a Steel CRM.`);
+    if (empresaSinResolver) return toastWarn(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de enviar a Steel CRM.`);
     const codigo = pres.codigo_calculo || newCodigoCalculo();
     if (!pres.codigo_calculo) set("codigo_calculo", codigo);
     setEnviandoCRM(true);
@@ -2596,7 +2597,7 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
       const v = await enviarPresupuestoASteelCRM({ ...pres, codigo_calculo: codigo }, c, usuario);
       setVinculosCRM(prev => [...prev, v]);
     } catch (e) {
-      alert("No se pudo enviar a Steel CRM: " + (e.message || e));
+      toastError("No se pudo enviar a Steel CRM: " + (e.message || e));
     } finally {
       setEnviandoCRM(false);
     }

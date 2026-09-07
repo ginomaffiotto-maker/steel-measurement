@@ -12,6 +12,7 @@ import Config from "./components/Config";
 import Buscador from "./components/Buscador";
 import SolicitudesAsignadas from "./components/SolicitudesAsignadas";
 import { hidratarFamiliasDesdeNube } from "./utils/taxonomia";
+import { useToastBus } from "./components/Toast";
 
 // ─── MÓDULOS / NAVEGACIÓN ────────────────────────────────────────
 const GRUPOS = [
@@ -348,6 +349,7 @@ const INACTIVIDAD_MS = 2 * 60 * 60 * 1000;
 const ULTIMA_ACTIVIDAD_KEY = "smeas_ultima_actividad";
 
 export default function App() {
+  const toastBusContainer = useToastBus();
   const [usuarios, setUsuarios] = useState(iUsuarios);
   // Registro de actividad (2026-08-24, mismo patrón que steelCRM: no es
   // exhaustivo, cubre creación/eliminación de las entidades principales).
@@ -675,6 +677,7 @@ export default function App() {
           {tab === "Config"      && <Config usuario={usuario} usuarios={usuarios} setUsuarios={setUsuarios} auditLog={auditLog} logear={logear} />}
         </div>
       </div>
+      {toastBusContainer}
     </div>
   );
 }

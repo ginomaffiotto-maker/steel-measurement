@@ -20,7 +20,8 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
   const [existente, setExistente] = useState(null);
 
   function intentarGuardar() {
-    if (!f.nombre.trim()) return alert("Ingresá el nombre de la obra");
+    if (!f.nombre.trim()) { setErr("Ingresá el nombre de la obra"); return; }
+    setErr("");
     const match = listaObras.find((o) => (o.nombre || "").trim().toLowerCase() === f.nombre.trim().toLowerCase());
     if (match) { setExistente(match); return; }
     guardar();
@@ -63,7 +64,7 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
           <>
             <div style={{ color: C.muted, fontSize: 12, marginBottom: 14 }}>No existe todavía en el sistema — completá los datos para crear su ficha.</div>
             <label style={LBL}>Nombre *</label>
-            <input autoFocus style={{ ...INP, marginBottom: 10 }} value={f.nombre} onChange={e => setF(x => ({ ...x, nombre: e.target.value }))} />
+            <input autoFocus style={{ ...INP, marginBottom: 10, ...(err ? { border: "1px solid " + C.err } : {}) }} value={f.nombre} onChange={e => { setF(x => ({ ...x, nombre: e.target.value })); if (e.target.value.trim()) setErr(""); }} />
             <label style={LBL}>Empresa</label>
             <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} onChange={e => setF(x => ({ ...x, empresa: e.target.value }))} />
             <label style={LBL}>Dirección</label>

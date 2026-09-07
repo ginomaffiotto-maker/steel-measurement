@@ -12,6 +12,7 @@ import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
+import { toastWarn, toastError } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, REJILLAS_DATA, IDS_UNIFICADOS_GM } from "./BibliotecaMateriales";
@@ -1077,12 +1078,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     const faltaCategoria = !nuevo.categoria;
     setErrNombre(faltaNombre); setErrCliente(faltaCliente); setErrCategoria(faltaCategoria);
     if (faltaNombre || faltaCliente || faltaCategoria) return;
-    if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
-    if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
-    if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
+    if (clienteSinResolver) { toastWarn(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (obraSinResolver) { toastWarn(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    if (empresaSinResolver) { toastWarn(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
     const nroManual = nuevo.nro?.trim();
     if (nroManual && computos.some(c => c.nro === nroManual)) {
-      alert(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
+      toastError(`Ya existe un cómputo con el número ${nroManual}. Elegí otro número.`);
       return;
     }
     // 2026-08-30: dos cómputos con el mismo nombre y fecha quedan idénticos
@@ -1091,7 +1092,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     // en vez de solo avisar, a pedido explícito.
     const nombreDup = computos.find(c => normalizarTexto(c.nombre) === normalizarTexto(nuevo.nombre) && c.fecha === nuevo.fecha);
     if (nombreDup) {
-      alert(`Ya existe un cómputo "${nombreDup.nombre}" con la misma fecha (${nombreDup.nro}) — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
+      toastWarn(`Ya existe un cómputo "${nombreDup.nombre}" con la misma fecha (${nombreDup.nro}) — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
       return;
     }
     const nro = nroManual || siguienteNroComputo(computos);

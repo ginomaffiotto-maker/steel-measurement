@@ -12,6 +12,7 @@ import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
+import { toastWarn } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { MAQUINAS_OPTS } from "./Computo";
 import FiltrosBar from "./FiltrosBar";
@@ -1153,9 +1154,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     const faltaCliente = !clienteTexto;
     setErrNombre(faltaNombre); setErrCliente(faltaCliente);
     if (faltaNombre || faltaCliente) return;
-    if (clienteSinResolver) { alert(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
-    if (obraSinResolver) { alert(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
-    if (empresaSinResolver) { alert(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
+    if (clienteSinResolver) { toastWarn(`El cliente "${clienteTexto}" no existe todavía — creálo con "+ Crear cliente nuevo" antes de guardar.`); return; }
+    if (obraSinResolver) { toastWarn(`La obra "${obraTexto}" no existe todavía — creála con "+ Crear obra nueva" antes de guardar.`); return; }
+    if (empresaSinResolver) { toastWarn(`La empresa "${empresaTexto}" no existe todavía — creála con "+ Crear empresa nueva" antes de guardar.`); return; }
     // 2026-08-30: dos anidados con el mismo nombre y fecha quedan idénticos
     // en el desplegable "Anidado vinculado" de Presupuesto ("nombre (fecha)")
     // — típicamente pasa al apretar "Anidar" más de una vez desde el mismo
@@ -1163,7 +1164,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     // vivo por Gino). Se bloquea en vez de solo avisar, a pedido explícito.
     const nombreDup = anidados.find(x => !x.eliminado && normalizarTexto(x.nombre) === normalizarTexto(nombre) && x.fecha === fecha);
     if (nombreDup) {
-      alert(`Ya existe un anidado "${nombreDup.nombre}" con la misma fecha — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
+      toastWarn(`Ya existe un anidado "${nombreDup.nombre}" con la misma fecha — no se van a poder distinguir en los desplegables. Cambiá el nombre o la fecha.`);
       return;
     }
     const grupos=computoSel?importar(computoSel,bib_map,bib_planchas_map):[];

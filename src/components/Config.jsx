@@ -5,6 +5,7 @@ import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { seedTestData } from "../utils/seedTestData";
 import { authorize, backupToDrive, restoreFromDrive, formatBackupDate } from "../utils/googleDrive";
+import { toastOk, toastError } from "../utils/toastBus";
 
 // ─── GESTIÓN DE USUARIOS ─────────────────────────────────────────────────
 // Mismo mecanismo que steelCRM (mismo backend Supabase compartido): no hay
@@ -187,8 +188,8 @@ function InvitarUsuario({ setUsuarios }) {
   const [err, setErr] = useState("");
   const [cargando, setCargando] = useState(false);
   const invitar = async () => {
-    if (!form.nombre.trim() || !form.email.trim()) { alert("Ingresá nombre y email"); return; }
-    if (!form.accesoCrm && !form.accesoCostos) { alert("Tildá al menos un módulo (CRM y/o Costos)."); return; }
+    if (!form.nombre.trim() || !form.email.trim()) { setErr("Ingresá nombre y email"); return; }
+    if (!form.accesoCrm && !form.accesoCostos) { setErr("Tildá al menos un módulo (CRM y/o Costos)."); return; }
     if (!supabase) { setErr("Backend no configurado"); return; }
     setCargando(true); setErr(""); setMsg("");
     try {
@@ -318,7 +319,7 @@ function NumeracionPresupuestos({ soloLectura }) {
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input type="number" min="0" style={{ ...INP, maxWidth:160 }} value={contador}
               onChange={e => setContador(e.target.value)} placeholder="0" />
-            <button onClick={() => { localStorage.setItem(contadorKey, String(Number(contador) || 0)); alert("✅ Contador actualizado"); }}
+            <button onClick={() => { localStorage.setItem(contadorKey, String(Number(contador) || 0)); toastOk("Contador actualizado"); }}
               style={{ ...BTN("ghost"), fontSize:12, padding:"6px 14px" }}>
               Guardar contador
             </button>
@@ -400,7 +401,7 @@ function BackupYDatos({ usuario }) {
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
-      if (!token) { alert("Tu sesión no tiene token real — volvé a iniciar sesión."); setBackupForzando(false); return; }
+      if (!token) { toastError("Tu sesión no tiene token real — volvé a iniciar sesión."); setBackupForzando(false); return; }
       // Apunta a steelcrm.vercel.app a propósito, no es un descuido: el cron
       // (api/backup-cron.js, con el schedule real en vercel.json) solo existe
       // desplegado en el proyecto de Steel CRM — cubre los dos sistemas de
@@ -410,11 +411,11 @@ function BackupYDatos({ usuario }) {
       // steelcostos.vercel.app sin problema.
       const r = await fetch("https://steelcrm.vercel.app/api/backup-cron", { method: "POST", headers: { Authorization: "Bearer " + token } });
       const d = await r.json();
-      if (!r.ok) { alert("❌ " + (d.error || "No se pudo hacer el backup")); setBackupForzando(false); return; }
+      if (!r.ok) { toastError(d.error || "No se pudo hacer el backup"); setBackupForzando(false); return; }
       await cargarBackupStatus();
-      alert("✅ Backup hecho — " + d.fecha);
+      toastOk("Backup hecho — " + d.fecha);
     } catch (e) {
-      alert("❌ No se pudo hacer el backup: " + e.message);
+      toastError("No se pudo hacer el backup: " + e.message);
     }
     setBackupForzando(false);
   }
