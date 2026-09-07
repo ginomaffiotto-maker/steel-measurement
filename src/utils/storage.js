@@ -1387,6 +1387,19 @@ export const buscarVinculosCRM = async (presupuestoSmId) => {
   return data.map(row => ({ crmId: row.presupuesto_crm_id, nro: row.presupuestos_crm?.nro || null, estado: row.presupuestos_crm?.estado_nativo || null }));
 };
 
+// Traduce los códigos de error de Postgres más comunes que puede tirar este
+// flujo (número duplicado, vínculo todavía no sincronizado del otro lado) a
+// un mensaje entendible — antes se mostraba el error crudo de Supabase/
+// Postgres (en inglés, jerga de base de datos) directo al vendedor.
+function mensajeErrorEnvioCRM(error) {
+  const MAP = {
+    "23505": "Ya existe un presupuesto con ese número en Steel CRM — probá de nuevo en unos segundos.",
+    "23503": "El presupuesto todavía no terminó de sincronizar — esperá unos segundos y probá de nuevo.",
+    "42501": "No tenés permiso para crear este presupuesto en Steel CRM.",
+  };
+  return MAP[error?.code] || error?.message || String(error);
+}
+
 // El N° de presupuesto de Steel CRM es único por tenant y sigue un formato
 // configurable (Config > Sistema, sólo en el localStorage de Steel CRM) que
 // acá no se puede replicar — se usa un N° provisorio "SM-<código de
@@ -1431,7 +1444,7 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
     link_archivos: pres.link_archivos || null,
   });
   const { data: crmRow, error: errCrm } = await supabase.from("presupuestos_crm").insert(rowCrm).select().single();
-  if (errCrm) throw errCrm;
+  if (errCrm) throw new Error(mensajeErrorEnvioCRM(errCrm));
 
   const { error: errLink } = await supabase
     .from("presupuesto_calculo_link")
@@ -1445,7 +1458,7 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
     // presupuesto fantasma. Se deshace esa fila antes de propagar el
     // error, en vez de dejar basura a mitad de camino.
     await supabase.from("presupuestos_crm").delete().eq("id", crmRow.id);
-    throw errLink;
+    throw new Error(mensajeErrorEnvioCRM(errLink));
   }
 
   return { crmId: crmRow.id, nro: crmRow.nro };
