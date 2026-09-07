@@ -1042,9 +1042,15 @@ export const loadDBCategoriasTrabajo = async () => {
   if (error) throw error;
   return data;
 };
+// Bug real reportado por Gino desde Steel CRM (2026-09-07, mismo bug
+// acá): el upsert sin `onConflict` apunta por default al `id` (uuid,
+// nunca viene en el payload), no a la restricción real de la tabla
+// (tenant_id+categoria) — si la categoría ya existía (creada desde el
+// otro sistema, u otro dispositivo/sesión) el insert chocaba contra esa
+// unique y tiraba error en vez de resolverla.
 export const saveDBCategoriaTrabajo = async (row) => {
   if (!supabase) throw new Error("Supabase no configurado (faltan REACT_APP_SUPABASE_URL/ANON_KEY)");
-  const { data, error } = await supabase.from("categorias_trabajo").upsert(saneado(row)).select().single();
+  const { data, error } = await supabase.from("categorias_trabajo").upsert(saneado(row), { onConflict: "tenant_id,categoria" }).select().single();
   if (error) throw error;
   return data;
 };

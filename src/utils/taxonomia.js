@@ -87,10 +87,18 @@ export const TIPOS_TRABAJO = ["Fabricación", "Montaje", "Fab+Mont"];
 // FAMILIAS al instante — usado por el "+ Crear categoría nueva" de acá
 // abajo. Mutación in-place del objeto exportado (no reasignación del
 // binding), válido desde cualquier módulo que lo importe.
+// Devuelve `true` si se creó bien, o el mensaje de error real (string) si
+// falló — antes tragaba cualquier error y devolvía `false` a secas
+// (mismo fix del lado de Steel CRM, 2026-09-07).
 async function crearCategoriaTrabajo(familia, categoria) {
   const orden = (FAMILIAS[familia] || []).length;
-  const saved = await saveDBCategoriaTrabajo({ familia, categoria, orden }).catch(() => null);
-  if (!saved) return false;
+  let saved;
+  try {
+    saved = await saveDBCategoriaTrabajo({ familia, categoria, orden });
+  } catch (e) {
+    return e?.message || "Error desconocido";
+  }
+  if (!saved) return "No se pudo crear la categoría.";
   if (!FAMILIAS[familia]) FAMILIAS[familia] = [];
   if (!FAMILIAS[familia].includes(categoria)) FAMILIAS[familia] = [...FAMILIAS[familia], categoria];
   categoriaAFamilia[categoria] = familia;
@@ -116,9 +124,9 @@ function CategoriaRapidaModal({ categoriaInicial, onCreated, onClose }) {
     setErrCat(!cat); setErrFam(!fam); setErrGuardar("");
     if (!cat || !fam) return;
     setGuardando(true);
-    const ok = await crearCategoriaTrabajo(fam, cat);
+    const resultado = await crearCategoriaTrabajo(fam, cat);
     setGuardando(false);
-    if (!ok) return setErrGuardar("No se pudo crear la categoría. Revisá tu conexión.");
+    if (resultado !== true) return setErrGuardar(typeof resultado === "string" ? resultado : "No se pudo crear la categoría.");
     onCreated(cat);
     onClose();
   };
@@ -171,7 +179,10 @@ export function SelectCategoria({ value, onChange, style }) {
   const [showModal, setShowModal] = useState(false);
   const q = (value || "").trim().toLowerCase();
   const todas = Object.entries(FAMILIAS).flatMap(([familia, cats]) => cats.map(c => ({ categoria: c, familia })));
-  const sugeridas = (q ? todas.filter(t => t.categoria.toLowerCase().includes(q)) : todas).slice(0, 10);
+  // Bug real (2026-09-07, mismo fix del lado de Steel CRM): el tope de 10
+  // se aplicaba también con el campo vacío (navegando las ~32 categorías
+  // reales), escondiendo el resto. Ahora solo topea una búsqueda real.
+  const sugeridas = q ? todas.filter(t => t.categoria.toLowerCase().includes(q)).slice(0, 10) : todas;
   const sinResolver = !!q && !todas.some(t => t.categoria.toLowerCase() === q);
   return (
     <div style={{ position: "relative" }}>
