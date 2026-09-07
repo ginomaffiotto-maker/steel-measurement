@@ -408,6 +408,15 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
                 <span title={incidencia?"% que este material representa del total de kg del anidado":"Sin calcular"} style={{...BDG(incidencia?C.pur:C.muted,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:incidencia?1:.5}}>{incidencia?`${incidencia}%`:"—"}</span>
                 <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.b_total} barras</span>
+                {/* 2026-09-07, segunda vuelta — reportado por Gino con
+                    captura: aun con las 5 badges siempre presentes, Perfil
+                    (5 badges) y Plancha (6, tiene "m²" de más) seguían sin
+                    alinear ENTRE los dos tipos — Plancha arranca 130px más
+                    a la izquierda porque tiene una badge más. Este hueco
+                    vacío ocupa el mismo lugar que "m²" en GrupoPlancha
+                    (no aplica a perfiles, se miden en metros lineales, ya
+                    mostrado en "m útil" arriba) — mismo ancho, sin texto. */}
+                <span title="No aplica a perfiles (se miden en metros lineales, ver 'm útil' arriba)" style={{...BDG(C.muted,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:130,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:.35}}>—</span>
                 {/* 2026-09-07, a pedido de Gino: el kg resaltado acá pasa a
                     ser el kg ÚTIL (material realmente aprovechado), no el
                     total comprado (útil+desperdicio) — mismo criterio en
