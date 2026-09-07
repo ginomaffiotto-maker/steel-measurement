@@ -105,7 +105,12 @@ export function Combobox({ opciones, value, onChange, placeholder = "Buscar…",
             onMouseLeave={e => e.currentTarget.style.background = value === o.id ? C.accent + "22" : "transparent"}>
             <span style={{ flex: 1 }}>{o.nombre}</span>
             {infoMaterial(o) && <span style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>{infoMaterial(o)}</span>}
-            {!o[precioField] && <span title="Sin precio cargado" style={{ fontSize: 10, color: C.warn }}>⚠</span>}
+            {/* 2026-09-07, a pedido de Gino: acá sólo se avisaba cuando NO
+                había precio cargado — el precio real, cuando sí existe,
+                nunca se mostraba en ningún lado de este buscador. */}
+            {o[precioField] > 0
+              ? <span title="Precio cargado en Insumos y Precios" style={{ fontSize: 10, color: C.ok, fontWeight: 700, flexShrink: 0 }}>U$S {o[precioField]}/kg</span>
+              : <span title="Sin precio cargado" style={{ fontSize: 10, color: C.warn }}>⚠</span>}
             {o.cat && <span style={{ fontSize: 10, color: C.muted }}>{o.cat}</span>}
             {value === o.id && <span style={{ color: C.accent }}>✓</span>}
           </div>
@@ -124,7 +129,9 @@ export function Combobox({ opciones, value, onChange, placeholder = "Buscar…",
           <>
             <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sel.nombre}</span>
             {infoMaterial(sel) && <span style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>{infoMaterial(sel)}</span>}
-            {!sel[precioField] && <span title="Sin precio cargado en Insumos y Precios" style={{ fontSize: 11, color: C.warn, flexShrink: 0 }}>⚠ sin precio</span>}
+            {sel[precioField] > 0
+              ? <span title="Precio cargado en Insumos y Precios" style={{ fontSize: 11, color: C.ok, fontWeight: 700, flexShrink: 0 }}>U$S {sel[precioField]}/kg</span>
+              : <span title="Sin precio cargado en Insumos y Precios" style={{ fontSize: 11, color: C.warn, flexShrink: 0 }}>⚠ sin precio</span>}
             <span onMouseDown={e => { e.stopPropagation(); onChange(null); setBusq(""); setOpen(false); }}
               style={{ cursor: "pointer", color: C.muted, fontSize: 14, padding: "0 3px" }}>✕</span>
           </>
