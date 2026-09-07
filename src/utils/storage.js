@@ -517,6 +517,21 @@ export const useMergePresupuestosNube = (presupuestosActuales, setPresupuestos, 
 // de React hoy, que reemplaza el array completo en cada guardado. No incluye
 // horas_especiales: sin UI para agregar filas, siempre vacío en la práctica
 // (ver BACKEND-COMPARTIDO.md).
+// item_hierros no tiene columna `ficha` (jsonb) — el % parcial de
+// arena/pintura/galvanizado y la máquina de corte se guardan como columnas
+// planas (pct_arena/pct_pintura/pct_galvanizado/maquina), igual que
+// computo_piezas/anidados. La UI local espera esos 4 campos anidados bajo
+// `.ficha`, así que hay que renidarlos al leer y aplanarlos al guardar.
+function nestFichaHierro(row) {
+  const { pct_arena, pct_pintura, pct_galvanizado, maquina, ...resto } = row;
+  const ficha = {};
+  if (pct_arena != null) ficha.pct_arena = pct_arena;
+  if (pct_pintura != null) ficha.pct_pintura = pct_pintura;
+  if (pct_galvanizado != null) ficha.pct_galvanizado = pct_galvanizado;
+  if (maquina) ficha.maquina = maquina;
+  return Object.keys(ficha).length ? { ...resto, ficha } : resto;
+}
+
 const RUBROS_ITEM = [
   ["hierros", "item_hierros"],
   ["mat_generales", "item_mat_generales"],
@@ -541,7 +556,7 @@ export const loadDBItems = async (presupuestoId) => {
     for (const [campo, tabla] of RUBROS_ITEM) {
       const { data, error } = await supabase.from(tabla).select("*").eq("item_id", row.id).order("orden");
       if (error) throw error;
-      item[campo] = data;
+      item[campo] = campo === "hierros" ? (data || []).map(nestFichaHierro) : data;
     }
     const { data: trat, error: eTrat } = await supabase
       .from("item_trat_superficie").select("*").eq("item_id", row.id).maybeSingle();
@@ -633,7 +648,17 @@ export const saveDBItem = async (presupuestoId, item) => {
   for (const [campo, tabla] of RUBROS_ITEM) {
     const { error: eDel } = await supabase.from(tabla).delete().eq("item_id", itemId);
     if (eDel) throw eDel;
-    const filas = (rubrosData[campo] || []).map((f) => ({ ...sinId(f), item_id: itemId }));
+    const filas = (rubrosData[campo] || []).map((f) => {
+      if (campo !== "hierros") return { ...sinId(f), item_id: itemId };
+      const { ficha, ...resto } = f;
+      return {
+        ...sinId(resto), item_id: itemId,
+        pct_arena: ficha?.pct_arena ?? null,
+        pct_pintura: ficha?.pct_pintura ?? null,
+        pct_galvanizado: ficha?.pct_galvanizado ?? null,
+        maquina: ficha?.maquina || null,
+      };
+    });
     if (filas.length) {
       const { error: eIns } = await supabase.from(tabla).insert(filas);
       if (eIns) throw eIns;
@@ -1882,4 +1907,35 @@ export const newNroPresupuesto = () => {
   const next = Number(localStorage.getItem(key) || "0") + 1;
   localStorage.setItem(key, String(next));
   return formatearNroPres(cfg, next);
+};
+
+// 2026-09-07, bug real reportado por Gino con captura: "P-001" repetido 5
+// veces en la lista real de presupuestos (P-002/P-004 también duplicados).
+// Causa: `presupuestos_sm.nro` nunca tuvo restricción de unicidad (a
+// diferencia de `presupuestos_crm.nro` en Steel CRM, que sí la tiene) —
+// el contador es puramente local (`smeas_last_nro*`), así que cualquier
+// dispositivo/sesión nueva que arranca con localStorage limpio repite la
+// numeración desde el principio sin que nada lo bloquee ni avise. Mismo
+// mecanismo de fondo que ya existía para codigo_calculo
+// (catchUpCodigoCalculo) — acá se llama siempre ANTES de generar (no sólo
+// al reintentar un choque) porque, sin restricción real en la base, nunca
+// va a llegar un error que dispare un reintento.
+export const catchUpNroPresupuesto = async () => {
+  const cfg = loadNumeracion();
+  const key = contadorKeyPres(cfg);
+  if (!supabase) return newNroPresupuesto();
+  const prefijo = (cfg.prefijo || "") + (cfg.incluirAnio ? String(new Date().getFullYear()) : "");
+  const { data } = await supabase
+    .from("presupuestos_sm")
+    .select("nro")
+    .like("nro", `${prefijo}%`)
+    .order("nro", { ascending: false })
+    .limit(50);
+  const maxRemoto = (data || [])
+    .map(r => Number((r.nro || "").slice(prefijo.length)))
+    .filter(n => !isNaN(n))
+    .reduce((max, n) => Math.max(max, n), 0);
+  const actual = Number(localStorage.getItem(key) || "0");
+  if (maxRemoto > actual) localStorage.setItem(key, String(maxRemoto));
+  return newNroPresupuesto();
 };

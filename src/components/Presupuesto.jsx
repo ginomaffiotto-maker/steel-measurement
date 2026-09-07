@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, newNroPresupuesto, newCodigoCalculo, catchUpCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, peekNroPresupuesto, catchUpNroPresupuesto, newCodigoCalculo, catchUpCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -2522,6 +2522,11 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   // A pedido de Gino (2026-08-30): clonar un ítem dentro del mismo presupuesto.
   const clonarItem = (it) => { if (bloqueado) return; set("items", [...pres.items, { ...it, id: uid(), titulo: `${it.titulo} (copia)` }]); };
   const [confirmarSyncPrecios, setConfirmarSyncPrecios] = useState(null); // {cambios} | null
+  // 2026-09-07, reportado por Gino: el nombre del presupuesto (topbar) era
+  // sólo texto estático — se cargaba una vez al crear y no había forma de
+  // corregirlo después. Mismo criterio que el resto de campos editables acá:
+  // respeta `bloqueado` (post-envío se congela, usar Clonar si hace falta).
+  const [editandoNombre, setEditandoNombre] = useState(false);
   const [showComparador, setShowComparador] = useState(false);
   // Colapsado por defecto (2026-08-24, pedido de Gino) — deja más lugar en
   // pantalla para los ítems, que es lo que se edita más seguido.
@@ -2662,7 +2667,19 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18, flexWrap:"wrap" }}>
         <button style={BTN("ghost")} onClick={onBack}>← Volver</button>
         <div style={{ flex:1 }}>
-          <div style={{ fontWeight:800, fontSize:17, color:C.accent }}>{pres.nombre||"Presupuesto sin nombre"}</div>
+          {editandoNombre && !bloqueado ? (
+            <input autoFocus defaultValue={pres.nombre||""} placeholder="Nombre del presupuesto"
+              onBlur={e=>{ set("nombre", e.target.value.trim()); setEditandoNombre(false); }}
+              onKeyDown={e=>{ if (e.key==="Enter") e.target.blur(); if (e.key==="Escape") setEditandoNombre(false); }}
+              style={{ ...INP, fontWeight:800, fontSize:17, color:C.accent, padding:"2px 6px", maxWidth:360 }} />
+          ) : (
+            <div onClick={()=>!bloqueado && setEditandoNombre(true)}
+              title={bloqueado ? "Presupuesto ya enviado — usá Clonar para cambiar el nombre" : "Click para editar el nombre"}
+              style={{ fontWeight:800, fontSize:17, color:C.accent, cursor: bloqueado ? "default" : "pointer",
+                borderBottom: bloqueado ? "none" : `1px dashed ${C.accent}55`, display:"inline-block" }}>
+              {pres.nombre||"Presupuesto sin nombre"} {!bloqueado && <span style={{ fontSize:12, color:C.muted }}>✏️</span>}
+            </div>
+          )}
           <div style={{ fontSize:13, color:C.muted }}>
             {pres.nro} · {pres.fecha}
             {pres.codigo_calculo && <span title="Código de cálculo — vincula este presupuesto con Steel CRM (idsCalc)"> · 🔗 {pres.codigo_calculo}</span>}
@@ -3059,7 +3076,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // el ítem con los materiales ya cargados en un solo paso.
   const importarMaterialesComoPresNuevo = () => {
     const nuevo = { ...iPresupuesto(), ...(precargaPend||{}) };
-    nuevo.nro = newNroPresupuesto();
+    nuevo.nro = peekNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
     if (!nuevo.vendedor) nuevo.vendedor = usuario?.id || "";
     const materiales = materialesPend || [];
@@ -3092,7 +3109,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     const maquinado = filasMaquinadoDesdeMateriales(materiales, loadTarifario());
     nuevo.items = [{ ...iItem(), hierros, maquinado }];
     setPres(prev => [nuevo, ...prev]);
-    dualWritePresupuesto(nuevo);
+    confirmarNroYSincronizar(nuevo);
     logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
     cerrarImportMateriales();
     setSelId(nuevo.id);
@@ -3283,16 +3300,29 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     }
   };
 
+  // 2026-09-07: nro se asigna con peekNroPresupuesto (instantáneo, no
+  // consume el contador) para que la UI muestre algo al toque; el número
+  // real se confirma un instante después contra la nube (catchUpNroPresupuesto)
+  // y recién ahí se sincroniza — mismo criterio en los 3 lugares que crean
+  // un presupuesto nuevo. Ver comentario de catchUpNroPresupuesto (storage.js).
+  const confirmarNroYSincronizar = (p) => {
+    catchUpNroPresupuesto().then(nroReal => {
+      const conNroReal = { ...p, nro: nroReal };
+      setPres(prev => prev.map(x => x.id === p.id ? conNroReal : x));
+      dualWritePresupuesto(conNroReal);
+    });
+  };
+
   const crearPres = (form) => {
     const nuevo = { ...iPresupuesto(), ...form };
-    nuevo.nro = newNroPresupuesto();
+    nuevo.nro = peekNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
     if (!nuevo.vendedor) nuevo.vendedor = usuario?.id || "";
     setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
     setNuevoOpen(false);
-    dualWritePresupuesto(nuevo);
+    confirmarNroYSincronizar(nuevo);
     logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));
   };
 
@@ -3359,11 +3389,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       // segundo. El dueño del clon pasa a ser quien clona.
       vendedor: usuario?.id || "",
     };
-    nuevo.nro = newNroPresupuesto();
+    nuevo.nro = peekNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
     setPres([nuevo, ...presupuestos]);
     setSelId(nuevo.id);
     setVista("detalle");
+    confirmarNroYSincronizar(nuevo);
     // 2026-09-04, a pedido de Gino: mismo criterio que Cómputo/Anidado —
     // clonar también queda en el registro de actividad.
     logear?.("Presupuesto clonado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));

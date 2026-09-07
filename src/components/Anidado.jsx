@@ -388,7 +388,15 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
                   ancho fijo. Agruparlas en un sub-flex con marginLeft:"auto"
                   las mantiene juntas y alineadas a la derecha siempre, sea
                   cual sea el ancho del texto que las precede. */}
-              <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto" }}>
+              {/* 2026-09-07, otro reporte real de Gino con captura: el cluster
+                  entraba en la misma línea o pasaba a una segunda según el
+                  ancho disponible — con 5 badges (Perfil) a veces entraba,
+                  con 6 (Plancha, tiene "m²" de más) casi nunca, así que la
+                  lista se veía con filas de alturas distintas sin ningún
+                  criterio. flexBasis:"100%" fuerza que el cluster SIEMPRE
+                  vaya en su propia línea, en las dos variantes de fila, para
+                  que todas las filas midan lo mismo. */}
+              <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
                 {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
                 <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.b_total} barras</span>
                 <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
@@ -572,7 +580,9 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
               {/* Mismo fix que Grupo (PERFIL 3D) más arriba — cluster aparte
                   empujado al borde derecho, para que no dependa del ancho
                   del texto que lo precede (2026-09-05). */}
-              <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto" }}>
+              {/* Mismo fix que Grupo (PERFIL 3D) más arriba — flexBasis:"100%"
+                  fuerza que el cluster siempre vaya en su propia línea. */}
+              <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
                 {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
                 <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.n_hojas} hojas</span>
                 <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:130,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>▦ {r.resumen.area_total_m2} m²</span>
@@ -813,6 +823,13 @@ function materialesUnificados(anidado, tc) {
     const sup = g.tipo === "plancha"
       ? (r.area_total_m2 || 0)
       : (r.m_total || 0) * sup_m2m;
+    // Metros lineales (perfiles/planchuelas/redondo...) o m² (planchas) —
+    // pedido real de Gino (2026-09-07): antes sólo se veían los kg, sin la
+    // medida real que hay que pedirle al proveedor.
+    const medida_util = g.tipo === "plancha" ? (r.area_util_m2 || 0) : (r.m_util || 0);
+    const medida_total = g.tipo === "plancha" ? (r.area_total_m2 || 0) : (r.m_total || 0);
+    const medida_label = g.tipo === "plancha" ? "m²" : "m";
+    const kg_desp = Math.max(0, kg - kg_util);
     const unidades = g.tipo === "plancha"
       ? { util: r.area_total_m2>0 ? Math.round((r.area_util_m2/r.area_total_m2)*r.n_hojas*100)/100 : 0, desp: 0, total: r.n_hojas || 0, label: "hojas" }
       : { util: r.b_util || 0, desp: r.b_desp || 0, total: r.b_total || 0, label: "barras" };
@@ -856,7 +873,7 @@ function materialesUnificados(anidado, tc) {
     costoMaquinado += procesos.cilindrado_kg * (maquinadoPorNombre["Cilindrado"] || 0);
 
     const precio_total = precioMaterial + costoMaquinado;
-    return { id: g.id, material_id: g.material_id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
+    return { id: g.id, material_id: g.material_id, tipo: g.tipo, nombre, kg, kg_util, kg_desp, sup, medida_util, medida_total, medida_label, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
   });
 }
 
@@ -895,6 +912,9 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
   const totalKg = materiales.reduce((s,m)=>s+m.kg,0);
   const totalUsd = materiales.reduce((s,m)=>s+m.precio_total,0);
   const sinCalcular = (anidado?.grupos||[]).length - materiales.length;
+  // Ordenable por columna (2026-09-07, a pedido de Gino) — mismo patrón
+  // que el resto de las listas del software (ColSort/useSortable).
+  const { ordenados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(materiales, null, "asc");
   const [, setTick] = useState(0);
   const [verFichaMat, setVerFichaMat] = useState(null); // { catKey, tipoDB, item, enLocal }
   const guardarFicha = (matActualizado) => {
@@ -929,17 +949,30 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
         <div style={{ color:C.muted, fontSize:12 }}>Calculá al menos un grupo para ver la lista unificada.</div>
       ) : (
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead><tr>{["Material","Tipo","A comprar","Kg útiles","Kg totales","USD/kg","Total USD","Ficha"].map(h=><th key={h} style={{...TH,fontSize:10}}>{h}</th>)}</tr></thead>
+          <thead><tr>
+            <th style={{...TH,fontSize:10}}><ColSort campo="nombre" label="Material" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} /></th>
+            <th style={{...TH,fontSize:10}}><ColSort campo="tipo" label="Tipo" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} /></th>
+            <th style={{...TH,fontSize:10}}>A comprar</th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="medida_util" label={materiales[0]?.medida_label==="m²"?"M² útiles":"M lineales útiles"} sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="kg_util" label="Kg útiles" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="kg_desp" label="Kg desp." sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="kg" label="Kg totales" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="precio_usd_kg" label="USD/kg" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="precio_total" label="Total USD" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
+            <th style={{...TH,fontSize:10}}>Ficha</th>
+          </tr></thead>
           <tbody>
-            {materiales.map(m=>(
+            {ordenados.map(m=>(
               <tr key={m.id}>
                 <td style={{...TD,fontWeight:700}}>{m.nombre}</td>
                 <td style={TD}><span style={BDG(m.tipo==="perfil"?C.info:C.teal,true)}>{m.tipo==="perfil"?"3D":"2D"}</span></td>
                 <td style={TD}>
                   <span style={{color:C.ok,fontWeight:700}}>{m.unidades.total} {m.unidades.label}</span>
-                  <span style={{color:C.muted,fontSize:10}}> ({m.unidades.util} útil + {m.unidades.desp} desp.)</span>
+                  <span style={{color:C.muted,fontSize:12}}> ({m.unidades.util} útil + {m.unidades.desp} desp.)</span>
                 </td>
+                <td style={{...TD,textAlign:"right",color:C.steel}}>{n2(m.medida_util)} {m.medida_label} <span style={{color:C.muted,fontSize:11}}>/ {n2(m.medida_total)}</span></td>
                 <td style={{...TD,textAlign:"right",color:C.muted}}>{n2(m.kg_util)} kg</td>
+                <td style={{...TD,textAlign:"right",color:m.kg_desp>0?C.warn:C.muted}}>{n2(m.kg_desp)} kg</td>
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>

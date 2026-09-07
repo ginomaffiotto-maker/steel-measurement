@@ -26,10 +26,11 @@ const GRUPOS = [
   },
   {
     id: "computo", icon: "📐", label: "Cómputo",
-    tabs: [
-      { icon: "📐", label: "Cómputo",  tab: "Computo" },
-      { icon: "✂️", label: "Anidado",  tab: "Anidado" },
-    ],
+    tabs: [{ icon: "📐", label: "Cómputo", tab: "Computo" }],
+  },
+  {
+    id: "anidado", icon: "✂️", label: "Anidado",
+    tabs: [{ icon: "✂️", label: "Anidado", tab: "Anidado" }],
   },
   {
     id: "presupuesto", icon: "💰", label: "Presupuesto",
@@ -426,8 +427,15 @@ export default function App() {
   const tabGuardado = (() => {
     try { return JSON.parse(sessionStorage.getItem(SESION_TAB_KEY) || "null"); } catch { return null; }
   })();
-  const [grupo,    setGrupo]    = useState(tabGuardado?.grupo || "computo");
-  const [tab,      setTab]      = useState(tabGuardado?.tab || "Computo");
+  // El grupo se deriva SIEMPRE del tab guardado (no del grupo guardado) —
+  // así, si algún día se vuelve a reorganizar el menú lateral (como pasó
+  // acá el 2026-09-07, sacando Anidado de adentro de Cómputo), una sesión
+  // vieja con `grupo` desactualizado en sessionStorage no queda mostrando
+  // el breadcrumb equivocado ("Cómputo › Anidado" en vez de "Anidado ›
+  // Anidado") hasta el próximo click manual en el menú.
+  const tabInicial = tabGuardado?.tab || "Computo";
+  const [grupo,    setGrupo]    = useState(() => GRUPOS.find(g => g.tabs.some(t => t.tab === tabInicial))?.id || "computo");
+  const [tab,      setTab]      = useState(tabInicial);
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   // Cuántas de "Mis solicitudes asignadas" todavía no tienen cómputo — para
   // el número en el menú lateral (2026-09-05, a pedido de Gino). Al
