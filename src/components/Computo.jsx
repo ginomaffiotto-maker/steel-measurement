@@ -496,13 +496,15 @@ function FormPieza({ tipo, bib, onAgregar, onCancelar }) {
   const set       = (k, v) => setP(prev => ({ ...prev, [k]: v }));
   const elegirMaterial = mat => {
     if (!mat) { setP(prev => ({ ...prev, material_id:"", material_nombre:"", kg_m:0, sup_m2m:0, kg_m2:0 })); return; }
-    const precioBib = mat.precio_kg || 0;
-    const fichaActual = p.ficha || fichaVacia();
-    const fichaConPrecio = precioBib > 0 && !fichaActual.precio_raw
-      ? { ...fichaActual, precio_raw: String(precioBib) }
-      : fichaActual;
-    if (tipo === "perfil") setP(prev => ({ ...prev, material_id:mat.id, material_nombre:mat.nombre, kg_m:mat.kg_m, sup_m2m:mat.sup_m2m, ficha:fichaConPrecio }));
-    else                   setP(prev => ({ ...prev, material_id:mat.id, material_nombre:mat.nombre, kg_m2:mat.kg_m2, ficha:fichaConPrecio }));
+    // 2026-09-07, bug real reportado por Gino (dos veces, con datos reales
+    // confirmados contra Supabase): esto copiaba el precio del catálogo
+    // adentro de la ficha de la pieza "para no dejarla vacía" — pero
+    // cualquier pantalla que lee `ficha.precio_raw` lo interpreta como
+    // "precio cargado a mano", mostrando "$ Precio manual" para un precio
+    // que el vendedor nunca tocó. El precio de catálogo ya se resuelve
+    // solo (por material_id) en todos lados — no hace falta copiarlo acá.
+    if (tipo === "perfil") setP(prev => ({ ...prev, material_id:mat.id, material_nombre:mat.nombre, kg_m:mat.kg_m, sup_m2m:mat.sup_m2m }));
+    else                   setP(prev => ({ ...prev, material_id:mat.id, material_nombre:mat.nombre, kg_m2:mat.kg_m2 }));
   };
   const calc  = calcPieza(p);
   const listo = p.material_id &&
@@ -612,19 +614,14 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
   const editarPieza   = (id,k,v) => onChange({ ...item, piezas: item.piezas.map(p=>p.id===id?{...p,[k]:v}:p) });
   const updatePieza   = (actualizada)  => onChange({ ...item, piezas: item.piezas.map(p=>p.id===actualizada.id?actualizada:p) });
   // Mismo criterio que elegirMaterial() en FormPieza — sólo toca los campos
-  // que dependen del material (id/nombre/kg, y completa el precio de la
-  // ficha si todavía estaba vacío); dimensiones, cantidad, plano y el resto
-  // de la ficha de la pieza quedan intactos.
+  // que dependen del material (id/nombre/kg); dimensiones, cantidad, plano
+  // y el resto de la ficha de la pieza quedan intactos. No copia el precio
+  // de catálogo a la ficha (2026-09-07) — ver comentario en elegirMaterial.
   const cambiarMaterialPieza = (p, mat) => {
     if (!mat) { setCambiandoMaterialId(null); return; }
-    const precioBib = mat.precio_kg || 0;
-    const fichaActual = p.ficha || fichaVacia();
-    const fichaConPrecio = precioBib > 0 && !fichaActual.precio_raw
-      ? { ...fichaActual, precio_raw: String(precioBib) }
-      : fichaActual;
     const actualizada = p.tipo === "perfil"
-      ? { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m: mat.kg_m, sup_m2m: mat.sup_m2m, ficha: fichaConPrecio }
-      : { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m2: mat.kg_m2, ficha: fichaConPrecio };
+      ? { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m: mat.kg_m, sup_m2m: mat.sup_m2m }
+      : { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m2: mat.kg_m2 };
     updatePieza(actualizada);
     setCambiandoMaterialId(null);
   };

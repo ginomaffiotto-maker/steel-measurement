@@ -791,7 +791,18 @@ function importar(computo_id, bib_map, bib_planchas_map) {
 // las unidades a comprar (útiles + desperdicio, ej. "5 barras: 4.83 útiles,
 // 0.17 desperdicio") y el precio (USD/kg de Biblioteca × kg = total USD).
 function materialesUnificados(anidado, tc) {
-  const bibLineales = [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[])];
+  // 2026-09-07, bug real reportado por Gino con captura: acá se leía el
+  // catálogo con loadLS() puro, sin mergeSeed() — un material que nunca se
+  // editó/guardó a mano en Insumos y Precios (sólo tiene el precio por
+  // default del catálogo semilla, ej. Ángulo/IPN) quedaba con precio 0 acá
+  // aunque el resto de la app (useBibliotecaLineales, el Combobox de
+  // elegir material) sí lo viera bien — mismo bug ya corregido en
+  // Presupuesto.jsx (2026-09-03) para el mismo tipo de catálogo.
+  const bibLineales = [
+    ...migrar(mergeSeed(loadLS("smeas_perfiles", null), PERFILES_DATA, IDS_UNIFICADOS_GM)),
+    ...migrar(mergeSeed(loadLS("smeas_planchuelas", null), PLANCHUELAS_DATA)),
+  ];
+  const bibPlanchasCompleto = migrar(mergeSeed(loadLS("smeas_planchas", null), PLANCHAS_DATA));
   // Costo de Maquinado (Corte de máquina por tipo + Plegado + Cilindrado),
   // 2026-09-02 a pedido de Gino — mismo catálogo que Insumos y Precios >
   // Maquinado, resuelto por nombre (no hay material_id acá, son operaciones,
@@ -803,7 +814,7 @@ function materialesUnificados(anidado, tc) {
   // corregido del lado de Presupuesto.jsx) quedaba en "—" sin avisar por
   // qué. Se resuelve por `material_id`, que es lo que el grupo ya guarda.
   const bibPorId = {};
-  [...bibLineales, ...loadLS("smeas_planchas",[])]
+  [...bibLineales, ...bibPlanchasCompleto]
     .forEach(m => { bibPorId[m.id] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
   // Fallback de sup_m2m por si el grupo es de un anidado viejo, creado antes de
   // que se empezara a guardar ese dato al elegir el material (ver Presupuesto.jsx).
