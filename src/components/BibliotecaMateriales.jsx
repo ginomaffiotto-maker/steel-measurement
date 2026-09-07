@@ -693,13 +693,47 @@ export const PERFILES_DATA = [
 ];
 
 // ─── PLANCHUELAS ─────────────────────────────────────────────────
+// Nombre en pulgadas (2026-09-07, a pedido de Gino) — a diferencia de Ángulo
+// (donde el ancho en mm YA ES la conversión exacta de una pulgada real, ej.
+// 76,2mm = 3" exacto), acá los mm del catálogo son valores comerciales
+// redondeados que sólo se ACERCAN a una medida en pulgadas, no la definen —
+// una fórmula genérica de "fracción más cercana" generaba fracciones que no
+// existen en el mercado real (ej. "1 9/16\"", "2 15/16\"") y hacía colisionar
+// espesores realmente distintos (4mm y 5mm) en la misma etiqueta. Los dos
+// conjuntos de abajo son las medidas reales confirmadas por Gino contra una
+// tabla de proveedor real (Timber, "Hierro Planchuela") — no una fórmula
+// inventada. El mm real del catálogo sigue mostrándose entre paréntesis,
+// así que dos anchos/espesores que caen en la misma pulgada nominal (ej.
+// 30mm y 32mm, los dos "1 1/4\"") se siguen distinguiendo igual.
+const PLANCHUELA_ANCHOS_PULG = [0.5,0.625,0.75,0.875,1,1.25,1.5,1.75,2,2.5,3,3.5,4,5,6,8,10,12];
+const PLANCHUELA_ESPESORES_PULG = [0.125,0.1875,0.25,0.3125,0.375,0.5,0.625,0.75,1];
+function fraccionPulgadas(valor) {
+  const entero = Math.floor(valor + 1e-9);
+  const resto = valor - entero;
+  if (resto < 1e-6) return `${entero}"`;
+  for (const den of [2, 4, 8, 16]) {
+    const num = Math.round(resto * den);
+    if (Math.abs(num / den - resto) < 1e-6) {
+      const mcd = (a, b) => (b ? mcd(b, a % b) : a);
+      const g = mcd(num, den);
+      return entero ? `${entero} ${num / g}/${den / g}"` : `${num / g}/${den / g}"`;
+    }
+  }
+  return `${valor}"`;
+}
+function nombrePlanchuela(anchoMm, espMm) {
+  const cercano = (mm, set) => set.reduce((mejor, s) => Math.abs(s - mm / 25.4) < Math.abs(mejor - mm / 25.4) ? s : mejor, set[0]);
+  const anchoPulg = fraccionPulgadas(cercano(anchoMm, PLANCHUELA_ANCHOS_PULG));
+  const espPulg = fraccionPulgadas(cercano(espMm, PLANCHUELA_ESPESORES_PULG));
+  return `Planchuela ${anchoPulg} x ${espPulg} (${anchoMm}x${espMm}mm)`;
+}
 function mkPL(id, ancho, esp, largo = 6) {
   const kg_m = Math.round(ancho * esp * 7.85 / 1000 * 1000) / 1000;
   const sup  = Math.round(2 * (ancho + esp) / 1000 * 1000) / 1000;
   // Precio representativo de referencia (planillas Gino, 2026-08): 1,17 USD/kg para anchos
   // hasta ~3" (80mm), 1,22 USD/kg para 4" (100mm) en adelante — mismo patrón en ~90 filas reales.
   const precio_usd_kg = ancho <= 80 ? 1.17 : 1.22;
-  return { id, nombre:`Planchuela ${ancho}×${esp} mm`, cat:"Planchuelas", kg_m, largo, sup, precio_usd_kg, historial_precios:[] };
+  return { id, nombre: nombrePlanchuela(ancho, esp), cat:"Planchuelas", kg_m, largo, sup, precio_usd_kg, historial_precios:[] };
 }
 export const PLANCHUELAS_DATA = [
   mkPL("PL20x3",20,3),    mkPL("PL20x4",20,4),
@@ -1226,7 +1260,7 @@ function AgregarModal({ tipo, onClose, onAgregar }) {
       const largo = parseFloat(f.largo) || 6;
       const kg_m  = Math.round(ancho * esp * 7.85 / 1000 * 1000) / 1000;
       const sup   = Math.round(2 * (ancho + esp) / 1000 * 1000) / 1000;
-      item = { id: uid(), nombre: f.nombre.trim() || `Planchuela ${ancho}×${esp} mm`, cat:"Planchuelas", ancho_mm: ancho, espesor_mm: esp, kg_m, largo, sup, precio_usd_kg: 0, historial_precios: [], ...stamp() };
+      item = { id: uid(), nombre: f.nombre.trim() || nombrePlanchuela(ancho, esp), cat:"Planchuelas", ancho_mm: ancho, espesor_mm: esp, kg_m, largo, sup, precio_usd_kg: 0, historial_precios: [], ...stamp() };
     } else {
       item = { id: uid(), nombre: f.nombre.trim(), cat: f.cat, kg_m: parseFloat(f.kg_m)||0, largo: parseFloat(f.largo)||12, sup: parseFloat(f.sup)||0, precio_usd_kg: 0, historial_precios: [], ...stamp() };
     }
