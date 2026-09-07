@@ -396,8 +396,17 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
                   criterio. flexBasis:"100%" fuerza que el cluster SIEMPRE
                   vaya en su propia línea, en las dos variantes de fila, para
                   que todas las filas midan lo mismo. */}
+              {/* 2026-09-07, reportado por Gino con captura: cuando a un
+                  material le faltaba el $ (sin precio cargado) o la %
+                  (rarísimo, pero posible), esa badge directamente no se
+                  renderizaba — con el cluster alineado a la derecha, eso
+                  corría TODAS las demás badges de esa fila hacia la
+                  derecha, así que las columnas no quedaban alineadas entre
+                  filas. Ahora las 5 badges siempre están presentes (con
+                  "—" y color apagado cuando no hay dato), mismo criterio
+                  en GrupoPlancha más abajo. */}
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
-                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
+                <span title={incidencia?"% que este material representa del total de kg del anidado":"Sin calcular"} style={{...BDG(incidencia?C.pur:C.muted,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:incidencia?1:.5}}>{incidencia?`${incidencia}%`:"—"}</span>
                 <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.b_total} barras</span>
                 {/* 2026-09-07, a pedido de Gino: el kg resaltado acá pasa a
                     ser el kg ÚTIL (material realmente aprovechado), no el
@@ -405,7 +414,7 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
                     GrupoPlancha más abajo y en la lista de Anidados. */}
                 <span title="Kg útiles de este material (sin el desperdicio de corte)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(r.resumen.kg_util)} kg</span>
                 <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚠ {r.resumen.pct_desp}% desp.</span>
-                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>${n2(monto)}</span>}
+                <span title={monto>0?"Monto de este material (kg total × USD/kg de Biblioteca)":"Sin precio cargado en Insumos y Precios"} style={{...BDG(monto>0?C.gold:C.muted,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:monto>0?1:.5}}>{monto>0?`$${n2(monto)}`:"—"}</span>
               </div>
             </>}
           </div>
@@ -586,13 +595,16 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
                   del texto que lo precede (2026-09-05). */}
               {/* Mismo fix que Grupo (PERFIL 3D) más arriba — flexBasis:"100%"
                   fuerza que el cluster siempre vaya en su propia línea. */}
+              {/* Mismo fix que Grupo (PERFIL 3D) más arriba (2026-09-07):
+                  las 6 badges siempre presentes, con "—" cuando falta el
+                  dato, para que las columnas no se corran de fila en fila. */}
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
-                {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
+                <span title={incidencia?"% que este material representa del total de kg del anidado":"Sin calcular"} style={{...BDG(incidencia?C.pur:C.muted,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:incidencia?1:.5}}>{incidencia?`${incidencia}%`:"—"}</span>
                 <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.n_hojas} hojas</span>
                 <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:130,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>▦ {r.resumen.area_total_m2} m²</span>
                 <span title="Kg útiles de este material (sin el desperdicio de corte)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(kg_util)} kg</span>
                 <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚠ {r.resumen.pct_desp}% desp.</span>
-                {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>${n2(monto)}</span>}
+                <span title={monto>0?"Monto de este material (kg total × USD/kg de Biblioteca)":"Sin precio cargado en Insumos y Precios"} style={{...BDG(monto>0?C.gold:C.muted,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden",opacity:monto>0?1:.5}}>{monto>0?`$${n2(monto)}`:"—"}</span>
               </div>
             </>}
           </div>
