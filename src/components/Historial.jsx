@@ -7,7 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
-import { useSortable, usePaginado, Paginador } from "../utils/useSortable";
+import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import FiltrosBar from "./FiltrosBar";
 
@@ -536,6 +536,10 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .map(t => ({ ...t, _usd_kg: usdKgDe(t) })),
     [trabajosActivos, filt]); // eslint-disable-line react-hooks/exhaustive-deps
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_historial", {
+    check: 34, ot: 70, fecha: 85, cliente: 130, obra: 130, categoria: 110,
+    vendedor: 100, kg: 80, usd: 90, usdkg: 80, origen: 90, acc: 30,
+  });
   // Paginado (2026-08-31): 235 trabajos históricos reales y creciendo —
   // mismo riesgo de DOM grande que ya causó el cuelgue en Steel CRM.
   const { pagina: paginaHist, totalPaginas: totalPaginasHist, itemsPagina: listaPagina, setPagina: setPaginaHist } = usePaginado(lista, 50, [filt, sortCampo, sortDir]);
@@ -678,24 +682,28 @@ export default function Historial({ usuario, usuarios = [], logear }) {
           )}
           {lista.length > 0 && (
             <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <div style={{ textAlign:"right", marginBottom:6 }}>
+                <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
+              </div>
+              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead><tr>
-                  <th style={TH}>
+                  <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                     <input type="checkbox" checked={listaPagina.length>0 && listaPagina.every(t=>seleccionados.has(t.id))}
                       onChange={() => setSeleccionados(prev => listaPagina.every(t=>prev.has(t.id)) ? new Set() : new Set(listaPagina.map(t=>t.id)))}
                       style={{ width:15, height:15, cursor:"pointer" }} />
-                  </th>
+                  </ThResizable>
                   {[
-                    { h:"OT", campo:"nro_ot" }, { h:"Fecha", campo:"fecha" }, { h:"Cliente", campo:"cliente" },
-                    { h:"Obra", campo:"obra" }, { h:"Categoría", campo:"categoria" }, { h:"Vendedor", campo:null },
-                    { h:"Kg", campo:"kg_total" },
-                    { h:"USD", campo:"usd_total" }, { h:"USD/kg", campo:"_usd_kg" }, { h:"Origen", campo:"origen" },
-                    { h:"", campo:null },
-                  ].map(({h,campo}) => (
-                    <th key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                    { h:"OT", campo:"nro_ot", k:"ot" }, { h:"Fecha", campo:"fecha", k:"fecha" }, { h:"Cliente", campo:"cliente", k:"cliente" },
+                    { h:"Obra", campo:"obra", k:"obra" }, { h:"Categoría", campo:"categoria", k:"categoria" }, { h:"Vendedor", campo:null, k:"vendedor" },
+                    { h:"Kg", campo:"kg_total", k:"kg" },
+                    { h:"USD", campo:"usd_total", k:"usd" }, { h:"USD/kg", campo:"_usd_kg", k:"usdkg" }, { h:"Origen", campo:"origen", k:"origen" },
+                    { h:"", campo:null, k:"acc" },
+                  ].map(({h,campo,k}) => (
+                    <ThResizable key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                      width={colW[k]} onResize={w => setColW(k, w)}
                       onClick={() => campo && ordenarPor(campo)}>
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
-                    </th>
+                    </ThResizable>
                   ))}
                 </tr></thead>
                 <tbody>

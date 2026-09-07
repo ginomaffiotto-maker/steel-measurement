@@ -90,6 +90,10 @@ export const TH = {
   fontWeight: 700, borderBottom: `1px solid ${C.border}`, background: C.card,
   position: "sticky", top: 0, zIndex: 1, textTransform: "uppercase", letterSpacing: .5,
   whiteSpace: "nowrap",
+  // Línea tenue entre columnas (2026-09-07, mismo cambio en steelCRM, a
+  // pedido de Gino junto con las columnas ajustables) — marca dónde termina
+  // cada columna sin depender de arrastrar el borde para descubrirlo.
+  borderRight: `1px solid ${C.border}33`,
 };
 export const TD = {
   padding: "9px 12px", borderBottom: `1px solid ${C.border}18`,

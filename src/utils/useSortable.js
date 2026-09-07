@@ -85,6 +85,56 @@ export function ColSort({ campo, label, sortCampo, sortDir, ordenarPor, align })
   );
 }
 
+// Columnas ajustables tipo Excel (2026-09-07, a pedido de Gino, mismo
+// mecanismo ya construido en steelCRM/shared.jsx) — persiste el ancho de
+// cada columna por dispositivo (localStorage), igual criterio que las
+// preferencias de columnas de Kanban. `defaults` es un objeto {colKey:px}.
+export function useResizableColumns(storageKey, defaults) {
+  const [widths, setWidths] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      return { ...defaults, ...saved };
+    } catch { return defaults; }
+  });
+  function setWidth(key, px) {
+    setWidths(prev => {
+      const next = { ...prev, [key]: Math.max(30, Math.round(px)) };
+      try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+  function reset() {
+    setWidths(defaults);
+    try { localStorage.removeItem(storageKey); } catch {}
+  }
+  return { widths, setWidth, reset };
+}
+
+// <th> con handle de arrastre en el borde derecho — mismo mecanismo que
+// SortTH de steelCRM, adaptado al patrón de este repo (headers armados
+// inline con onClick de ordenarPor, sin un componente <th> compartido
+// previo). Sin `width`/`onResize`, se comporta igual que un <th> normal.
+export function ThResizable({ children, style, width, onResize, minWidth = 40, onClick, title }) {
+  function iniciarResize(e) {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX, startW = width || 100;
+    function onMove(ev) { onResize(Math.max(minWidth, startW + (ev.clientX - startX))); }
+    function onUp() { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+  return (
+    <th onClick={onClick} title={title}
+      style={{ ...style, position: "relative", ...(width ? { width, maxWidth: width } : {}) }}>
+      {children}
+      {onResize && (
+        <span onMouseDown={iniciarResize}
+          style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
+      )}
+    </th>
+  );
+}
+
 export function OrdenarControl({ campo, dir, ordenarPor, opciones }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:4 }}>

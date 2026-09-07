@@ -14,7 +14,7 @@ import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirResumenInterno } from "../utils/resumenInterno";
-import { useSortable } from "../utils/useSortable";
+import { useSortable, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";
@@ -3186,6 +3186,10 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto", {
+    check: 34, nro: 70, nombre: 160, cliente: 130, obra: 130, tipo: 90,
+    vendedor: 110, fecha: 90, items: 55, total: 100, estado: 100, acc: 30,
+  });
 
   // Reintento de sincronización (2026-08-29) — mismo mecanismo agregado del
   // lado de Steel CRM. Se recalcula desde localStorage después de cada
@@ -3526,23 +3530,27 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       )}
       {lista.length > 0 && (
         <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <div style={{ textAlign:"right", marginBottom:6 }}>
+            <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
+          </div>
+          <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
             <thead><tr>
-              <th style={TH}>
+              <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                 <input type="checkbox" checked={lista.length>0 && lista.every(p=>seleccionados.has(p.id))}
                   onChange={() => setSeleccionados(prev => lista.every(p=>prev.has(p.id)) ? new Set() : new Set(lista.map(p=>p.id)))}
                   style={{ width:15, height:15, cursor:"pointer" }} />
-              </th>
+              </ThResizable>
               {[
-                { h:"N°", campo:"nro" }, { h:"Nombre", campo:"nombre" }, { h:"Cliente", campo:"cliente" },
-                { h:"Obra", campo:"obra" }, { h:"Tipo", campo:"tipo_trabajo" }, { h:"Vendedor", campo:"_vendedor_nombre" },
-                { h:"Fecha", campo:"fecha" }, { h:"Ítems", campo:"_n_items" }, { h:"Total USD", campo:"_total_usd" },
-                { h:"Estado", campo:"estado" }, { h:"", campo:null },
-              ].map(({h,campo}) => (
-                <th key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                { h:"N°", campo:"nro", k:"nro" }, { h:"Nombre", campo:"nombre", k:"nombre" }, { h:"Cliente", campo:"cliente", k:"cliente" },
+                { h:"Obra", campo:"obra", k:"obra" }, { h:"Tipo", campo:"tipo_trabajo", k:"tipo" }, { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
+                { h:"Fecha", campo:"fecha", k:"fecha" }, { h:"Ítems", campo:"_n_items", k:"items" }, { h:"Total USD", campo:"_total_usd", k:"total" },
+                { h:"Estado", campo:"estado", k:"estado" }, { h:"", campo:null, k:"acc" },
+              ].map(({h,campo,k}) => (
+                <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                  width={colW[k]} onResize={w => setColW(k, w)}
                   onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
-                </th>
+                </ThResizable>
               ))}
             </tr></thead>
             <tbody>
