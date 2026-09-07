@@ -399,7 +399,11 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
               <div style={{ display:"flex",gap:8,alignItems:"center",flexShrink:0,marginLeft:"auto",flexBasis:"100%",justifyContent:"flex-end" }}>
                 {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
                 <span title="Cantidad de barras a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.b_total} barras</span>
-                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(r.resumen.kg_total)} kg</span>
+                {/* 2026-09-07, a pedido de Gino: el kg resaltado acá pasa a
+                    ser el kg ÚTIL (material realmente aprovechado), no el
+                    total comprado (útil+desperdicio) — mismo criterio en
+                    GrupoPlancha más abajo y en la lista de Anidados. */}
+                <span title="Kg útiles de este material (sin el desperdicio de corte)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(r.resumen.kg_util)} kg</span>
                 <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚠ {r.resumen.pct_desp}% desp.</span>
                 {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>${n2(monto)}</span>}
               </div>
@@ -586,7 +590,7 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
                 {incidencia && <span title="% que este material representa del total de kg del anidado" style={{...BDG(C.pur,true),fontSize:13,padding:"4px 10px",width:70,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>{incidencia}%</span>}
                 <span title="Cantidad de hojas a comprar (útiles + desperdicio)" style={{...BDG(C.steel,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>🔩 {r.resumen.n_hojas} hojas</span>
                 <span title="m² totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.teal,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:130,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>▦ {r.resumen.area_total_m2} m²</span>
-                <span title="Kg totales a comprar de este material (útiles + desperdicio)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(kg_total)} kg</span>
+                <span title="Kg útiles de este material (sin el desperdicio de corte)" style={{...BDG(C.info,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:160,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚖ {n2(kg_util)} kg</span>
                 <span title="% de desperdicio = kg que se pierden en el corte ÷ kg totales comprados (barras/hojas de más por el corte)" style={{...BDG(col_desp,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:145,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>⚠ {r.resumen.pct_desp}% desp.</span>
                 {monto>0 && <span title="Monto de este material (kg total × USD/kg de Biblioteca)" style={{...BDG(C.gold,true),fontSize:15,fontWeight:800,padding:"5px 12px",width:120,boxSizing:"border-box",textAlign:"center",overflow:"hidden"}}>${n2(monto)}</span>}
               </div>
@@ -1240,7 +1244,10 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // directo — hace falta adjuntarlos acá para poder ordenar por ellos.
   }).map(a => {
     const materiales = materialesUnificados(a, tcGlobal);
-    return { ...a, _kg: materiales.reduce((s,m)=>s+m.kg,0), _monto_usd: materiales.reduce((s,m)=>s+m.precio_total,0),
+    // 2026-09-07, a pedido de Gino: el KG de la lista pasa a ser kg útil
+    // (material realmente aprovechado), no el total comprado — mismo
+    // criterio que el badge resaltado de cada grupo, más arriba.
+    return { ...a, _kg: materiales.reduce((s,m)=>s+m.kg_util,0), _monto_usd: materiales.reduce((s,m)=>s+m.precio_total,0),
       _vendedor_nombre: usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre || "" };
   });
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
@@ -1462,6 +1469,10 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
         {anidadosFiltrados.length > 0 && (
           <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
             <div style={{ width:15, flexShrink:0 }} />
+            {/* 2026-09-07, a pedido de Gino: la fecha ya se ve en la
+                segunda línea de "Nombre" — acá solo hace falta el control
+                de orden, no otra columna que compita por ancho. */}
+            <div style={{ width:80, flexShrink:0 }}><ColSort campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>

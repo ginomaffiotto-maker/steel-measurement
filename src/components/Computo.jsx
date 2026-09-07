@@ -1419,6 +1419,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
             <div style={{ width:15, flexShrink:0 }} />
             <ColSort w={70} campo="nro" label="N°" {...{sortCampo,sortDir,ordenarPor}} />
+            {/* 2026-09-07, a pedido de Gino: la fecha ya se ve en la
+                segunda línea de "Nombre" — acá solo hace falta el control
+                de orden, no otra columna que compita por ancho. */}
+            <ColSort w={80} campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} />
             <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
