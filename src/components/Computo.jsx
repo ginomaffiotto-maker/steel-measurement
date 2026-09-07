@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
+import { useSortable, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1389,9 +1389,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <>
             <FiltrosBar campos={computoCampos(usuarios)} valores={filt} setValores={setFilt} defaults={COMPUTO_FILT_DEFAULTS}
               abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
+            {/* 2026-09-07, reportado por Gino con captura (mismo fix en
+                Anidado.jsx): este selector quedó duplicando el encabezado
+                de columnas clickeable de más abajo (2026-09-06) — se saca,
+                mismo criterio que ya usa Historial. */}
             <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-              <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
-                opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
               <span style={{ fontSize:11, color:C.muted }}>{computosFiltrados.length} de {computos.length}</span>
             </div>
           </>
@@ -1454,8 +1456,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                   <div style={{ fontWeight:800, fontSize:14, color:C.text, lineHeight:1.3 }}>{c.nombre||"Sin nombre"}
                     {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginLeft:8, fontSize:10 }}>×{multTotal}</span>}
                   </div>
-                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.fecha}{c.cliente?` · ${c.cliente}`:""} · {c.items.length} ítem{c.items.length!==1?"s":""}</div>
+                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.cliente?`${c.cliente} · `:""}{c.items.length} ítem{c.items.length!==1?"s":""}</div>
                 </div>
+                {/* 2026-09-07, mismo fix que Anidado.jsx: la columna "Fecha"
+                    del header (2026-09-06) nunca tuvo celda de valor. */}
+                <div style={{ width:80, flexShrink:0, fontSize:12, color:C.muted }}>{c.fecha||"—"}</div>
                 <div style={{ flex:"1 1 130px", minWidth:0 }}>
                   <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
                   <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</div>

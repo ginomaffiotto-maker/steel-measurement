@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
+import { useSortable, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1487,9 +1487,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
         <>
           <FiltrosBar campos={anidadoCampos(usuarios)} valores={filt} setValores={setFilt} defaults={ANIDADO_FILT_DEFAULTS}
             abierto={filtrosAbiertos} setAbierto={setFiltrosAbiertos} />
+          {/* 2026-09-07, reportado por Gino con captura: este selector quedó
+              duplicando el encabezado de columnas clickeable de más abajo
+              (agregado el 2026-09-06) — Historial ya no lo usa, solo
+              depende de los headers. Se saca acá también. */}
           <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-            <OrdenarControl campo={sortCampo} dir={sortDir} ordenarPor={ordenarPor}
-              opciones={[{ value:"fecha", label:"Fecha" }, { value:"nombre", label:"Nombre" }, { value:"cliente", label:"Cliente" }]} />
             <span style={{ fontSize:11, color:C.muted }}>{anidadosFiltrados.length} de {anidados.length}</span>
           </div>
         </>
@@ -1542,8 +1544,14 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   onClick={e=>e.stopPropagation()} style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
                 <div style={{ flex:"2 1 220px", minWidth:0 }}>
                   <div style={{ fontWeight:800,fontSize:14,color:C.text }}>{a.nombre||"Sin nombre"}</div>
-                  <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{a.fecha} · {nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
+                  <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
                 </div>
+                {/* 2026-09-07, reportado por Gino con captura: la columna
+                    "Fecha" del encabezado (agregada el 2026-09-06) nunca
+                    tuvo una celda de valor debajo — la fecha solo se veía
+                    (mezclada) en el subtítulo de arriba. Ahora tiene su
+                    propia celda, mismo ancho que el header (80px). */}
+                <div style={{ width:80, flexShrink:0, fontSize:12, color:C.muted }}>{a.fecha||"—"}</div>
                 <div style={{ flex:"1 1 130px", minWidth:0 }}>
                   <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
                   <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</div>
