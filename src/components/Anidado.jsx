@@ -924,7 +924,12 @@ function buscarMaterialCatalogo(nombre, tipoGrupo, materialId) {
 
 function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
   const materiales = materialesUnificados(anidado, tcGlobal);
-  const totalKg = materiales.reduce((s,m)=>s+m.kg,0);
+  // 2026-09-07, a pedido de Gino: el kg resaltado acá también pasa a ser
+  // kg útil (mismo criterio que el badge de cada grupo y la lista de
+  // Anidados) — totalKgComprado sigue existiendo para el % de desperdicio.
+  const totalKgUtil = materiales.reduce((s,m)=>s+m.kg_util,0);
+  const totalKgComprado = materiales.reduce((s,m)=>s+m.kg,0);
+  const pctDespTotal = totalKgComprado>0 ? +((totalKgComprado-totalKgUtil)/totalKgComprado*100).toFixed(1) : 0;
   const totalUsd = materiales.reduce((s,m)=>s+m.precio_total,0);
   const sinCalcular = (anidado?.grupos||[]).length - materiales.length;
   // Ordenable por columna (2026-09-07, a pedido de Gino) — mismo patrón
@@ -955,7 +960,8 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
         <div style={{ fontWeight:800, fontSize:13, color:C.text }}>📋 Materiales unificados (post-anidado)</div>
-        <span style={BDG(C.ok,true)}>{n2(totalKg)} kg total</span>
+        <span style={BDG(C.ok,true)}>{n2(totalKgUtil)} kg útiles</span>
+        {pctDespTotal>0 && <span style={BDG(pctDespTotal>25?C.err:pctDespTotal>15?C.warn:C.muted,true)}>⚠ {pctDespTotal}% desperdicio</span>}
         {totalUsd>0 && <span style={BDG(C.gold,true)}>{getMoneda()} {n2(totalUsd)}</span>}
         {sinCalcular>0 && <span style={BDG(C.warn,true)}>{sinCalcular} grupo{sinCalcular!==1?"s":""} sin calcular</span>}
         <button onClick={onClose} style={{ ...BTN("ghost"), marginLeft:"auto", padding:"4px 10px", fontSize:11 }}>✕ Cerrar</button>
@@ -974,7 +980,7 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
             <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="kg" label="Kg totales" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
             <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="precio_usd_kg" label="USD/kg" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
             <th style={{...TH,fontSize:10,textAlign:"right"}}><ColSort campo="precio_total" label="Total USD" sortCampo={sortCampo} sortDir={sortDir} ordenarPor={ordenarPor} align="right" /></th>
-            <th style={{...TH,fontSize:10}}>Ficha</th>
+            <th style={{...TH,fontSize:10,textAlign:"right"}}>Ficha</th>
           </tr></thead>
           <tbody>
             {ordenados.map(m=>(
@@ -991,7 +997,11 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
                 <td style={{...TD,textAlign:"right",color:C.ok,fontWeight:700}}>{n2(m.kg)} kg</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_usd_kg>0?C.text:C.muted}}>{m.precio_usd_kg>0?`U$S ${n2(m.precio_usd_kg)}`:"—"}</td>
                 <td style={{...TD,textAlign:"right",color:m.precio_total>0?C.gold:C.muted,fontWeight:700}}>{m.precio_total>0?`$${n2(m.precio_total)}`:"—"}</td>
-                <td style={TD}>
+                {/* 2026-09-07, a pedido de Gino: la columna quedaba pegada
+                    al texto (izquierda), lejos del borde derecho de la
+                    tabla — ahora el contenido va justificado a la derecha,
+                    igual que USD/kg y Total USD. */}
+                <td style={{ ...TD, textAlign:"right" }}>
                   {/* Desglose por kg (2026-09-02, a pedido de Gino): antes era
                       un sí/no por grupo entero — con dos piezas del mismo
                       material pasando por máquinas distintas, la segunda se
@@ -1480,11 +1490,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
         {anidadosFiltrados.length > 0 && (
           <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
             <div style={{ width:15, flexShrink:0 }} />
-            {/* 2026-09-07, a pedido de Gino: la fecha ya se ve en la
-                segunda línea de "Nombre" — acá solo hace falta el control
-                de orden, no otra columna que compita por ancho. */}
-            <div style={{ width:80, flexShrink:0 }}><ColSort campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            {/* 2026-09-07, a pedido de Gino: va después de "Nombre" (la
+                fecha ya se ve en su segunda línea) — acá solo hace falta
+                el control de orden, no otra columna que compita por ancho. */}
+            <div style={{ width:80, flexShrink:0 }}><ColSort campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
             <div style={{ textAlign:"right", minWidth:90 }}><ColSort campo="_kg" label="Kg" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
