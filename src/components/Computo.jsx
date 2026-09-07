@@ -42,7 +42,7 @@ const n3    = v => (Math.round(v * 1000) / 1000).toFixed(3);
 // (el contador guardado puede haber quedado atrás de cómputos importados o
 // creados manualmente con un N° más alto — encontrado el 24/8: "C-003" se
 // sugirió de nuevo pese a que ya existía un cómputo real con ese número).
-const siguienteNroComputo = (computos) => {
+export const siguienteNroComputo = (computos) => {
   const usados = new Set((computos || []).map(c => c.nro).filter(Boolean));
   let counter = loadLS("smeas_computo_nro", 0);
   let nro;
