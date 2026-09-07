@@ -31,9 +31,9 @@ export function infoMaterial(o) {
 // catálogo de materiales con un nombre de campo distinto (precio_kg en
 // Cómputo, precio_usd_kg en Anidado) — no es un error, son dos formas
 // reales de la misma info; se pasa como prop en vez de asumir un nombre fijo.
-export function Combobox({ opciones, value, onChange, placeholder = "Buscar…", precioField = "precio_kg" }) {
+export function Combobox({ opciones, value, onChange, placeholder = "Buscar…", precioField = "precio_kg", autoOpen = false }) {
   const [busq, setBusq] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [rect, setRect] = useState(null); // posición calculada del trigger, null hasta que se abre
   const ref = useRef(null);
   const panelRef = useRef(null);

@@ -256,6 +256,8 @@ export const PERFILES_DATA = [
   { id:"CUPN240", nombre:"Cajón UPN 240", cat:"Cajón UPN", kg_m:66.4, largo:12, sup:1.694 },
   { id:"CUPN300", nombre:"Cajón UPN 300", cat:"Cajón UPN", kg_m:92.4, largo:12, sup:2.090 },
   // Redondos macizos
+  { id:"RD14",  nombre:'Redondo ¼" (6,35mm)',    cat:"Redondo", kg_m:0.25,  largo:6, sup:0.020, precio_usd_kg:1.52 },
+  { id:"RD516", nombre:'Redondo 5/16" (7,94mm)', cat:"Redondo", kg_m:0.39,  largo:6, sup:0.025, precio_usd_kg:1.52 },
   { id:"RD38",  nombre:'Redondo 3/8" (9,5mm)',   cat:"Redondo", kg_m:0.56,  largo:6, sup:0.030, precio_usd_kg:1.52 },
   { id:"RD12",  nombre:'Redondo ½" (12,7mm)',    cat:"Redondo", kg_m:0.99,  largo:6, sup:0.040, precio_usd_kg:1.52 },
   { id:"RD58",  nombre:'Redondo 5/8" (15,9mm)',  cat:"Redondo", kg_m:1.56,  largo:6, sup:0.050, precio_usd_kg:1.52 },

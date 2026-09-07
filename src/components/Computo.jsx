@@ -597,6 +597,12 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
   const [showResumen, setShowResumen] = useState(false);
   const [fichaTarget, setFichaTarget] = useState(null); // id de pieza con ficha abierta
   const [confirmarPiezaId, setConfirmarPiezaId] = useState(null);
+  // Cambiar el material de una pieza ya agregada (2026-09-07, a pedido de
+  // Gino) — antes el material quedaba fijo apenas se creaba la fila, y la
+  // única forma de corregirlo era borrarla y cargarla de nuevo (perdiendo
+  // ficha/plano/lo que ya tuviera cargado). Mismo Combobox que ya usa
+  // Anidado.jsx para esto mismo, ahí sí siempre editable.
+  const [cambiandoMaterialId, setCambiandoMaterialId] = useState(null);
 
   // No cierra el formulario — así se puede seguir cargando largo/cantidad
   // del mismo material sin tener que volver a buscarlo cada vez.
@@ -605,6 +611,23 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
   const piezaAEliminar = confirmarPiezaId ? item.piezas.find(p=>p.id===confirmarPiezaId) : null;
   const editarPieza   = (id,k,v) => onChange({ ...item, piezas: item.piezas.map(p=>p.id===id?{...p,[k]:v}:p) });
   const updatePieza   = (actualizada)  => onChange({ ...item, piezas: item.piezas.map(p=>p.id===actualizada.id?actualizada:p) });
+  // Mismo criterio que elegirMaterial() en FormPieza — sólo toca los campos
+  // que dependen del material (id/nombre/kg, y completa el precio de la
+  // ficha si todavía estaba vacío); dimensiones, cantidad, plano y el resto
+  // de la ficha de la pieza quedan intactos.
+  const cambiarMaterialPieza = (p, mat) => {
+    if (!mat) { setCambiandoMaterialId(null); return; }
+    const precioBib = mat.precio_kg || 0;
+    const fichaActual = p.ficha || fichaVacia();
+    const fichaConPrecio = precioBib > 0 && !fichaActual.precio_raw
+      ? { ...fichaActual, precio_raw: String(precioBib) }
+      : fichaActual;
+    const actualizada = p.tipo === "perfil"
+      ? { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m: mat.kg_m, sup_m2m: mat.sup_m2m, ficha: fichaConPrecio }
+      : { ...p, material_id: mat.id, material_nombre: mat.nombre, kg_m2: mat.kg_m2, ficha: fichaConPrecio };
+    updatePieza(actualizada);
+    setCambiandoMaterialId(null);
+  };
   const duplicarPieza = id => {
     const idx=item.piezas.findIndex(p=>p.id===id);
     const orig=item.piezas[idx]; if (!orig) return;
@@ -759,7 +782,18 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
                       <td style={{ ...TD,textAlign:"center" }}>
                         <span style={BDG(p.tipo==="perfil"?C.info:C.teal,true)}>{p.tipo==="perfil"?"▭":"🟦"}</span>
                       </td>
-                      <td style={{ ...TD,fontWeight:600 }}>{p.material_nombre||<span style={{ color:C.err }}>Sin material</span>}</td>
+                      <td style={{ ...TD,fontWeight:600 }}>
+                        {cambiandoMaterialId===p.id ? (
+                          <Combobox opciones={p.tipo==="perfil"?bib.lineales:bib.chapas} value={p.material_id}
+                            onChange={mat=>cambiarMaterialPieza(p,mat)}
+                            placeholder={p.tipo==="perfil"?"Buscar perfil…":"Buscar plancha…"} autoOpen />
+                        ) : (
+                          <span onClick={()=>setCambiandoMaterialId(p.id)} title="Click para cambiar el material"
+                            style={{ cursor:"pointer", borderBottom:`1px dashed ${C.border}` }}>
+                            {p.material_nombre||<span style={{ color:C.err }}>Sin material</span>}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ ...TD_R,color:C.muted,fontSize:11 }}>
                         {p.tipo==="perfil"
                           ? (p.kg_m>0?`${p.kg_m.toFixed(3)}`:"—")
