@@ -43,8 +43,13 @@ export default function ObraRapidaModal({ nombreInicial, empresaInicial, onCreat
   }
 
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 3500, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    // 2026-09-07, reportado por Gino ("el cartel de obra no existe se
+    // cierra solo"): el fondo oscuro cerraba el modal al primer click
+    // afuera, sin avisar — perdía los 5 campos ya tipeados (nombre,
+    // empresa, dirección, fecha, estado) sin ninguna confirmación. Ahora
+    // solo cierra con la ✕ o "Cancelar", explícitos. Mismo fix en
+    // ClienteRapidoModal/EmpresaRapidaModal (copia idéntica del patrón).
+    <div style={{ position: "fixed", inset: 0, zIndex: 3500, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ background: C.card, border: `1.5px solid ${C.ok}55`, borderRadius: 14, padding: 24, width: "100%", maxWidth: 400 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div style={{ color: C.ok, fontWeight: 800, fontSize: 15 }}>🏗️ Obra nueva</div>

@@ -43,8 +43,9 @@ export default function EmpresaRapidaModal({ nombreInicial, onCreated, onClose }
   }
 
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 3500, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    // 2026-09-07: mismo fix que ObraRapidaModal — no cerrar al click en el
+    // fondo, para no perder los datos tipeados sin avisar.
+    <div style={{ position: "fixed", inset: 0, zIndex: 3500, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ background: C.card, border: `1.5px solid ${C.ok}55`, borderRadius: 14, padding: 24, width: "100%", maxWidth: 400 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div style={{ color: C.ok, fontWeight: 800, fontSize: 15 }}>🏢 Empresa nueva</div>
