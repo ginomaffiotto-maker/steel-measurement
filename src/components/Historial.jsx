@@ -94,8 +94,12 @@ export function calcTrabajo(t) {
   const kg_hora_fab_real = (+t.horas_fab_real > 0) ? kg / t.horas_fab_real : 0;
   const kg_hora_mon_est  = (+t.horas_mon_est  > 0) ? kg / t.horas_mon_est  : 0;
   const kg_hora_mon_real = (+t.horas_mon_real > 0) ? kg / t.horas_mon_real : 0;
-  const desvio_fab_pct = (+t.horas_fab_est > 0) ? ((t.horas_fab_real - t.horas_fab_est) / t.horas_fab_est) * 100 : 0;
-  const desvio_mon_pct = (+t.horas_mon_est > 0) ? ((t.horas_mon_real - t.horas_mon_est) / t.horas_mon_est) * 100 : 0;
+  // null (no 0) cuando falta la estimada — un trabajo importado desde
+  // presupuesto arranca sin horas estimadas cargadas, y mostrar "0% de
+  // desvío" ahí es engañoso (parece "sin desvío" cuando en realidad es
+  // "sin dato"). La UI distingue los dos casos (ver Historial.jsx render).
+  const desvio_fab_pct = (+t.horas_fab_est > 0) ? ((t.horas_fab_real - t.horas_fab_est) / t.horas_fab_est) * 100 : null;
+  const desvio_mon_pct = (+t.horas_mon_est > 0) ? ((t.horas_mon_real - t.horas_mon_est) / t.horas_mon_est) * 100 : null;
   return { usd_kg_real, kg_hora_fab_est, kg_hora_fab_real, kg_hora_mon_est, kg_hora_mon_real, desvio_fab_pct, desvio_mon_pct };
 }
 
@@ -390,7 +394,7 @@ function DetalleTrabajo({ t, onChange, onBack, usuarios = [] }) {
             <div><label style={lblMini}>Hs Real</label><input type="number" style={inpMini} value={t.horas_fab_real} onChange={e=>set("horas_fab_real",+e.target.value)}/></div>
           </div>
           <div style={{ fontSize:12, color: c.desvio_fab_pct > 10 ? C.err : c.desvio_fab_pct < -5 ? C.ok : C.muted, fontWeight:700 }}>
-            Desvío: {c.desvio_fab_pct > 0 ? "+" : ""}{n2(c.desvio_fab_pct)}%
+            Desvío: {c.desvio_fab_pct == null ? "— (sin hs. estimadas)" : `${c.desvio_fab_pct > 0 ? "+" : ""}${n2(c.desvio_fab_pct)}%`}
           </div>
           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>Kg/h est.: {n2(c.kg_hora_fab_est)} · real: {n2(c.kg_hora_fab_real)}</div>
         </div>
@@ -401,7 +405,7 @@ function DetalleTrabajo({ t, onChange, onBack, usuarios = [] }) {
             <div><label style={lblMini}>Hs Real</label><input type="number" style={inpMini} value={t.horas_mon_real} onChange={e=>set("horas_mon_real",+e.target.value)}/></div>
           </div>
           <div style={{ fontSize:12, color: c.desvio_mon_pct > 10 ? C.err : c.desvio_mon_pct < -5 ? C.ok : C.muted, fontWeight:700 }}>
-            Desvío: {c.desvio_mon_pct > 0 ? "+" : ""}{n2(c.desvio_mon_pct)}%
+            Desvío: {c.desvio_mon_pct == null ? "— (sin hs. estimadas)" : `${c.desvio_mon_pct > 0 ? "+" : ""}${n2(c.desvio_mon_pct)}%`}
           </div>
           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>Kg/h est.: {n2(c.kg_hora_mon_est)} · real: {n2(c.kg_hora_mon_real)}</div>
         </div>

@@ -14,7 +14,20 @@ test("calcTrabajo no divide por cero cuando faltan horas u kg", () => {
   const c = calcTrabajo(t);
   expect(c.usd_kg_real).toBe(0);
   expect(c.kg_hora_fab_real).toBe(0);
-  expect(c.desvio_fab_pct).toBe(0);
+  expect(c.desvio_fab_pct).toBe(null);
+  expect(c.desvio_mon_pct).toBe(null);
+});
+
+// Regression (2026-09): un trabajo importado desde presupuesto arranca sin
+// horas estimadas — mostraba "0% de desvío" (parecía "sin desvío" cuando en
+// realidad era "sin dato"). Debe ser null, distinto de un desvío real de 0%
+// (estimada y real coinciden exacto).
+test("calcTrabajo distingue 'sin horas estimadas' (null) de un desvío real de 0%", () => {
+  const sinEstimada = calcTrabajo({ ...iTrabajo(), horas_fab_est: 0, horas_fab_real: 40 });
+  expect(sinEstimada.desvio_fab_pct).toBe(null);
+
+  const desvioRealCero = calcTrabajo({ ...iTrabajo(), horas_fab_est: 40, horas_fab_real: 40 });
+  expect(desvioRealCero.desvio_fab_pct).toBe(0);
 });
 
 // Regression: verificado a mano en navegador (sesión 2026-08-06) que el

@@ -110,11 +110,17 @@ siempre-online? Esa respuesta define qué patrón de los dos usar.
 
 ## 4. Control de acceso por módulo
 
-Ver el cambio de esta misma Fase 1: `acceso_crm`/`acceso_costos`
-(booleanos hardcodeados) pasan a un modelo extensible
-(`modulos_habilitados`) — un módulo nuevo (Producción, Compras,
-Administración) se agrega ahí, sin tener que tocar el gate de login ni el
-formulario de Config de los módulos ya existentes.
+**Sigue pendiente — no se generalizó en esta Fase 1** (corregido
+2026-09-07: esta sección quedó redactada como si el cambio ya estuviera
+hecho, y no es así). Hoy sigue siendo `acceso_crm`/`acceso_costos`,
+exactamente 2 booleanos hardcodeados, repetidos en `App.js`/`Config.jsx`/
+`api/invitar-usuario.js` de los dos repos (6 archivos en total). La
+recomendación para cuando se retome sigue siendo la misma: reemplazar por
+un modelo extensible (ej. `modulos_habilitados text[]` en `profiles`) —
+un módulo nuevo (Producción, Compras, Administración) se agregaría ahí,
+sin tener que tocar el gate de login ni el formulario de Config de los
+módulos ya existentes. Pausado a propósito, sin urgencia real mientras no
+exista un tercer módulo (ver `CLAUDE.md`, plan "Steel Platform").
 
 ---
 

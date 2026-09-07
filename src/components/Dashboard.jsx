@@ -144,8 +144,23 @@ function TabResumen({ actual, anterior }) {
   );
 }
 
+// Fase 5.5 (2026-09-07): "Tendencia"/"Empresas"/"Materiales" ignoran a
+// propósito el recorte de período (usan "últimos N meses" fijo o el
+// histórico completo, según el caso — ver comentario en el componente
+// raíz) — ya estaba documentado en el código, pero invisible en pantalla,
+// así que podía leerse como "los números no cuadran" al cambiar el
+// período y ver que estas 3 pestañas no reaccionan. Aviso chico y
+// reusado en las 3.
+function AvisoIgnoraPeriodo() {
+  return (
+    <div style={{ fontSize: 11, color: C.warn, marginBottom: 10 }}>
+      ℹ️ Esta pestaña no usa el filtro de período de arriba — muestra su propio rango fijo, independiente del que elegiste.
+    </div>
+  );
+}
+
 // ─── PESTAÑA TENDENCIA ─────────────────────────────────────────────
-function TabTendencia({ registros }) {
+function TabTendencia({ registros, avisoPeriodo }) {
   const meses = getUltimosMeses(12);
   const porMes = meses.map(m => {
     const delMes = registros.filter(r => r.fecha && r.fecha.slice(0, 7) === m.key);
@@ -154,6 +169,7 @@ function TabTendencia({ registros }) {
   const maxUsd = Math.max(1, ...porMes.map(m => m.usd));
   return (
     <div style={CARD()}>
+      {avisoPeriodo && <AvisoIgnoraPeriodo />}
       <div style={{ fontSize: 12, fontWeight: 700, color: C.steel, marginBottom: 14 }}>Últimos 12 meses — monto USD</div>
       {porMes.map(m => (
         <div key={m.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -168,7 +184,7 @@ function TabTendencia({ registros }) {
 }
 
 // ─── PESTAÑA EMPRESAS ──────────────────────────────────────────────
-function TabEmpresas({ registros }) {
+function TabEmpresas({ registros, avisoPeriodo }) {
   const porEmpresa = {};
   registros.forEach(r => {
     const key = r.cliente || "(sin cliente)";
@@ -180,6 +196,7 @@ function TabEmpresas({ registros }) {
   const maxUsd = ranking[0].usd || 1;
   return (
     <div style={CARD()}>
+      {avisoPeriodo && <AvisoIgnoraPeriodo />}
       {ranking.map((e, i) => (
         <div key={e.nombre} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <div style={{ width: 24, textAlign: "center", fontSize: 14 }}>{medal(i) || (i + 1)}</div>
@@ -194,7 +211,7 @@ function TabEmpresas({ registros }) {
 }
 
 // ─── PESTAÑA MATERIALES ────────────────────────────────────────────
-function TabMateriales({ registros, fuente }) {
+function TabMateriales({ registros, fuente, avisoPeriodo }) {
   const porMaterial = {};
   registros.forEach(r => {
     (r.materiales || []).forEach(h => {
@@ -207,6 +224,7 @@ function TabMateriales({ registros, fuente }) {
   const ranking = Object.values(porMaterial).sort((a, b) => b.kg - a.kg).slice(0, 20);
   return (
     <div>
+      {avisoPeriodo && <AvisoIgnoraPeriodo />}
       <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
         Sólo cuenta materiales de Presupuestos reales (no los 235 históricos aproximados, que no tienen detalle pieza por pieza — ver PLAN-HISTORIAL.md §9.21).
         {fuente === "historial" && <span style={{ color: C.warn }}> — Fuente actual "Historial" no tiene materiales: cambiá a "Presupuesto" o "Ambos".</span>}
@@ -285,9 +303,13 @@ export default function Dashboard({ usuarios = [] }) {
   const perAnt = getPeriodoAnterior(filt.periodo);
   const anterior = perAnt ? registros.filter(r => aplicarFiltrosComunes(r) && enRango(r, perAnt.desde, perAnt.hasta)) : [];
 
-  // Tendencia y Materiales usan sólo los filtros de categoría/cliente/fuente
-  // (no el recorte de período — igual que "últimos N meses" fijo de steelCRM).
+  // Tendencia, Empresas y Materiales usan sólo los filtros de
+  // categoría/cliente/fuente (no el recorte de período — igual que
+  // "últimos N meses" fijo de steelCRM). `avisoPeriodo` avisa en pantalla
+  // cuando el usuario tiene un período activo distinto de "Todo" (o un
+  // rango manual cargado) que estas 3 pestañas no van a respetar.
   const paraTendenciaYRanking = registros.filter(aplicarFiltrosComunes);
+  const avisoPeriodo = filt.periodo !== "todo" || !!filt.desde || !!filt.hasta;
 
   return (
     <div>
@@ -311,9 +333,9 @@ export default function Dashboard({ usuarios = [] }) {
       </div>
 
       {tab === "resumen" && <TabResumen actual={actual} anterior={anterior} />}
-      {tab === "tendencia" && <TabTendencia registros={paraTendenciaYRanking} />}
-      {tab === "empresas" && <TabEmpresas registros={paraTendenciaYRanking} />}
-      {tab === "materiales" && <TabMateriales registros={paraTendenciaYRanking} fuente={filt.fuente} />}
+      {tab === "tendencia" && <TabTendencia registros={paraTendenciaYRanking} avisoPeriodo={avisoPeriodo} />}
+      {tab === "empresas" && <TabEmpresas registros={paraTendenciaYRanking} avisoPeriodo={avisoPeriodo} />}
+      {tab === "materiales" && <TabMateriales registros={paraTendenciaYRanking} fuente={filt.fuente} avisoPeriodo={avisoPeriodo} />}
     </div>
   );
 }

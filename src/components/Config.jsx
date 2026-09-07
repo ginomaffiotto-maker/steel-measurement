@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { C, INP, LBL, BTN, TEMA_ACTUAL, TEMAS_DISPONIBLES, cambiarTema } from "../styles/colors";
-import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda, loadTenantSettingDB, saveTenantSettingDB } from "../utils/storage";
+import { loadLS, saveLS, loadNumeracion, saveNumeracion, exportBackup, parseBackup, restoreBackup, saveDBComputo, saveDBAnidado, saveDBPresupuestoSM, saveDBItem, saveDBTrabajoHistorico, resolverClienteId, deleteDBFila, deleteFilaPorMatchDB, esUUID, getMoneda, setMoneda, loadTenantSettingDB, saveTenantSettingDB, formatearNroPres } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import { ModalConfirmarEliminar, puedeEliminar } from "./ConfirmarEliminar";
 import { seedTestData } from "../utils/seedTestData";
@@ -257,8 +257,7 @@ function InvitarUsuario({ setUsuarios }) {
 // Preview local con los valores en edición (sin guardar todavía) — la
 // generación real vive en utils/storage.js (newNroPresupuesto/peekNroPresupuesto).
 function previewNroPres(cfg) {
-  const anioTxt = cfg.incluirAnio ? String(new Date().getFullYear()) : "";
-  return `${cfg.prefijo || ""}${anioTxt}${String(1).padStart(cfg.digitos || 3, "0")}`;
+  return formatearNroPres(cfg, 1);
 }
 function NumeracionPresupuestos({ soloLectura }) {
   const [cfg, setCfg] = useState(() => loadNumeracion());
@@ -280,6 +279,23 @@ function NumeracionPresupuestos({ soloLectura }) {
   };
   const contadorKey = cfg.reiniciaPorAnio ? `smeas_last_nro_${new Date().getFullYear()}` : "smeas_last_nro";
   const [contador, setContador] = useState(() => localStorage.getItem(contadorKey) || "");
+  // Fase 5.5 (2026-09-07): antes esto pisaba el contador sin validar nada —
+  // corregirlo a un valor por debajo de lo ya usado hacía que el próximo
+  // presupuesto generado chocara con uno real ya existente (mismo tipo de
+  // colisión de `nro` que ya causó problemas reales varias veces en este
+  // proyecto). Se valida contra los presupuestos locales antes de guardar.
+  const guardarContador = () => {
+    const n = Number(contador) || 0;
+    const candidato = formatearNroPres(cfg, n + 1);
+    const presupuestos = loadLS("smeas_presupuestos", []);
+    const yaExiste = presupuestos.some(p => p.nro === candidato);
+    if (yaExiste) {
+      toastError(`Ya existe un presupuesto con el número ${candidato} — subí el contador para no pisarlo.`);
+      return;
+    }
+    localStorage.setItem(contadorKey, String(n));
+    toastOk("Contador actualizado");
+  };
 
   return (
     <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:18, marginBottom:16 }}>
@@ -319,7 +335,7 @@ function NumeracionPresupuestos({ soloLectura }) {
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input type="number" min="0" style={{ ...INP, maxWidth:160 }} value={contador}
               onChange={e => setContador(e.target.value)} placeholder="0" />
-            <button onClick={() => { localStorage.setItem(contadorKey, String(Number(contador) || 0)); toastOk("Contador actualizado"); }}
+            <button onClick={guardarContador}
               style={{ ...BTN("ghost"), fontSize:12, padding:"6px 14px" }}>
               Guardar contador
             </button>

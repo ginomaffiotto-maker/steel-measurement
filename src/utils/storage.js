@@ -1819,7 +1819,7 @@ export const saveNumeracion = (cfg) => saveLS("smeas_numeracion", cfg);
 function contadorKeyPres(cfg) {
   return cfg.reiniciaPorAnio ? `smeas_last_nro_${new Date().getFullYear()}` : "smeas_last_nro";
 }
-function formatearNroPres(cfg, n) {
+export function formatearNroPres(cfg, n) {
   const anioTxt = cfg.incluirAnio ? String(new Date().getFullYear()) : "";
   return `${cfg.prefijo || ""}${anioTxt}${String(n).padStart(cfg.digitos || 3, "0")}`;
 }
