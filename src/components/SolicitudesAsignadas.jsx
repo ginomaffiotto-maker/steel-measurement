@@ -129,16 +129,16 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
 
       {!cargando && solicitudes.length > 0 && (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead>
               <tr>
                 {[
-                  { h: "Prioridad", campo: "prioridad_manual" }, { h: "Cliente", campo: "cliente_nombre" }, { h: "Obra", campo: "obra" },
-                  { h: "Tipo", campo: "tipo_trabajo" }, { h: "Categoría", campo: "categoria" },
-                  { h: "Recepción", campo: "fecha_recepcion" }, { h: "Estado", campo: "estado" },
-                  { h: "Fecha límite", campo: "fecha_limite" }, { h: "", campo: null },
-                ].map(({ h, campo }) => (
-                  <th key={h} title={campo ? "Ordenar por " + h : ""} style={{ ...TH, cursor: campo ? "pointer" : "default", userSelect: "none" }}
+                  { h: "Prioridad", campo: "prioridad_manual", w: 100 }, { h: "Cliente", campo: "cliente_nombre", w: 160 }, { h: "Obra", campo: "obra", w: 180 },
+                  { h: "Tipo", campo: "tipo_trabajo", w: 100 }, { h: "Categoría", campo: "categoria", w: 140 },
+                  { h: "Recepción", campo: "fecha_recepcion", w: 100 }, { h: "Estado", campo: "estado", w: 110 },
+                  { h: "Fecha límite", campo: "fecha_limite", w: 100 }, { h: "", campo: null, w: 260 },
+                ].map(({ h, campo, w }) => (
+                  <th key={h} title={campo ? "Ordenar por " + h : ""} style={{ ...TH, width: w, cursor: campo ? "pointer" : "default", userSelect: "none" }}
                     onClick={() => campo && ordenarPor(campo)}>
                     {h}{sortCampo === campo && campo ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                   </th>
@@ -156,11 +156,11 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   <td style={TD}>{s.fecha_recepcion || "—"}</td>
                   <td style={TD}><span style={{ ...BDG(ESTADO_COLOR[s.estado] || C.muted, true) }}>{s.estado}</span></td>
                   <td style={TD}>{s.fecha_limite || "—"}</td>
-                  <td style={TD}>
+                  <td style={{ ...TD, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "nowrap" }}>
                     {conComputo.has(s.id) && (
-                      <button onClick={() => abrirComputoDesde(conComputo.get(s.id))} style={{ ...BDG(C.ok, true), marginRight: 8, fontSize: 11, cursor: "pointer", border: "none" }} title="Abrir el cómputo ya vinculado">✅ Ver cómputo</button>
+                      <button onClick={() => abrirComputoDesde(conComputo.get(s.id))} style={{ ...BDG(C.ok, true), fontSize: 11, cursor: "pointer", border: "none", whiteSpace: "nowrap" }} title="Abrir el cómputo ya vinculado">✅ Ver cómputo</button>
                     )}
-                    <button onClick={() => crearComputoDesde(s)} style={BTN("primary")}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
+                    <button onClick={() => crearComputoDesde(s)} style={{ ...BTN("primary"), whiteSpace: "nowrap" }}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
                   </td>
                 </tr>
               ))}

@@ -1680,6 +1680,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                       saveLS("smeas_presupuesto_precarga_pending", {
                         nombre: actual.nombre, cliente: actual.empresa, contacto: actual.cliente, obra: actual.obra,
                         tipo_trabajo: actual.tipo_trabajo, categoria: actual.categoria,
+                        // 2026-09-07, bug real reportado por Gino: el ítem creado
+                        // por este camino nunca quedaba vinculado al anidado de
+                        // origen ("Anidado vinculado: — Ninguno —" pese a venir
+                        // de acá) — se arma en Presupuesto.jsx, no acá directo,
+                        // porque `anidado_id` vive en el ÍTEM, no en el
+                        // presupuesto (ver importarMaterialesComoPresNuevo).
+                        anidado_id: actual.id,
                       });
                       onExportarPresupuesto?.();
                     }} style={{ ...BTN("ghost"),borderColor:C.ok+"66",color:C.ok,fontSize:12 }}>

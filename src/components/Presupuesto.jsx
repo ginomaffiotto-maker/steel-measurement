@@ -3075,7 +3075,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // mecanismo que crearPres, pero con los datos que trajo la precarga y
   // el ítem con los materiales ya cargados en un solo paso.
   const importarMaterialesComoPresNuevo = () => {
-    const nuevo = { ...iPresupuesto(), ...(precargaPend||{}) };
+    // anidado_id viaja en la precarga pero pertenece al ÍTEM (ver más abajo),
+    // no al presupuesto — separado acá para no colarlo como campo suelto del
+    // presupuesto (2026-09-07, fix real: el ítem creado por este camino
+    // nunca quedaba vinculado al anidado de origen).
+    const { anidado_id, ...precargaPresupuesto } = precargaPend || {};
+    const nuevo = { ...iPresupuesto(), ...precargaPresupuesto };
     nuevo.nro = peekNroPresupuesto();
     nuevo.codigo_calculo = newCodigoCalculo();
     if (!nuevo.vendedor) nuevo.vendedor = usuario?.id || "";
@@ -3107,7 +3112,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       };
     });
     const maquinado = filasMaquinadoDesdeMateriales(materiales, loadTarifario());
-    nuevo.items = [{ ...iItem(), hierros, maquinado }];
+    nuevo.items = [{ ...iItem(), hierros, maquinado, anidado_id: anidado_id || "" }];
     setPres(prev => [nuevo, ...prev]);
     confirmarNroYSincronizar(nuevo);
     logear?.("Presupuesto creado", (nuevo.nro||"") + " — " + (nuevo.nombre||""));

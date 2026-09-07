@@ -1222,8 +1222,23 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
   const eliminarItem = (id) => {
     if (!computo || computo.items.length<=1) return;
+    // Toast "Deshacer" (2026-09-07, a pedido de Gino tras perder un ítem sin
+    // querer) — a diferencia del cómputo/anidado/presupuesto/historial
+    // completos, un ítem suelto dentro de un cómputo no tiene soft-delete ni
+    // Papelera propia (es una fila que vive dentro del array `items`, no una
+    // entidad con su propia tabla). Mismo mecanismo liviano que ya usa esta
+    // pantalla para el cómputo entero (`showUndo`), aplicado acá también —
+    // 7 segundos para arrepentirse sin tener que volver a cargar todo a mano.
+    const itemBorrado = computo.items.find(it=>it.id===id);
+    const computoAntes = computo;
     updateComputo({ ...computo, items:computo.items.filter(it=>it.id!==id) });
     setExpandedItems(prev=>{ const n=new Set(prev); n.delete(id); return n; });
+    if (itemBorrado) {
+      showUndo(`Ítem "${itemBorrado.titulo||"Sin nombre"}" eliminado`, () => {
+        updateComputo({ ...computoAntes });
+        setExpandedItems(prev=>new Set([...prev, id]));
+      });
+    }
   };
 
   const clonarItem = (item) => {
