@@ -28,8 +28,16 @@ const THEMES = {
   metalsales_light: {
     bg: "#f4f4f5", card: "#fafafa", iron: "#ffffff", border: "#e4e4e7",
     steel: "#71717a", steelDk: "#52525b", accent: "#c2410c", text: "#18181b",
-    muted: "#71717a", mutedL: "#a1a1aa", ok: "#059669", err: "#dc2626",
-    warn: "#d97706", info: "#2563eb", pur: "#8b5cf6", gold: "#b45309",
+    // mutedL/warn (2026-09-07, bugs reales de contraste — ver
+    // scripts/audit-contraste.mjs y el mismo fix en steelCRM, ambos repos
+    // comparten paleta idéntica): mutedL copiaba el valor "más claro" del
+    // tema oscuro (ahí "más claro" = más visible sobre fondo oscuro) —
+    // sobre un fondo CLARO hace lo opuesto, casi invisible (2.3-2.6:1).
+    // warn quedaba a 2.90:1, por debajo incluso del mínimo WCAG de 3:1
+    // para texto grande. mutedL pasa a más oscuro que muted (zinc-600);
+    // warn pasa a amber-800, sin igualar a `gold` (amber-700).
+    muted: "#71717a", mutedL: "#52525b", ok: "#059669", err: "#dc2626",
+    warn: "#92400e", info: "#2563eb", pur: "#8b5cf6", gold: "#b45309",
     teal: "#0d9488", pink: "#ec4899",
     radiusSm: 8, radiusLg: 10,
     fontSans: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
