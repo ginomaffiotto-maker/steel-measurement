@@ -856,7 +856,7 @@ function materialesUnificados(anidado, tc) {
     costoMaquinado += procesos.cilindrado_kg * (maquinadoPorNombre["Cilindrado"] || 0);
 
     const precio_total = precioMaterial + costoMaquinado;
-    return { id: g.id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
+    return { id: g.id, material_id: g.material_id, tipo: g.tipo, nombre, kg, kg_util, sup, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
   });
 }
 
@@ -871,12 +871,20 @@ const CATALOGOS_ANIDADO_SEED = {
   ],
   plancha: [["smeas_planchas","plancha", PLANCHAS_DATA, undefined]],
 };
-function buscarMaterialCatalogo(nombre, tipoGrupo) {
+// Busca primero por material_id (estable) y sólo si falta cae a nombre exacto
+// — el nombre NO es confiable como clave: un anidado viejo puede tener
+// guardado el nombre con el formato de antes de un rename del catálogo (ej.
+// "Planchuela 40×8 mm" antes de que el 2026-09-07 pasara a mostrar pulgadas),
+// y ya no matchea nada aunque el material siga existiendo con el mismo id.
+// Bug real reportado por Gino el mismo día del rename: el botón "Ver ficha"
+// dejó de funcionar en anidados viejos.
+function buscarMaterialCatalogo(nombre, tipoGrupo, materialId) {
   const n = (nombre||"").trim().toLowerCase();
-  if (!n) return null;
+  if (!n && !materialId) return null;
   for (const [catKey, tipoDB, seedData, ids] of (CATALOGOS_ANIDADO_SEED[tipoGrupo]||[])) {
     const combinado = migrar(mergeSeed(loadLS(catKey, null), seedData, ids));
-    const found = combinado.find(m => (m.nombre||"").trim().toLowerCase() === n);
+    const found = (materialId && combinado.find(m => m.id === materialId))
+      || (n && combinado.find(m => (m.nombre||"").trim().toLowerCase() === n));
     if (found) return { catKey, tipoDB, item: found, enLocal: loadLS(catKey, []).some(it=>it.id===found.id) };
   }
   return null;
@@ -954,7 +962,7 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
                   {/* 2026-09-03, a pedido de Gino: acá antes era solo texto —
                       sin forma de ver/editar el precio o los datos técnicos
                       reales del material sin salir a Insumos y Precios. */}
-                  <button onClick={()=>setVerFichaMat(buscarMaterialCatalogo(m.nombre, m.tipo))}
+                  <button onClick={()=>setVerFichaMat(buscarMaterialCatalogo(m.nombre, m.tipo, m.material_id))}
                     title="Ver ficha completa del material en el catálogo"
                     style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:4, color:C.accent, cursor:"pointer", fontSize:11, padding:"1px 6px" }}>📋</button>
                 </td>
