@@ -69,6 +69,22 @@ export function Paginador({ pagina, totalPaginas, setPagina }) {
   );
 }
 
+// Encabezado de columna clickeable para listas en formato "fila" (divs, no
+// <table>) que ya tienen su propio layout con badges/subtítulos — Cómputo y
+// Anidado (2026-09-06, a pedido de Gino, mismo criterio de columnas
+// ordenables que ya tienen Presupuesto/Historial con <th>, pero sin obligar
+// a esas dos pantallas a convertir su fila a una tabla real).
+export function ColSort({ campo, label, sortCampo, sortDir, ordenarPor, align }) {
+  const activo = sortCampo === campo;
+  return (
+    <div onClick={() => ordenarPor(campo)} title={"Ordenar por " + label}
+      style={{ fontSize:9, color: activo ? C.accent : C.muted, textTransform:"uppercase",
+        cursor:"pointer", userSelect:"none", fontWeight: activo ? 800 : 400, textAlign: align || "left" }}>
+      {label}{activo ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+    </div>
+  );
+}
+
 export function OrdenarControl({ campo, dir, ordenarPor, opciones }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:4 }}>

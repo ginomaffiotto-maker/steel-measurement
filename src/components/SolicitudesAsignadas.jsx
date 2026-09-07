@@ -10,6 +10,11 @@ import { useSortable } from "../utils/useSortable";
 // usuarios que ya tienen cuenta real — mismo bloqueo de siempre
 // (meta_usuarios, vendedor_id) hasta que el resto del equipo la tenga.
 const ESTADO_COLOR = { recibida: C.info, "en elaboración": C.warn, enviada: C.pur, ganada: C.ok, perdida: C.err };
+// Solo la prioridad fijada a mano (2026-09-05, Steel CRM) — el score
+// automático depende de historial de cliente/presupuestos, datos que este
+// componente no trae (lee únicamente `solicitudes`) y que mostrar a medias
+// podría divergir del valor real que ve el vendedor en Steel CRM.
+const PRIORIDAD_ICONO = { alta: "🔴", media: "🟡", baja: "🟢" };
 
 export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -128,8 +133,9 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
             <thead>
               <tr>
                 {[
-                  { h: "Cliente", campo: "cliente_nombre" }, { h: "Obra", campo: "obra" },
-                  { h: "Categoría", campo: "categoria" }, { h: "Estado", campo: "estado" },
+                  { h: "Prioridad", campo: "prioridad_manual" }, { h: "Cliente", campo: "cliente_nombre" }, { h: "Obra", campo: "obra" },
+                  { h: "Tipo", campo: "tipo_trabajo" }, { h: "Categoría", campo: "categoria" },
+                  { h: "Recepción", campo: "fecha_recepcion" }, { h: "Estado", campo: "estado" },
                   { h: "Fecha límite", campo: "fecha_limite" }, { h: "", campo: null },
                 ].map(({ h, campo }) => (
                   <th key={h} title={campo ? "Ordenar por " + h : ""} style={{ ...TH, cursor: campo ? "pointer" : "default", userSelect: "none" }}
@@ -142,9 +148,12 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
             <tbody>
               {lista.map(s => (
                 <tr key={s.id}>
+                  <td style={TD}>{PRIORIDAD_ICONO[s.prioridad_manual] ? `${PRIORIDAD_ICONO[s.prioridad_manual]} ${s.prioridad_manual[0].toUpperCase()}${s.prioridad_manual.slice(1)}` : "—"}</td>
                   <td style={TD}>{s.cliente_nombre || "—"}</td>
                   <td style={TD}>{s.obra || "—"}</td>
+                  <td style={TD}>{s.tipo_trabajo || "—"}</td>
                   <td style={TD}>{s.categoria || "—"}</td>
+                  <td style={TD}>{s.fecha_recepcion || "—"}</td>
                   <td style={TD}><span style={{ ...BDG(ESTADO_COLOR[s.estado] || C.muted, true) }}>{s.estado}</span></td>
                   <td style={TD}>{s.fecha_limite || "—"}</td>
                   <td style={TD}>

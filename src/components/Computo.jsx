@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import FiltrosBar from "./FiltrosBar";
@@ -1136,6 +1136,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     const enTipo     = !filt.tipo || c.tipo_trabajo === filt.tipo;
     const enFamilia  = !filt.familia || familiaDe(c.categoria) === filt.familia;
     return enNombre && enCliente && enEmpresa && enDesde && enHasta && enVendedor && enTipo && enFamilia;
+  // Campos calculados (2026-09-06, a pedido de Gino: columnas con
+  // encabezado clickeable, mismo criterio que Presupuesto/Historial) —
+  // useSortable ordena por `item[campo]` directo, así que kg/monto/vendedor
+  // (calculados en el render, no una columna real de la fila) necesitan
+  // quedar adjuntos acá para poder ordenarse por ellos.
+  }).map(c => {
+    const multTotal = c.cantidad_total || 1;
+    const _kg = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_kg,0)*(it.cantidad||1),0) * multTotal;
+    return { ...c, _kg, _monto_usd: calcMontoUSDComputo(c, c.tc ?? tcGlobal),
+      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre || "" };
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
 
@@ -1366,15 +1376,31 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
           </div>
         )}
+        {/* Encabezado de columnas clickeable (2026-09-06, a pedido de Gino:
+            mismo criterio que Presupuesto/Historial — acá con divs en vez de
+            <table>/<th> para no perder el layout de fila existente, que ya
+            tiene badges/subtítulos que no entran en celdas simples). */}
+        {computosFiltrados.length > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
+            <div style={{ width:15, flexShrink:0 }} />
+            <ColSort w={70} campo="nro" label="N°" {...{sortCampo,sortDir,ordenarPor}} />
+            <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ textAlign:"right", minWidth:90 }}><ColSort campo="_kg" label="Kg" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
+            <div style={{ textAlign:"right", minWidth:100 }}><ColSort campo="_monto_usd" label="Monto U$S" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
+            <div style={{ marginLeft:"auto", width:150 }} />
+          </div>
+        )}
         {/* Lista de obras — una fila por cómputo, ancho completo (2026-08-24,
             pedido de Gino: mas info visible, tipo Excel, no en grilla de
             tarjetas angostas) */}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {computosFiltrados.map(c => {
             const multTotal = c.cantidad_total || 1;
-            const tot = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_kg,0)*(it.cantidad||1),0) * multTotal;
-            const monto = calcMontoUSDComputo(c, c.tc ?? tcGlobal);
-            const vendedorNombre = usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre;
+            const tot = c._kg;
+            const monto = c._monto_usd;
+            const vendedorNombre = c._vendedor_nombre;
             return (
               <div key={c.id}
                 style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,

@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, OrdenarControl } from "../utils/useSortable";
+import { useSortable, OrdenarControl, ColSort } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
 import { MAQUINAS_OPTS } from "./Computo";
@@ -1193,6 +1193,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     const enTipo     = !filt.tipo || a.tipo_trabajo === filt.tipo;
     const enFamilia  = !filt.familia || familiaDe(a.categoria) === filt.familia;
     return enNombre && enCliente && enEmpresa && enObra && enDesde && enHasta && enVendedor && enTipo && enFamilia;
+  // Campos calculados (2026-09-06, mismo criterio que Cómputo): kg/monto/
+  // vendedor se calculan en el render, useSortable ordena por `item[campo]`
+  // directo — hace falta adjuntarlos acá para poder ordenar por ellos.
+  }).map(a => {
+    const materiales = materialesUnificados(a, tcGlobal);
+    return { ...a, _kg: materiales.reduce((s,m)=>s+m.kg,0), _monto_usd: materiales.reduce((s,m)=>s+m.precio_total,0),
+      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre || "" };
   });
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
 
@@ -1408,15 +1415,27 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
           </div>
         )}
+        {/* Encabezado de columnas clickeable (2026-09-06, a pedido de Gino),
+            mismo criterio que Cómputo. */}
+        {anidadosFiltrados.length > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
+            <div style={{ width:15, flexShrink:0 }} />
+            <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
+            <div style={{ textAlign:"right", minWidth:90 }}><ColSort campo="_kg" label="Kg" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
+            <div style={{ textAlign:"right", minWidth:100 }}><ColSort campo="_monto_usd" label="Monto U$S" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
+            <div style={{ marginLeft:"auto", width:130 }} />
+          </div>
+        )}
         {/* Lista — una fila por anidado, ancho completo (2026-08-24, mismo
             criterio que Cómputo: mas info visible, tipo Excel) */}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {anidadosFiltrados.map(a=>{
             const nG=a.grupos?.length||0;
-            const materiales = materialesUnificados(a, tcGlobal);
-            const kg = materiales.reduce((s,m)=>s+m.kg,0);
-            const monto = materiales.reduce((s,m)=>s+m.precio_total,0);
-            const vendedorNombre = usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre;
+            const kg = a._kg;
+            const monto = a._monto_usd;
+            const vendedorNombre = a._vendedor_nombre;
             return(
               <div key={a.id} onClick={()=>setSelId(a.id)}
                 style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
