@@ -341,6 +341,11 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
     setVerCorte(false);
     setExpanded(false);  // colapsar después de calcular
   };
+  // Aviso, no bloquea (2026-09-07, caso real de Gino: cargó por error el
+  // largo de la barra acá) — un Kerf real (ancho de corte de sierra/disco)
+  // nunca se acerca a 100mm, así que un valor así de alto es casi seguro un
+  // dato mal cargado, no un kerf real.
+  const kerfSospechoso = (parseFloat(g.kerf_mm)||0) > 100;
   const r=g.resultado;
   const calculado = !!r;
 
@@ -454,7 +459,14 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:4 }}>
           <span style={{ fontSize:11,color:C.muted }}>Kerf:</span>
-          <input type="number" value={g.kerf_mm} onChange={e=>set("kerf_mm",e.target.value)} onFocus={e=>e.target.select()} style={{ ...INP,width:52,padding:"4px 6px",textAlign:"right" }} /><span style={{ fontSize:10,color:C.muted }}>mm</span>
+          <input type="number" value={g.kerf_mm} onChange={e=>set("kerf_mm",e.target.value)} onFocus={e=>e.target.select()} style={{ ...INP,width:52,padding:"4px 6px",textAlign:"right", ...(kerfSospechoso?{borderColor:C.warn}:{}) }} /><span style={{ fontSize:10,color:C.muted }}>mm</span>
+          {/* Aviso, no bloquea (2026-09-07, a pedido de Gino tras cargar por
+              error el largo de la barra en este campo — el Kerf real es el
+              ancho del disco/sierra de corte, típicamente 2-6mm, nunca
+              cientos de mm) — mismo criterio "aviso visual" que ya usa el
+              resto del sistema para datos que probablemente están mal
+              cargados sin bloquear el guardado. */}
+          {kerfSospechoso && <span title="El Kerf es el ancho del corte de la sierra/disco (típicamente 2-6mm) — este valor parece demasiado alto, ¿cargaste por error el largo de la barra acá?" style={{ fontSize:11,color:C.warn,cursor:"help" }}>⚠ ¿es esto un kerf real?</span>}
         </div>
         <button onClick={calcular}
           style={{ ...BTN("primary"),padding:"5px 14px",fontSize:12,
