@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { INP, BTN, C } from "../styles/colors";
+import { BTN, C } from "../styles/colors";
 
 // Hook de orden reusable para listas — un click en una columna/opción ordena
 // por ese campo, un segundo click invierte la dirección. Mismo criterio en
@@ -132,20 +132,5 @@ export function ThResizable({ children, style, width, onResize, minWidth = 40, o
           style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
       )}
     </th>
-  );
-}
-
-export function OrdenarControl({ campo, dir, ordenarPor, opciones }) {
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-      <select value={campo} onChange={e => ordenarPor(e.target.value)}
-        style={{ ...INP, width:"auto", padding:"6px 8px" }} title="Ordenar por">
-        {opciones.map(o => <option key={o.value} value={o.value}>Ordenar: {o.label}</option>)}
-      </select>
-      <button onClick={() => ordenarPor(campo)}
-        style={{ ...BTN("ghost"), padding:"6px 10px" }} title={dir === "asc" ? "Ascendente" : "Descendente"}>
-        {dir === "asc" ? "↑" : "↓"}
-      </button>
-    </div>
   );
 }

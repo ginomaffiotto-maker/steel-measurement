@@ -5,7 +5,6 @@
 const listeners = new Set();
 
 export function toastError(msg) { emit(msg, "err"); }
-export function toastInfo(msg) { emit(msg, "info"); }
 export function toastWarn(msg) { emit(msg, "warn"); }
 export function toastOk(msg) { emit(msg, "ok"); }
 

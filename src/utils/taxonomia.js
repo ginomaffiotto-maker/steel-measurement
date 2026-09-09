@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { C, INP, LBL, BTN } from "../styles/colors";
 import { loadLS, saveLS, loadDBCategoriasTrabajo, saveDBCategoriaTrabajo } from "./storage";
 import { supabase } from "./supabaseClient";
@@ -66,19 +66,6 @@ export async function hidratarFamiliasDesdeNube() {
     console.warn("[Familias/Categorías] No se pudo leer de la nube, usando lo cacheado:", e.message || e);
     return false;
   }
-}
-
-// Hook chico para que un componente se re-renderice cuando FAMILIAS
-// termine de hidratarse desde la nube (útil para pantallas montadas
-// antes de que App.js llame a hidratarFamiliasDesdeNube — ej. si el
-// usuario ya está en Insumos y Precios apenas loguea).
-export function useFamiliasActualizadas(onChange) {
-  useEffect(() => {
-    let vivo = true;
-    hidratarFamiliasDesdeNube().then(cambio => { if (vivo && cambio) onChange?.(); });
-    return () => { vivo = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 }
 
 export const TIPOS_TRABAJO = ["Fabricación", "Montaje", "Fab+Mont"];
