@@ -90,10 +90,13 @@ export const TH = {
   fontWeight: 700, borderBottom: `1px solid ${C.border}`, background: C.card,
   position: "sticky", top: 0, zIndex: 1, textTransform: "uppercase", letterSpacing: .5,
   whiteSpace: "nowrap",
-  // Línea tenue entre columnas (2026-09-07, mismo cambio en steelCRM, a
-  // pedido de Gino junto con las columnas ajustables) — marca dónde termina
-  // cada columna sin depender de arrastrar el borde para descubrirlo.
-  borderRight: `1px solid ${C.border}33`,
+  // Línea entre columnas (2026-09-07, mismo cambio en steelCRM, a pedido de
+  // Gino junto con las columnas ajustables) — marca dónde termina cada
+  // columna sin depender de arrastrar el borde para descubrirlo. Mismo
+  // color/opacidad que borderBottom de este mismo TH (antes iba con alpha
+  // 33, muy tenue — pedido explícito de Gino el 2026-09-09 de hacerla más
+  // nítida).
+  borderRight: `1px solid ${C.border}`,
 };
 export const TD = {
   padding: "9px 12px", borderBottom: `1px solid ${C.border}18`,
