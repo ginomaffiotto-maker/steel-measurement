@@ -2,8 +2,8 @@
 
 **Para:** referencia rápida de "qué cambió y cuándo" a nivel técnico, sin
 la textura de sesión de los changelogs narrativos.
-**De:** sesión de documentación (`steelCRM - BUILDIING`)
-**Fecha:** 2026-08-25
+**De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
+**Fecha:** 2026-08-25, actualizado 2026-09-11
 **Fuente:** condensado de `steelCRM - BUILDIING/CLAUDE.md`,
 `steel-measurement/PLAN.md` + `PLAN-HISTORIAL.md`, y `steel-backend/CLAUDE.md`.
 
@@ -281,6 +281,169 @@ directamente ausentes en una, un tercero con estado desactualizado).
 - Ficha consistente en los 4 valores "pineados" de tarifario (Arenado, Galvanizado, Corte 2D, Corte 3D): ganan proveedor/fecha del precio/observaciones, igual que cualquier fila de catálogo.
 - Historial de precios genérico: `material_historial_precios` se amplía a los 7 catálogos de tarifario + Maquinado + los 4 valores pineados, con `cambiado_por`. Botón "📜" por fila/valor.
 - Pinturas suma info técnica: `rendimiento`, `volumen_solidos`, `ficha_tecnica_link`.
+
+---
+
+## 2026-09-02 (tarde)/03 — Plan de 4 puntos: Estado de obra, Config sincronizado, invitación real, Forecast calibrado
+
+- **Estado de obra obligatorio en Solicitudes** (`solicitudes.estado_obra`,
+  mismo campo/lista que ya tenía Presupuesto) — solo bloquea en la
+  creación, nunca retroactivo.
+- **Config y API key de IA sincronizados entre dispositivos** —
+  `tenant_settings` pasa de "sin uso" a guardar el Config completo de
+  Steel CRM (`"config"`) y la API key (`"ai_key"`); Steel Costos suma lo
+  mismo para nombre/datos de empresa/numeración/moneda el 04/9.
+- **Invitación real de usuarios por email** — `api/invitar-usuario.js`
+  (steelcrm primero, Steel Costos el 03/9) reemplaza el flujo de
+  `crear-usuario.mjs` pegado a mano en una terminal.
+- **Forecast calibrado con cierres reales**: `calibrarProbabilidadesBase`
+  reemplaza la tabla fija `PROB_EST` como base — tasa de cierre real por
+  vendedor+tipo, suavizado bayesiano (celda ← global, k=10), ponderada
+  por antigüedad (decaimiento exponencial, vida media 9 meses).
+  Recotizado se excluye del entrenamiento (no cuenta como pérdida).
+  Verificado en vivo: "calibrado con 211 cierres reales".
+
+## 2026-09-03 — Costo real + margen de negociación, candado de dueño (RLS), eliminación real de usuarios
+
+- **`presupuestos_crm.costo_real_usd`/`margen_negociacion_pct`,
+  `presupuestos_sm.costo_real_usd`**: colchón de negociación — Steel
+  Costos calcula y escribe, Steel CRM solo lee vía
+  `presupuesto_calculo_link`. Visible al vendedor dueño, no solo
+  admin/supervisor.
+- **Candado de dueño — primera vez que RLS restringe por propiedad, no
+  solo por tenant** (ver `ENTIDADES-COMPARTIDAS.md` §8). Ronda 1:
+  `presupuestos_crm`/`computos`/`anidados`/`presupuestos_sm` — UPDATE
+  (incl. soft-delete) solo el dueño o admin/supervisor; SELECT/INSERT sin
+  cambios. Ronda 2: `seguimientos`, con SELECT también restringido (los
+  seguimientos "son de cada vendedor", a diferencia del resto).
+- **Eliminación real de usuarios por email** (`api/eliminar-usuario.js`,
+  los dos sistemas) — reemplaza el `.mjs` manual, mismo patrón que
+  invitar.
+- Badge "⏳ Invitado — pendiente" (`profiles.invitado_pendiente`).
+- **Bug real corregido en Steel Costos**: `vendedorLocalDesdeRemoto` — el
+  candado de dueño llegaba mal resuelto desde la nube (campo sin mapear
+  en Presupuesto, uuid crudo sin traducir en Cómputo/Anidado), podía
+  bloquear al propio dueño o no bloquear a nadie.
+
+## 2026-09-04 — Control de acceso por módulo + backup automático real (server-side)
+
+- **`profiles.acceso_crm`/`acceso_costos`** (default `true`): permite
+  vender Steel CRM y Steel Costos por separado dentro del mismo tenant.
+  **Solo verificado en el cliente, no en RLS** — límite conocido.
+- **Backup automático, rediseño completo**: el mecanismo viejo de Steel
+  CRM (`server.js` a disco) **nunca corrió en producción** — hallazgo
+  real, el `fetch` a `localhost:3001` fallaba siempre en silencio en
+  `steelcrm.vercel.app`. Reemplazado por bucket privado `backups` en
+  Supabase Storage + `tablas_con_tenant_id()` (descubrimiento dinámico) +
+  `api/backup-cron.js` (cron diario de Vercel, cubre los dos sistemas de
+  una pasada) + `api/backup-status.js`. Steel Costos nunca había tenido
+  backup automático — ahora lo tiene, igual que Steel CRM.
+- **Google Drive (backup opcional), ahora en los dos sistemas** — cierra
+  la asimetría documentada desde el 25/8.
+- **Dominio `steelcostos.vercel.app`** agregado al proyecto de
+  Steel Costos en Vercel (alias, sin sacar `steel-measurement.vercel.app`).
+- **Fix real: "Monto Vendido" no reflejaba lo facturado** — 11 lugares
+  (Dashboard, Bonificaciones, Clientes, Inicio) sumaban `montoUSD` en vez
+  de `montoFinal||montoUSD` cuando un presupuesto se facturó por un monto
+  distinto al cotizado.
+
+## 2026-09-05 — categorias_trabajo (tabla nueva), vínculo real Solicitud→Cómputo, candado de dueño completo
+
+- **`categorias_trabajo`**: Familia/Categoría deja de ser una constante
+  fija en código — tabla real compartida entre los dos sistemas, alta al
+  vuelo desde cualquiera, backfill de las 32 categorías canónicas.
+- **`computos.solicitud_id → solicitudes`**: primer FK real que cruza de
+  Steel Costos hacia una tabla propiedad de Steel CRM (antes solo se
+  leía). Cierra el riesgo de crear cómputos duplicados desde la misma
+  solicitud.
+- **Candado de dueño, ronda 3 (cierra la pasada iniciada el 3/9)**:
+  `fichas_aceptados` (hereda el dueño del presupuesto vinculado, sin
+  columna propia) y `solicitudes` (con una excepción real: el dueño
+  actual SÍ puede reasignar `asignado_a` a un tercero).
+- **`empresa_id`** extendido a `presupuestos_crm`, `obras`,
+  `historial_trabajos` (Steel CRM/Costos) y `solicitudes` — completa el
+  wireo iniciado el 29/8.
+- **Rediseño de Metas**: `alcance` (individual/equipo) y `beneficiario`
+  (id local, no FK — quién cobra el bono de una meta de equipo; las
+  ventas del equipo se siguen sumando todas, el premio lo ve solo esa
+  persona). `valores_por_usuario` quedó sin uso desde el frontend (primer
+  intento revertido tras probarlo en vivo).
+- `link_archivos` (Fase 3, enlace a carpeta) en `presupuestos_crm`,
+  `computos`, `anidados`, `presupuestos_sm` — viaja por la cadena
+  Solicitud → Cómputo/Anidado → Presupuesto.
+- **Fix real: Obras duplicadas** — dos causas distintas: carrera en el
+  merge de Fase 5 (chequeo "¿ya la tengo?" antes de esperar un `await`) y
+  `resolverObra()` nunca sincronizaba la obra nueva a Supabase (creaba
+  copias independientes desde distintos dispositivos).
+- **Fix real: Kanban ignoraba las reglas de transición de Estado** en el
+  drag & drop (sí las respetaba el dropdown de `BudgetModal`).
+- Auditoría de RLS completa (62 tablas) — sin agujeros de aislamiento por
+  tenant encontrados.
+
+## 2026-09-06 — Fix crítico: vendedor perdido en 600+ presupuestos + backfill de 156 Obras
+
+- **⚠️→✅ Bug crítico**: `vendedorIdRemoto` (uuid) nunca se resolvía
+  contra `usuarios[].profileId` en el merge de Fase 5 de Presupuestos —
+  cualquier presupuesto que llegara "nuevo" por esa vía (dispositivo
+  nuevo, localStorage reseteado) quedaba sin vendedor. Con los ~619
+  presupuestos reales llegando de una sola vez, Gino tuvo que
+  reasignarse manualmente más de 600.
+- **Backfill de 156 Obras + 457 presupuestos vinculados**: presupuestos
+  viejos con el nombre de obra como texto libre (de antes de que Obras
+  fuera una entidad real, o nunca vueltos a tocar desde el 29/8) nunca
+  disparaban la creación de la Obra real — `resolverObra()` solo corre
+  si el texto del campo cambia.
+- **Fase 2 (Iniciar Elaboración → métricas automáticas)**:
+  `presupuestos_crm.fecha_rechazo` (espejo de `fecha_aceptado`/
+  `fecha_facturado`) — el cronómetro manual de Solicitudes (sin datos
+  reales detrás de ningún reporte) se saca del todo, reemplazado por
+  "Solicitud → Presupuesto" (Dashboard) y "Tiempo de Respuesta"
+  extendido a rechazo.
+- **`presupuestos_crm.terminos_condiciones`** (Fase 4, PDF editable) —
+  override opcional por presupuesto del bloque legal del PDF.
+- **Filtros enriquecidos** en toda la plataforma: Cliente/Obra/Categoría
+  sumados a `GFilt` (Presupuestos/Kanban/Dashboard/Forecast); Aceptados/
+  Competencia/Historial/Solicitudes ganan los filtros que les faltaban.
+- **Fix real: `solicitudes.tipo_trabajo`** (valor único, reemplaza al
+  array `tipos_trabajo` desde el mismo día) nunca se había agregado al
+  sync — el valor elegido por el vendedor quedaba 100% local.
+
+## 2026-09-07 — 89 alert() nativos reemplazados, tests automatizados, Sentry, última entidad sin soft-delete
+
+- **89 `alert()` nativos reemplazados** (60 en Steel CRM, 29 en Steel
+  Costos) por borde rojo inline (validación de campo) o toast (error
+  genérico) — el detalle más citado de "esto se siente como un
+  prototipo hecho por IA". Nuevo `utils/toastBus.js` compartido.
+- **`competencia` gana soft-delete** — última entidad de todo el sistema
+  que todavía tenía borrado duro sin contraseña ni Papelera.
+- **Tests automatizados — primera vez en el proyecto**: 19 tests reales
+  (Jest/`react-scripts test`) cubriendo funciones que ya causaron bugs
+  reales una vez (`siguienteNroComputo`, `runFFD`, `calcItem`, etc.). No
+  reemplazan la verificación en vivo, la complementan.
+- **Monitoreo de errores (Sentry)** en producción, los dos sistemas —
+  gateado por `REACT_APP_SENTRY_DSN`, verificado recibiendo eventos
+  reales.
+- **Fix real: 206 de 413 fichas de Aceptados duplicadas por
+  `presupuesto_id`** — inflaban las 3 tarjetas KPI de Aceptados al
+  doble. Herramienta permanente de limpieza en Importar > Mantenimiento
+  (fusiona datos administrativos de las copias antes de descartar, no
+  solo conserva una).
+- **BudgetModal: desbloqueo explícito** de Cliente/Empresa/Producto/
+  Obra/Tipo/Categoría en presupuestos ya enviados (banner + botón) — los
+  campos comerciales (Kgs/precio/monto) siguen bloqueados sin excepción.
+- **Columnas ajustables tipo Excel**, rollout a la mayoría de las tablas
+  de navegación diaria en los dos sistemas.
+
+## 2026-09-09 — Código muerto + vínculo con Steel Costos disponible antes de guardar
+
+- Código muerto confirmado por auditoría automatizada, borrado en los
+  dos repos (funciones/imports sin ningún uso real).
+- **"Vincular a Steel Costos" disponible antes de guardar un presupuesto
+  nuevo** — antes solo aparecía una vez que el presupuesto ya tenía
+  `dbId` real; ahora el vínculo elegido queda pendiente y se aplica solo
+  en cuanto el presupuesto lo obtiene.
+- Kanban muestra por defecto el pipeline propio del vendedor logueado
+  (antes, el de todo el equipo).
 
 ---
 
