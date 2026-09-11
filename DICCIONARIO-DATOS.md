@@ -3,9 +3,9 @@
 **Para:** cualquier sesión que escriba SQL, un reporte, una migración nueva,
 o cualquier documento (manual, arquitectura) que necesite el detalle
 columna por columna del esquema real.
-**De:** sesión de documentación (`steelCRM - BUILDIING`)
-**Fecha:** 2026-08-25
-**Fuente:** las 24 migraciones de `steel-backend/supabase/migrations/`,
+**De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
+**Fecha:** 2026-08-25, actualizado 2026-09-11
+**Fuente:** las 65 migraciones de `steel-backend/supabase/migrations/`,
 leídas completas (no de memoria).
 **Relación con los otros dos documentos**: `ENTIDADES-COMPARTIDAS.md`
 es el mapa de relaciones (qué tabla se conecta con cuál y por qué);
@@ -37,8 +37,10 @@ rubros de costo, comentarios — estas solo tienen `created_at` o ninguna).
 `eliminado_por text` + a veces `eliminado_fecha timestamptz`): no está en
 todas las tablas — ver marca ✅ por tabla más abajo. Nunca se borra de
 verdad una fila marcada; se filtra de las vistas activas y es recuperable
-desde una Papelera admin-only. Detalle completo del patrón en
-`ENTIDADES-COMPARTIDAS.md` §7.
+desde una Papelera (admin y supervisor desde 2026-08-25; la purga real
+sigue siendo admin-only). Detalle completo del patrón en
+`ENTIDADES-COMPARTIDAS.md` §7, y del candado de dueño (RLS por
+propiedad, distinto de esto) en `ENTIDADES-COMPARTIDAS.md` §8.
 
 ---
 
@@ -58,11 +60,28 @@ desde una Papelera admin-only. Detalle completo del patrón en
 | `nombre` | text not null | |
 | `rol` | text not null, check in (`admin`,`supervisor`,`vendedor`) | |
 | `emoji`, `foto` | text | Avatar. |
+| `acceso_crm`, `acceso_costos` | boolean not null default `true` | 2026-09-04 — control de acceso por módulo (vender Steel CRM/Steel Costos por separado dentro del mismo tenant). Default `true` no bloquea a nadie ya invitado; solo se aplica en el cliente (React), RLS no lo verifica. |
+| `invitado_pendiente` | boolean not null default `false` | 2026-09-03 — se marca al invitar, se limpia sola en el primer login real. Alimenta el badge "⏳ Invitado — pendiente". |
 
-Función `current_tenant_id()` (security definer): devuelve el `tenant_id` del usuario autenticado — la usan todas las policies RLS.
+Función `current_tenant_id()` (security definer): devuelve el `tenant_id` del usuario autenticado — la usan todas las policies RLS. Desde 2026-09-03 existe también `current_user_rol()` (mismo patrón), usada por las policies del candado de dueño (ver `ENTIDADES-COMPARTIDAS.md` §8).
 
 ### `tenant_settings`
-PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Config libre por tenant — sin uso confirmado en UI todavía.
+PK compuesta `(tenant_id, key)`. `value jsonb not null default '{}'`. Sin uso real hasta 2026-09-02 — desde esa fecha: Steel CRM guarda acá su Config completo (key `"config"`) y la API key de IA (key `"ai_key"`), Steel Costos guarda nombre de empresa/datos de empresa/formato de numeración/símbolo de moneda, cada uno con su propia key. Gana la nube sobre el valor local una sola vez al montar (mismo criterio que Fase 5 del resto de entidades).
+
+### `categorias_trabajo` (única, compartida entre Steel CRM y Steel Costos — nueva 2026-09-06)
+| Columna | Tipo | Nota |
+|---|---|---|
+| `familia` | text not null | |
+| `categoria` | text not null | `unique(tenant_id, categoria)`. |
+| `orden` | int not null default 0 | |
+| `updated_at` | timestamptz | Única tabla de esta lista que sí tiene trigger de `updated_at` desde el día que se creó. |
+
+Reemplaza la constante fija que vivía en código (`CATEGORIAS_DEFAULT` en
+steelcrm, `utils/taxonomia.js` en Steel Costos) — alta al vuelo desde
+cualquiera de los dos sistemas. Backfill automático de las 32 categorías
+canónicas (Predictor Eq v25) por tenant existente, `on conflict do
+nothing`. Los campos `categoria`/`tipo` de `presupuestos_crm`/
+`solicitudes`/`computos` la referencian **por valor** (texto), sin FK.
 
 ---
 
@@ -123,7 +142,18 @@ dos nunca tuvieron columna `empresa` en la base, nada que recuperar).
 | `plazo_pago`, `porcentaje_negociacion`, `acabado_superficial` | int / numeric / text | |
 | `ids_calc` | **text[]** | Códigos de cálculo de Steel Costos vinculados — texto libre, sin FK. Ver §6 de `ENTIDADES-COMPARTIDAS.md`. |
 | `fecha_aceptado`, `fecha_facturado` | date | |
+| `fecha_rechazo` | date | 2026-09-06 — espejo de las dos anteriores, autocompletada la primera vez que el presupuesto llega a "no aprobado" (excepto por recotización). Alimenta "Tiempo de Respuesta" en Dashboard para el caso de rechazo, no solo aprobación. |
+| `empresa_id` | uuid → `empresas` on delete set null | 2026-09-05. |
+| `costo_real_usd` | numeric | 2026-09-03 — colchón de negociación (no es margen contable). Steel Costos lo calcula y escribe (desglose real por rubro, sin markup); Steel CRM solo lee, vía `presupuesto_calculo_link`. |
+| `margen_negociacion_pct` | numeric | 2026-09-03 — % que el vendedor tiene para negociar sin bajar del costo real. Visible al vendedor dueño, no solo admin/supervisor. |
+| `link_archivos` | text | 2026-09-06 — enlace a carpeta (Drive/Dropbox). Se copia una sola vez desde `solicitudes.link_archivos` al crear el presupuesto desde una Solicitud; si no, se carga directo. La Ficha de Aceptados lo hereda en vivo por su relación 1:1, sin columna propia. |
+| `terminos_condiciones` | text | 2026-09-06 — override opcional por presupuesto del bloque "Términos y condiciones" del PDF; el default vive en Config > Sistema (localStorage, no en esta tabla). |
+| `mostrar_usd_kg_pdf` | boolean, nullable | 2026-09-04 — override por presupuesto del toggle USD/kg del PDF. `null` = usa el default de la empresa; `true`/`false` = fuerza mostrar/ocultar. |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
+
+**Candado de dueño (RLS, 2026-09-03)** — ver `ENTIDADES-COMPARTIDAS.md` §8:
+UPDATE (incluye el soft-delete) restringido a `vendedor_id = auth.uid()` o
+admin/supervisor; SELECT/INSERT sin cambios.
 
 ### `comentarios_presupuesto` / `comentarios_obra` / `comentarios_ficha_aceptado`
 Misma forma en las 3 (genéricas vía `comentarioToDB`/`FromDB` con `table` como parámetro):
@@ -155,16 +185,17 @@ Misma forma en las 3 (genéricas vía `comentarioToDB`/`FromDB` con `table` como
 | `fecha`, `hora`, `tipo`, `nota` | date/text | |
 | `completado` | boolean not null default false | |
 | `zoom_link` | text | |
+| `vendedor_id` | uuid → `profiles` on delete set null | 2026-09-03 — nullable, completado solo por trigger (`seguimientos_set_vendedor`) en cada INSERT nuevo, sin backfill retroactivo. **Candado de dueño más estricto que el resto (ver `ENTIDADES-COMPARTIDAS.md` §8)**: restringe también el SELECT — un vendedor sin asignación no ve los seguimientos de otro (confirmado por Gino: "son de cada vendedor"). Un registro sin `vendedor_id` (todo lo viejo) queda visible/editable por cualquiera. |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
 
 ### `historial_interacciones`
-`cliente_id → clientes`, `presupuesto_id → presupuestos_crm` (ambos `on delete set null`), `fecha`, `tipo`, `resumen`, `texto_completo`. ✅ soft-delete.
+`cliente_id → clientes`, `presupuesto_id → presupuestos_crm` (ambos `on delete set null`), `fecha`, `tipo`, `resumen`, `texto_completo`. ✅ soft-delete. Sin ningún flujo de edición de una interacción ya guardada (solo crear/borrar/restaurar). El borrado (soft-delete y purga real) quedó restringido (RLS, 2026-09-05) a admin/supervisor únicamente, sin excepción de "quien la cargó" — decisión de Gino: es un registro del cliente/equipo, no de una persona.
 
 ### `competencia`
-`empresa`, `presupuesto_id → presupuestos_crm`, `precio_usd`, `kg_cotizados`, `motivo`, `motivo_detalle`, `notas`, `fecha`. Sin soft-delete.
+`empresa`, `presupuesto_id → presupuestos_crm`, `precio_usd`, `kg_cotizados`, `motivo`, `motivo_detalle`, `notas`, `fecha`, `eliminado`, `eliminado_por`, `eliminado_fecha`. ✅ soft-delete desde 2026-09-07 — hasta esa fecha era el único borrado duro (sin Papelera, sin contraseña) de todo el sistema; sin RLS especial, mismo patrón que clientes/obras/presupuestos.
 
 ### `obras`
-`nombre`, `direccion`, `empresa`, `fecha_inicio`, `fecha_fin`, `estado` (check in `activa`/`finalizada`/`pausada`/`cancelada`), `notas`. ✅ soft-delete. Hasta 2026-08-29 solo la consumía Steel CRM (`obra_presupuestos`) — desde esa fecha también `computos`/`anidados`/`presupuestos_sm` de Steel Costos, vía `obra_id` directo (sin tabla de vínculo intermedia).
+`nombre`, `direccion`, `empresa`, `fecha_inicio`, `fecha_fin`, `estado` (check in `activa`/`finalizada`/`pausada`/`cancelada`), `notas`, `empresa_id` (uuid → `empresas` on delete set null, 2026-09-05). ✅ soft-delete. Hasta 2026-08-29 solo la consumía Steel CRM (`obra_presupuestos`) — desde esa fecha también `computos`/`anidados`/`presupuestos_sm` de Steel Costos, vía `obra_id` directo (sin tabla de vínculo intermedia).
 
 ### `obra_presupuestos`
 Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade), `unique(obra_id, presupuesto_id)`. Tabla de vínculo pura — el esquema permite muchos-a-muchos pero la UI fuerza 1 obra por presupuesto (ver `ENTIDADES-COMPARTIDAS.md` §4).
@@ -175,17 +206,28 @@ Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade),
 | `cliente_id` | uuid → `clientes` on delete set null | |
 | `cliente_nombre`, `obra`, `direccion_obra`, `contacto`, `tel`, `email` | text | Copia desnormalizada — la solicitud puede llegar antes de cargar el cliente formalmente. |
 | `fecha_recepcion`, `fecha_limite`, `fecha_envio`, `fecha_resolucion` | date | `fecha_limite` obligatoria en la UI desde el 2026-08-26. |
-| `categoria` | text | Agregada 2026-08-26. Lista canónica de 32 (misma que `presupuestos_crm.categoria`), obligatoria en la UI al guardar. Distinta de `tipos_trabajo` (abajo), que es la lista vieja de 10 estilo Gestsoft — no hay traducción 1 a 1 entre ambas, conviven. |
+| `categoria` | text | Agregada 2026-08-26. Lista canónica de 32 (ahora tabla real `categorias_trabajo`, ver §1), obligatoria en la UI al guardar. |
 | `creado_por` | text | Agregada 2026-08-26. Nombre fijado una sola vez al crear la solicitud — a diferencia de `asignado_a` (reasignable), este no cambia, para no perder el rastro de quién la cargó originalmente. |
-| `tipos_trabajo` | text[] not null default `'{}'` | |
+| `tipos_trabajo` | text[] not null default `'{}'` | Lista vieja de 10 estilo Gestsoft. Reemplazada en la UI por `tipo_trabajo` (abajo) el 2026-09-06 — se sigue leyendo como respaldo en 3 lugares (prioridad automática, badge de lista, creación de presupuesto) pero ya no se vuelve a escribir. |
+| `tipo_trabajo` | text | 2026-09-06/07 — valor único (Fabricación/Montaje/Fabricación y Montaje, mismo criterio que `presupuestos_crm.tipo`), reemplaza a `tipos_trabajo`. Agregada el 06/9 en el frontend pero la columna real (y el sync) llegó un día después — bug real: el valor elegido quedaba 100% local hasta entonces. |
+| `producto` | text | 2026-09-05 — existía y era obligatorio en el formulario desde antes, pero nunca se sincronizaba (bug real: Steel Costos, que lee esta tabla directo, nunca lo veía). |
+| `empresa` | text | 2026-09-05, mismo bug/fix que `producto`. |
+| `empresa_id` | uuid → `empresas` on delete set null | 2026-09-05. |
+| `estado_obra` | text, check in (`''`,`Adjudicada`,`Licitación`,`Directa`) | 2026-09-02 — mismo campo/lista que ya tenía `presupuestos_crm`, obligatorio al crear. |
+| `prioridad_manual` | text, nullable | 2026-09-05 — override opcional del score automático de prioridad (0-100). El score se sigue calculando siempre y se muestra como referencia; si `prioridad_manual` está cargado, gana. |
 | `link_archivos`, `notas` | text | |
-| `horas_estimadas`, `horas_reales` | numeric | |
-| `fecha_inicio_elab`, `cronometro_activo` | date / boolean | Cronómetro de elaboración de la cotización. |
+| `horas_estimadas`, `horas_reales` | numeric | **Sin uso desde 2026-09-06** — el cronómetro manual (junto con `fecha_inicio_elab`/`cronometro_activo`) se sacó del todo, sin datos reales detrás de ningún reporte. Reemplazado por 2 tiempos medidos solos: "Solicitud → Presupuesto" (Dashboard > Pipeline, por fecha) y "Tiempo de Respuesta" extendido a rechazo (vía `presupuestos_crm.fecha_rechazo`). |
+| `fecha_inicio_elab`, `cronometro_activo` | date / boolean | Ídem — sin uso desde 2026-09-06, columnas sin borrar. |
 | `nro_gestsoft` | text | Vínculo con el sistema legado. |
 | `estado` | text not null default `'recibida'`, check in (`recibida`,`en elaboración`,`enviada`,`ganada`,`perdida`) | |
 | `asignado_a` | uuid → `profiles` on delete set null | |
 | `presupuesto_id` | uuid → `presupuestos_crm` on delete set null | Se completa al "ganar". |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
+
+**Candado de dueño (RLS, 2026-09-05)** — ver `ENTIDADES-COMPARTIDAS.md` §8:
+UPDATE restringido a `asignado_a = auth.uid()`, sin asignar, o admin/
+supervisor — con una excepción real: el dueño actual SÍ puede reasignar
+`asignado_a` a un tercero (el `WITH CHECK` solo valida `tenant_id`).
 
 ### `solicitud_versiones`
 `solicitud_id → solicitudes` cascade, `v` (int), `fecha`, `autor`, `descripcion`, `nro_gestsoft`. Sin soft-delete propio (vive y muere con la solicitud).
@@ -193,6 +235,7 @@ Solo `obra_id → obras`, `presupuesto_id → presupuestos_crm` (ambos cascade),
 ### `metas`
 `nombre`, `tipo` (check in `monto`/`presupuestos`/`aprobacion`/`seguimientos`/`clientes_nuevos`/`kg_vendidos`), `valor`, `periodo` (check in `mes`/`trimestre`/`semestre`/`anio`), `icono`, `color`, `asignado_a_todos` (boolean default true), `activa`, `umbral_alerta` (numeric default 80), `notas_supervisor`, `mostrar_en_inicio`.
 `escalones` (jsonb, nullable — `[{valor, premio}, ...]`, 3 escalones mínimo/medio/máximo) y `sobregiro` (jsonb, nullable — `{desde, hasta, premioAdicional}`, extensión proporcional más allá del último escalón, hoy solo usada por `tipo="monto"`). Agregadas 2026-08-31: antes Bonificaciones.jsx (steelcrm) tenía sus propios 3 escalones + sobregiro hardcodeados en `calcBonus()`, ahora editables desde Config > Metas y leídos de acá — `calcBonus()` queda como fallback para cuando una meta todavía no tiene `escalones` cargados.
+`alcance` (text, 2026-09-05 — `individual`/`equipo`) y `beneficiario` (text, mismo commit — **no es FK real**, guarda el id LOCAL de quién cobra el bono de una meta de equipo; las ventas de `asignadoA` se siguen sumando todas, pero el premio lo ve solo esta persona, ej. el supervisor). `valores_por_usuario` (jsonb, mismo commit) quedó **sin uso desde el frontend** — el primer intento (tabla de "objetivos personalizados por usuario" dentro de la meta) se probó en vivo y se revirtió, Gino no lo encontró claro.
 
 ### `meta_usuarios`
 `meta_id → metas` cascade, `profile_id → profiles` cascade, `unique(meta_id, profile_id)`. Solo se llena cuando `asignado_a_todos = false`.
@@ -227,7 +270,12 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 | `tc` | numeric | Tipo de cambio histórico de ese presupuesto puntual — agregado tarde (`fix_steel_measurement_schema`, era un campo real de la UI que nunca se había persistido). |
 | `vendedor` | uuid → `profiles` on delete set null | |
 | `notas`, `fecha` | text/date | |
+| `costo_real_usd` | numeric | 2026-09-03 — Steel Costos lo calcula (desglose real por rubro, sin markup) y lo guarda; Steel CRM solo lee vía `presupuesto_calculo_link` para el colchón de negociación. |
+| `estado_crm` | text, nullable | 2026-09-04 — espejo inverso de `estado_sm` (Steel CRM local): solo referencia, escrito desde Steel CRM cuando cambia el `estado_nativo` de un presupuesto ya vinculado. Nunca pisa `estado` (arriba), que sigue siendo el real de Steel Costos. |
+| `link_archivos` | text | 2026-09-06 — mismo criterio que `presupuestos_crm.link_archivos`: viaja por la cadena Solicitud → Cómputo → Anidado → Presupuesto, o se carga directo si no hay origen. |
 | `eliminado`, `eliminado_por`, `eliminado_fecha` | ✅ soft-delete | |
+
+**Candado de dueño (RLS, 2026-09-03)** — mismo criterio que `presupuestos_crm`, ver `ENTIDADES-COMPARTIDAS.md` §8.
 
 ### `items_presupuesto_sm`
 `presupuesto_id → presupuestos_sm` cascade. `titulo`, `cantidad` (default 1), `n_plano`, `no_agrega_kg` (boolean). `computo_id → computos` on delete set null (opcional). `anidado_id → anidados` on delete set null (opcional, agregada después — un ítem puede traer material de un cómputo o de un anidado). `tipo` check in (`fabricacion`,`montaje`,`fab_mont`). `orden` int.
@@ -236,7 +284,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 
 | Tabla | Columnas propias | Nota |
 |---|---|---|
-| `item_hierros` | `nombre`, `proveedor`, `fecha_precio`, `obs`, `cantidad`, `kg_pieza`, `area_pieza_m2`, `usd_kg`, `arena`/`pintura`/`galvanizado` (bool), `corte_maquina` (bool), `maquina` (text), `plegado`/`cilindrado` (bool) — estas últimas 4 agregadas 2026-09-02, mismo criterio que arena/pintura/galvanizado, `subtotal_kg`/`subtotal_m2`/`subtotal_usd`, `pct_desperdicio`, `orden` | Material principal (perfiles/planchas del ítem). |
+| `item_hierros` | `nombre`, `proveedor`, `fecha_precio`, `obs`, `cantidad`, `kg_pieza`, `area_pieza_m2`, `usd_kg`, `arena`/`pintura`/`galvanizado` (bool), `corte_maquina` (bool), `maquina` (text), `plegado`/`cilindrado` (bool) — estas últimas 4 agregadas 2026-09-02, mismo criterio que arena/pintura/galvanizado, `pct_arena`/`pct_pintura`/`pct_galvanizado` (numeric, 2026-09-07 — % parcial de cada tratamiento, la ficha lo tenía en el modelo local desde antes pero nunca aplanado a columnas reales; guardar fallaba con "column ficha not found"), `subtotal_kg`/`subtotal_m2`/`subtotal_usd`, `pct_desperdicio`, `orden` | Material principal (perfiles/planchas del ítem). **Nota de migración**: `20260907020000_ficha_item_hierros.sql` reintenta `add column maquina text` sin `if not exists` — esa columna ya existe desde el 2026-09-02, esa línea puntual va a fallar si se corre tal cual (ver aviso al pie de este documento). |
 | `item_mat_generales` | `nombre`, `proveedor`, `fecha_precio`, `cantidad`, `kg_unit`, `m2_unit`, `usd_unit`, `obs`, `subtotal_usd`, `orden` | Bulones, insumos, etc. |
 | `item_mo_fabricacion` / `item_mo_montajes` | `categoria`, `tipo_hora`, `pct_adicional`, `tarea`, `detalle`, `cant_horas`, `usd_hora`, `subtotal_usd`, `orden` | Mano de obra propia. |
 | `item_terc_fabricacion` / `item_terc_montajes` | `nombre`, `empresa`, `fecha_precio`, `cantidad`, `unidad`, `usd_unit`, `subtotal_usd`, `detalle`, `orden` | Tercerizado. |
@@ -248,7 +296,9 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 | `item_trat_otros` | `trat_id → item_trat_superficie` cascade — `nombre`, `usd_kg` | |
 
 ### `computos`
-`nombre`, `fecha`, `cliente_id → clientes`, `cantidad_total`, `nro`, `categoria`, `tipo_trabajo` (agregadas 24/8, ver arriba), `vendedor → profiles`. ✅ soft-delete (agregado 24/8, mismo commit que `categoria`/`tipo_trabajo`/`vendedor` — un hueco real donde estos 3 campos se guardaban solo local y nunca sincronizaban, cerrado en la misma migración). `obra` (text) y `obra_id → obras` on delete set null, agregadas 2026-08-29 — antes Cómputo no tenía ningún campo de obra propio, distinto de su `nombre`. `empresa` (text) y `empresa_id → empresas` on delete set null, mismo commit — tampoco tenía columna de empresa (el valor solo viajaba embebido en el cliente vía `resolverClienteId`).
+`nombre`, `fecha`, `cliente_id → clientes`, `cantidad_total`, `nro`, `categoria`, `tipo_trabajo` (agregadas 24/8, ver arriba), `vendedor → profiles`. ✅ soft-delete (agregado 24/8, mismo commit que `categoria`/`tipo_trabajo`/`vendedor` — un hueco real donde estos 3 campos se guardaban solo local y nunca sincronizaban, cerrado en la misma migración). `obra` (text) y `obra_id → obras` on delete set null, agregadas 2026-08-29 — antes Cómputo no tenía ningún campo de obra propio, distinto de su `nombre`. `empresa` (text) y `empresa_id → empresas` on delete set null, mismo commit — tampoco tenía columna de empresa (el valor solo viajaba embebido en el cliente vía `resolverClienteId`). `solicitud_id → solicitudes` on delete set null (2026-09-05) — primer FK real cruzando de Steel Costos hacia una tabla propiedad de Steel CRM; antes "Crear cómputo" desde una solicitud asignada no dejaba rastro persistente. `link_archivos` (text, 2026-09-06).
+
+**Candado de dueño (RLS, 2026-09-03)** — mismo criterio que `presupuestos_crm`, ver `ENTIDADES-COMPARTIDAS.md` §8.
 
 ### `computo_items`
 `computo_id → computos` cascade. `titulo`, `cantidad`, `n_plano`, `orden`.
@@ -257,16 +307,18 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 `computo_item_id → computo_items` cascade. `tipo` check (`perfil`,`plancha`). `material_id` (text, referencia lógica al catálogo de biblioteca — sin FK real porque biblioteca usa 4 tablas distintas según tipo). `material_nombre`, `kg_m`, `sup_m2m`, `largo_mm`, `ancho_mm`, `kg_m2`, `cantidad`. `granallado`/`pintura`/`galvanizado` (bool) + sus `pct_*`. `corte_maquina` (bool), `maquina`. `precio_raw`, `precio_por` (check `kg`/`m`/`m2`), `moneda`, `proveedor`, `fecha_precio`, `obs`.
 
 ### `anidados`
-`nombre`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `vendedor → profiles`. ✅ soft-delete (mismo momento y motivo que `computos`). `obra_id → obras` on delete set null, agregada 2026-08-29 — convive con `obra` (texto), mismo criterio que `presupuestos_sm`. `empresa_id → empresas` on delete set null, mismo commit — `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día: faltaba en el allowlist de columnas de `storage.js`).
+`nombre`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `vendedor → profiles`. ✅ soft-delete (mismo momento y motivo que `computos`). `obra_id → obras` on delete set null, agregada 2026-08-29 — convive con `obra` (texto), mismo criterio que `presupuestos_sm`. `empresa_id → empresas` on delete set null, mismo commit — `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día: faltaba en el allowlist de columnas de `storage.js`). `link_archivos` (text, 2026-09-06).
+
+**Candado de dueño (RLS, 2026-09-03)** — mismo criterio que `presupuestos_crm`, ver `ENTIDADES-COMPARTIDAS.md` §8.
 
 ### `anidado_grupos`
-`anidado_id → anidados` cascade. `tipo` check (`perfil`,`plancha`). `material_id`, `material_nombre`, `kg_m`, `sup_m2m`, `kg_m2` (agregada aparte — los grupos tipo plancha la necesitan, los de perfil usan `kg_m`/`sup_m2m`). `largo_barra_mm`, `kerf_mm`, `sheet_w`, `sheet_h`. `granallado`/`pintura`/`galvanizado` (bool). **`resultado jsonb`** — única columna verdaderamente "libre" del esquema, a propósito: es la salida calculada del algoritmo de optimización de corte, no una línea de costo estructurada. `orden`.
+`anidado_id → anidados` cascade. `tipo` check (`perfil`,`plancha`). `material_id`, `material_nombre`, `kg_m`, `sup_m2m`, `kg_m2` (agregada aparte — los grupos tipo plancha la necesitan, los de perfil usan `kg_m`/`sup_m2m`). `largo_barra_mm`, `kerf_mm`, `sheet_w`, `sheet_h`. `granallado`/`pintura`/`galvanizado` (bool). **`resultado jsonb`** — salida calculada del algoritmo de optimización de corte, no una línea de costo estructurada. `procesos` (jsonb, 2026-09-06 — desglose de kg por proceso: granallado/pintura/galvanizado/plegado/cilindrado/corte por máquina; mismo criterio jsonb que `resultado` — es un objeto calculado, no columnas de costo sueltas. Bug real cerrado por esta migración: el campo se agregó al modelo local el 2026-09-02 sin agregarlo también a la tabla, así que TODO guardado de un anidado fallaba en silencio desde esa fecha hasta el 05/9). `orden`.
 
 ### `anidado_piezas`
 `grupo_id → anidado_grupos` cascade. `largo_mm`, `ancho_mm`, `cantidad`, `etiqueta`.
 
-### `historial_trabajos` — benchmark para Predictor Eq
-`nro_ot`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `kg_total`, `metros_total`, `usd_total`, `vendedor → profiles` (agregada 25/8, después que `computos`/`anidados`/`presupuestos_sm` ya la tenían — a pedido de Gino, para poder filtrar por vendedor acá también). ✅ soft-delete. Más 10 columnas `pct_*` (porcentaje de cada rubro sobre el total): `pct_hier`, `pct_mat`, `pct_mo_fab`, `pct_mo_mon`, `pct_hesp`, `pct_t_fab`, `pct_t_mon`, `pct_trat`, `pct_trasl`, `pct_panto`.
+### `historial_trabajos` — benchmark ("Comparativa") para Predictor Eq
+`nro_ot`, `fecha`, `cliente_id → clientes`, `obra`, `empresa`, `categoria`, `tipo_trabajo`, `kg_total`, `metros_total`, `usd_total`, `vendedor → profiles` (agregada 25/8, después que `computos`/`anidados`/`presupuestos_sm` ya la tenían — a pedido de Gino, para poder filtrar por vendedor acá también). ✅ soft-delete. `empresa_id → empresas` on delete set null (2026-09-05). `horas_fab_est`, `horas_fab_real`, `horas_mon_est`, `horas_mon_real` (numeric not null default 0, 2026-09-05) — la pantalla ya calculaba kg/hora real y desvío % en vivo, pero estas 4 columnas nunca existieron en la base: el dato se perdía al sincronizar con otro dispositivo, quedaba solo en localStorage. Más 10 columnas `pct_*` (porcentaje de cada rubro sobre el total): `pct_hier`, `pct_mat`, `pct_mo_fab`, `pct_mo_mon`, `pct_hesp`, `pct_t_fab`, `pct_t_mon`, `pct_trat`, `pct_trasl`, `pct_panto`. **Afuera a propósito del candado de dueño** — Gino solo lo pidió para Cómputo/Anidado/Presupuesto.
 
 ### Biblioteca de materiales — 4 tablas, `id` **text** (no uuid, ver §0)
 | Tabla | Columnas propias |
