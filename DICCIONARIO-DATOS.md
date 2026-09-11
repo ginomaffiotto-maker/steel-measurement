@@ -280,7 +280,7 @@ Misma forma: `ficha_id → fichas_aceptados` cascade, `numero`, `fecha`, `monto`
 ### `items_presupuesto_sm`
 `presupuesto_id → presupuestos_sm` cascade. `titulo`, `cantidad` (default 1), `n_plano`, `no_agrega_kg` (boolean). `computo_id → computos` on delete set null (opcional). `anidado_id → anidados` on delete set null (opcional, agregada después — un ítem puede traer material de un cómputo o de un anidado). `tipo` check in (`fabricacion`,`montaje`,`fab_mont`). `orden` int.
 
-### Los 9 rubros de costo por ítem (todas `item_id → items_presupuesto_sm` cascade)
+### Los 10 rubros de costo por ítem (9 tablas de línea + 1 de tratamiento — todas `item_id → items_presupuesto_sm` cascade)
 
 | Tabla | Columnas propias | Nota |
 |---|---|---|
