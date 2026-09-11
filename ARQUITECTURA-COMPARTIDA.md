@@ -3,8 +3,8 @@
 **Para:** cualquier sesión de Claude Code trabajando en los tres repos, y
 como base directa para el manual de instalación y la descripción técnica
 que se están armando en el chat de documentación.
-**De:** sesión de documentación (`steelCRM - BUILDIING`)
-**Fecha:** 2026-08-25
+**De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
+**Fecha:** 2026-08-25, actualizado 2026-09-11
 **Fuente:** relevado contra el código real — `package.json`, `server.js`,
 `api/`, `public/`, launchers, y remotos git de los tres repos. No
 reconstruido de memoria/changelog. Complementa a `ENTIDADES-COMPARTIDAS.md`
@@ -26,7 +26,7 @@ flowchart LR
 
     subgraph PROD["Producción (Vercel)"]
         CRMprod["steelcrm.vercel.app"]
-        SMprod["steel-measurement.vercel.app"]
+        SMprod["steel-measurement.vercel.app<br/>+ steelcostos.vercel.app<br/>(alias, mismo proyecto — 2026-09-04)"]
     end
 
     GH1[("GitHub<br/>ginomaffiotto-maker/steelcrm")]
@@ -85,36 +85,52 @@ steelcrm/  (o steel-measurement/)
 │   │   └── pdfPresupuesto.js       — generación de PDF (código compartido 1:1 entre los dos repos)
 │   └── styles/colors.js    — temas
 ├── public/                 — manifest.json, service-worker.js, íconos PWA
-├── api/cotizacion.js       — función serverless (Vercel) — scraping BROU en producción
-├── server.js               — proxy local (IA, backup, cotización) — SOLO corre en local, no en Vercel
+├── api/                    — funciones serverless (Vercel), ver tabla abajo
+├── vercel.json             — solo en steelcrm (cron diario de backup, ver §5/§6)
+├── server.js               — proxy local (IA, backup viejo, cotización) — SOLO corre en local, no en Vercel
 └── Iniciar*.ps1 / *.bat    — launchers de escritorio
 ```
 
-**Tamaño real de los archivos más grandes** (líneas, 2026-08-25) — útil para
-saber dónde un cambio va a doler más:
+**Funciones serverless reales hoy** (`api/`, 2026-09-11 — creció bastante
+desde que solo existía `cotizacion.js`):
+
+| Función | steelcrm | Steel Costos | Nota |
+|---|---|---|---|
+| `cotizacion.js` | ✅ | ✅ | Scraping BROU, código idéntico en los dos. |
+| `claude.js` | ✅ | — | Proxy de IA — Steel Costos no usa la API de Claude. |
+| `invitar-usuario.js` | ✅ | ✅ | 2026-09-03/04. Valida token de sesión + rol admin contra `profiles` con la `service_role key`, nunca en el browser. |
+| `eliminar-usuario.js` | ✅ | ✅ | Mismo patrón, revoca con `auth.admin.deleteUser`. |
+| `backup-cron.js` | ✅ | — | 2026-09-04. Cubre los DOS sistemas en una sola pasada (comparten backend) — no hace falta uno por repo. Disparado por el cron de Vercel (`vercel.json`) o a pedido manual con token de admin. |
+| `backup-status.js` | ✅ | ✅ | Lectura de solo estado, mismo bucket de Storage compartido. |
+
+**Tamaño real de los archivos más grandes** (líneas, 2026-09-11 — creció
+bastante desde el 2026-08-25, sobre todo `shared.jsx` y `Presupuesto.jsx`,
+que casi duplicaron su tamaño):
 
 | Repo | Archivo | Líneas |
 |---|---|---|
-| steelcrm | `src/components/shared.jsx` | 1903 |
-| steelcrm | `src/components/Config.jsx` | 1581 |
-| steelcrm | `src/App.js` | 1356 |
-| steelcrm | `src/components/CerebroNegocio.jsx` | 1009 |
-| steelcrm | `src/utils/storage.js` | 957 |
-| steel-measurement | `src/components/BibliotecaMateriales.jsx` | 2105 |
-| steel-measurement | `src/components/Presupuesto.jsx` | 2048 |
-| steel-measurement | `src/components/Computo.jsx` | 1464 |
-| steel-measurement | `src/utils/storage.js` | 1454 |
-| steel-measurement | `src/components/Anidado.jsx` | 1253 |
+| steelcrm | `src/components/shared.jsx` | 3385 |
+| steelcrm | `src/App.js` | 1723 |
+| steelcrm | `src/components/Config.jsx` | 1692 |
+| steelcrm | `src/utils/storage.js` | 1126 |
+| steelcrm | `src/components/CerebroNegocio.jsx` | 994 |
+| steel-measurement | `src/components/Presupuesto.jsx` | 3607 |
+| steel-measurement | `src/components/BibliotecaMateriales.jsx` | 2459 |
+| steel-measurement | `src/utils/storage.js` | 1795 |
+| steel-measurement | `src/components/Anidado.jsx` | 1755 |
+| steel-measurement | `src/components/Computo.jsx` | 1681 |
 
 (`historialSeed.js` 8231 líneas y `presupuestosHistoricosSeed.js` 25078
 líneas en Steel Costos son datos semilla, no lógica — no cuentan como
 deuda técnica de código.)
 
-**Módulos de Steel CRM** (`src/components/`, 18 archivos): Inicio,
-Presupuestos, Clientes, Kanban, Dashboard, Seguimientos, Historial,
-Solicitudes, Obras, Aceptados, Competencia, Forecast, Bonificaciones,
-CerebroNegocio, Calculadora, Config, Importar, `shared.jsx` (componentes
-compartidos entre módulos: `BudgetModal`, `ComentariosThread`, `ExportModal`, etc.).
+**Módulos de Steel CRM** (`src/components/`, 19 archivos — sube de 18 con
+`Empresas.jsx`, 2026-09-06, ficha de empresa que faltaba en esta tabla
+desde que la entidad existe): Inicio, Presupuestos, Clientes, Kanban,
+Dashboard, Seguimientos, Historial, Solicitudes, Obras, Aceptados,
+Empresas, Competencia, Forecast, Bonificaciones, CerebroNegocio,
+Calculadora, Config, Importar, `shared.jsx` (componentes compartidos
+entre módulos: `BudgetModal`, `ComentariosThread`, `ExportModal`, etc.).
 
 **Módulos de Steel Costos** (`src/components/`, 20 archivos):
 BibliotecaMateriales, Computo, Anidado, Presupuesto, Historial, Dashboard,
@@ -127,15 +143,34 @@ AutocompleteObra, ClienteRapidoModal, ObraRapidaModal, EmpresaRapidaModal
 también para Obra y Empresa) y Combobox (extraído como componente
 compartido durante ese mismo trabajo).
 
+**Tests automatizados (nuevo, 2026-09-07)** — hasta esa fecha, toda
+verificación de este proyecto era manual/en vivo (ver el patrón repetido
+en el changelog narrativo de cada repo: "el build limpio no alcanza para
+bugs de datos reales"). Primeros tests reales, con `react-scripts test`
+(Jest, ya incluido por Create React App, sin configuración nueva):
+steelcrm — `Empresas.test.js`, `utils/calculos.test.js`,
+`utils/helpers.test.js`; Steel Costos — `utils/taxonomia.test.js` y 4
+más en `components/__tests__/` (`calcItem`, `calcTrabajo`, `runFFD`,
+`siguienteNroComputo`) — cubren específicamente funciones que ya
+causaron bugs reales una vez (ej. `siguienteNroComputo`: el bug de
+número de cómputo duplicado del 24/8; `runFFD`: el algoritmo de anidado
+1D). No reemplazan la verificación en vivo con datos reales — la
+complementan para lógica pura que no depende de Supabase/DOM.
+
 ---
 
 ## 4. Persistencia, sync y autenticación
 
-Cubierto en detalle en `ENTIDADES-COMPARTIDAS.md` §1, §2 y §7 — no se
+Cubierto en detalle en `ENTIDADES-COMPARTIDAS.md` §1, §2, §7 y §8 — no se
 repite acá. Resumen de una línea: **localStorage es la fuente de verdad**,
 cada guardado dispara un dual-write a Supabase que nunca bloquea, Fase 5
 completa lo que falte desde la nube al montar la app, y todo está aislado
-por `tenant_id` vía RLS + Supabase Auth (`profiles`).
+por `tenant_id` vía RLS + Supabase Auth (`profiles`) — desde 2026-09-03,
+un segundo nivel de RLS ("candado de dueño") también restringe por
+propiedad en 7 tablas más sensibles (`ENTIDADES-COMPARTIDAS.md` §8), y
+desde 2026-09-04 `profiles.acceso_crm`/`acceso_costos` controla el acceso
+a cada producto por separado (**solo verificado en el cliente, no en
+RLS** — límite conocido, ver misma sección).
 
 ---
 
@@ -145,8 +180,10 @@ por `tenant_id` vía RLS + Supabase Auth (`profiles`).
 |---|---|---|---|
 | **IA (Claude, `claude-haiku-4-5-20251001`)** | Proxy que agrega el header `x-api-key` server-side — la key nunca vive en el browser. | ✅ `server.js` expone `POST /api/claude` en `localhost:3001` (steelcrm). | ✅ `api/claude.js` (función serverless, commit `2bfa1ef`) — ver §7 para el detalle y un bug distinto que sigue abierto en un módulo puntual. |
 | **Cotización BROU** | `server.js`/`api/cotizacion.js` hacen el mismo POST que la página pública del BROU a un portlet de Liferay (scraping, sin API oficial — riesgo conocido y documentado en el propio código: si el BROU rediseña la página, deja de funcionar). Steel CRM la muestra como referencia; Steel Costos la usa para autocompletar el tipo de cambio de cada presupuesto. | ✅ `localhost:3001` (steelcrm) / `localhost:3003` (Steel Costos). | ✅ `api/cotizacion.js` (función serverless, mismo código de scraping) en los dos repos. |
-| **Backup automático** | `server.js` escribe `backups/backup_<fecha>.json` a disco y purga lo de más de 30 días. Por diseño, solo tiene sentido con un proceso local con disco propio. | ✅ `POST /api/backup`, `localhost:3001`. | — (no aplica; Config avisa si pasaron >3 días sin backup exitoso). |
-| **Google Drive (backup opcional)** | `src/utils/googleDrive.js` — OAuth (Google Identity Services) + `drive.file` scope, sube/baja `steelcrm_backup.json`. Solo Steel CRM. | ✅ funciona igual en cualquier origen (no depende de `server.js`). | ✅ |
+| **Backup automático — server-side, real desde 2026-09-04** | Reemplaza por completo al mecanismo viejo (`server.js` a disco local, que en la práctica **nunca corrió en producción** — hallazgo real: `steelcrm.vercel.app` nunca disparó un backup exitoso desde que existe, el cartel de "atrasado" quedaba atrasado para siempre sin que nadie lo notara). Ahora: bucket privado `backups` en Supabase Storage + función `tablas_con_tenant_id()` (descubre las tablas a respaldar dinámicamente, sin lista fija a mano) + `api/backup-cron.js` (steelcrm — cubre los dos sistemas en una sola pasada, ya que comparten backend) con cron diario de Vercel (`vercel.json`, 06:00 UTC) o disparo manual con token de admin. Purga automática a 30 días. `api/backup-status.js` (copia en los dos repos) hace la lectura de solo estado. | ✅ el botón "Backup ahora" de Config llama a la misma función. | ✅ — a diferencia del mecanismo viejo, este sí corre en producción (es justamente para lo que se construyó). |
+| **Google Drive (backup opcional)** | `src/utils/googleDrive.js` — OAuth (Google Identity Services) + `drive.file` scope. **Desde 2026-09-04, en los dos sistemas** (antes solo Steel CRM — cerraba una asimetría documentada desde el 25/8 en `INTEGRACIONES-COMPARTIDAS.md`) — sube/baja el backup como `.json`. | ✅ funciona igual en cualquier origen (no depende de `server.js`). | ✅ (necesita un Client ID real de Google Cloud Console, sin probar de punta a punta todavía del lado de Steel Costos). |
+| **Invitación / eliminación de usuarios por email** | `api/invitar-usuario.js`/`api/eliminar-usuario.js` (2026-09-03/04, en los dos repos) — reemplazan el flujo viejo de generar un comando `crear-usuario.mjs` para pegar a mano en una terminal. Validan el token de sesión real + rol admin contra `profiles` server-side, con la `service_role key` (nunca en el browser); el cliente le pega siempre a la URL de producción del sistema correspondiente, sea que la sesión corra local o no. CORS explícito (`localhost` + dominio de producción) por header `Authorization` custom + preflight `OPTIONS`. | ✅ (llamando a la función de producción) | ✅ |
+| **Monitoreo de errores (Sentry)** | 2026-09-07, en los dos sistemas — `utils/sentry.jsx` + `Sentry.ErrorBoundary` envolviendo `<App/>`, con pantalla de resguardo si React se cae del todo. Gatea todo por `REACT_APP_SENTRY_DSN` — sin esa variable, no hace nada (build limpio y funcional sin ella). Verificado en vivo en producción en los dos proyectos reales de Sentry (`STEEL-CRM-1`, `STEEL-COSTOS-1`). | ✅ (si `.env.local` tiene el DSN) | ✅ |
 | **Supabase Auth** | Login real por email/contraseña, reemplaza la selección de usuario local. Una sola cuenta sirve para los dos sistemas (mismo backend). | ✅ | ✅ |
 
 ---
@@ -167,8 +204,22 @@ responde → abre el navegador en `http://localhost:3000` (Steel CRM) /
 conectados por `vercel git connect` a sus respectivos repos de GitHub —
 **cualquier push a `master` dispara un deploy automático**, no hace falta
 correr `vercel --prod` a mano. Ambos públicos (protección real es Supabase
-Auth + RLS, no algo de Vercel). Variables de entorno `REACT_APP_SUPABASE_URL`
-/`REACT_APP_SUPABASE_ANON_KEY` cargadas en el proyecto de Vercel.
+Auth + RLS, no algo de Vercel). El proyecto `steel-measurement` de Vercel
+tiene, desde 2026-09-04, un segundo dominio (`steelcostos.vercel.app`,
+agregado sin sacar el original) — son el mismo deploy, pero **orígenes
+distintos para el navegador** (PWA instalada desde uno no se entera del
+otro; hay que reinstalar desde el dominio nuevo para que el ícono/nombre
+digan "Steel Costos").
+
+**Variables de entorno reales en Vercel** (Project Settings > Environment
+Variables), por proyecto:
+
+| Variable | steelcrm | Steel Costos | Nota |
+|---|---|---|---|
+| `REACT_APP_SUPABASE_URL` / `REACT_APP_SUPABASE_ANON_KEY` | ✅ | ✅ | |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | ✅ | Server-only (`api/`), nunca llega al bundle del cliente — usada por invitar/eliminar usuario y por el backup. |
+| `CRON_SECRET` | ✅ | — | Solo en steelcrm — el cron de backup vive ahí. Secreto interno de la app, no una key de terceros. |
+| `REACT_APP_SENTRY_DSN` | ✅ | ✅ | Público por diseño (viaja en el bundle del browser, mismo criterio que la anon key) — sin riesgo si se comparte. |
 
 **PWA**: los dos sistemas son instalables (manifest + service worker +
 íconos PNG 192/512 reales, requisito de Chrome — un manifest con solo SVG
