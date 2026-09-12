@@ -12,7 +12,6 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { PRESUPUESTOS_HISTORICOS_SEED } from "../utils/presupuestosHistoricosSeed";
 import { abrirResumenInterno } from "../utils/resumenInterno";
 import { useSortable, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
@@ -3051,8 +3050,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   });
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
   const [precargaPend, setPrecargaPend] = useState(() => loadLS("smeas_presupuesto_precarga_pending", null));
-  const [historicoCargado, setHistoricoCargado] = useState(() => loadLS("smeas_historico_cargado", false));
-  const [confirmarHistorico, setConfirmarHistorico] = useState(false);
 
   useEffect(() => { saveLS("smeas_presupuestos", presupuestos); }, [presupuestos]);
 
@@ -3410,15 +3407,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   };
   const presAEliminar = confirmarDelId ? presupuestos.find(p=>p.id===confirmarDelId) : null;
 
-  const cargarHistorico = () => {
-    if (historicoCargado) return;
-    const nuevos = PRESUPUESTOS_HISTORICOS_SEED.map(p => ({ ...p, id: uid() }));
-    setPres(prev => [...nuevos, ...prev]);
-    setHistoricoCargado(true);
-    saveLS("smeas_historico_cargado", true);
-    setConfirmarHistorico(false);
-  };
-
   if (vista === "detalle" && selPres) {
     const origenNro = selPres.clonado_de ? presupuestos.find(x => x.id === selPres.clonado_de)?.nro : null;
     return (
@@ -3450,29 +3438,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
           onClose={() => setConfirmarDelLote(false)}
         />
       )}
-      {confirmarHistorico && (
-        <ModalConfirmarBorrado
-          titulo={`${PRESUPUESTOS_HISTORICOS_SEED.length} presupuestos históricos`}
-          subtitulo={`Se reconstruyen desde el histórico de fabricación (2017-2024), marcados "H-<OT>" y en estado Aprobado. Son una aproximación por rubro (sin detalle pieza por pieza) — se suman a los presupuestos existentes, no reemplazan nada.`}
-          verbo="Cargar"
-          checkboxLabel="Sí, quiero cargar estos presupuestos"
-          labelBoton="📥 Cargar histórico"
-          color={C.accent}
-          onConfirm={cargarHistorico}
-          onClose={() => setConfirmarHistorico(false)}
-        />
-      )}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <div style={{ fontWeight:800, fontSize:20, color:C.accent }}>💰 Presupuestos</div>
           <div style={{ fontSize:13, color:C.muted, marginTop:2 }}>{presupuestos.length} presupuesto{presupuestos.length!==1?"s":""}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
-          {!historicoCargado && (
-            <button style={BTN("ghost")} onClick={() => setConfirmarHistorico(true)} title="Reconstruye presupuestos aproximados desde el histórico de fabricación (2017-2024)">
-              📥 Cargar histórico ({PRESUPUESTOS_HISTORICOS_SEED.length})
-            </button>
-          )}
           <button style={BTN("primary")} onClick={() => setNuevoOpen(true)}>+ Nuevo presupuesto</button>
         </div>
       </div>
