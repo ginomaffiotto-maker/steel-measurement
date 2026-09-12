@@ -2,7 +2,10 @@
 
 **Para:** las sesiones de Claude Code que trabajan en Steel CRM y en Predictor Eq
 **De:** sesión de Claude Code trabajando en steel-measurement
-**Fecha:** 2026-08-06
+**Fecha:** 2026-08-06, actualizado 2026-09-12 (§4, §7, §8 — el mecanismo de
+sync entre Steel CRM y Steel Costos cambió de fondo desde que existe backend
+compartido; la parte de Predictor Eq de este documento NO se auditó en esta
+pasada, ver aviso en §4)
 **Por qué existe este documento:** Gino está construyendo tres
 softwares que en algún momento se van a interconectar. Antes de que eso pase,
 hace falta que los tres hablen el mismo idioma — mismos nombres para las
@@ -129,29 +132,50 @@ a Gestsoft, mentalmente traducilo a "categoría" en este vocabulario.
 
 ---
 
-## 4. Cómo se sincronizan los datos compartidos (sin backend común todavía)
+## 4. Cómo se sincronizan los datos compartidos
 
-Los tres siguen siendo apps cliente-only (localStorage, sin servidor
-compartido). Mientras eso no cambie, no hay forma automática de mantener
-sincronizado un archivo entre los tres — hay que hacerlo a mano, con una
-regla clara:
+**⚠️ Actualizado 2026-09-12 — lo que esta sección decía como objetivo a
+futuro (versión original, 2026-08-06: "cuando exista un backend real, este
+mapeo pasa a vivir ahí") ya pasó, así que se sacó ese punto: Steel CRM y
+Steel Costos dejaron de
+ser client-only el 2026-08-22 (backend compartido, Supabase) y desde el
+2026-09-06 Familia/Categoría dejó de ser "un archivo que hay que copiar a
+mano entre proyectos" — es una **tabla real** (`categorias_trabajo`,
+compartida por el mismo backend) entre esos dos sistemas específicamente.
+Cualquiera de los dos puede crear una categoría nueva al vuelo (buscador de
+Categoría en Steel CRM, mismo flujo ya existente en Steel Costos) y queda
+disponible del otro lado sin que nadie tenga que copiar ni avisar nada —
+ver `ENTIDADES-COMPARTIDAS.md` §2 y `DICCIONARIO-DATOS.md` §1 para el
+detalle de columnas. El backfill inicial de esa tabla usó exactamente el
+mapeo de 32 categorías/8 familias que ya estaba en §2 de este documento —
+no cambió el contenido, cambió el mecanismo.**
+
+**Esto NO alcanza a Predictor Eq** — sigue siendo, hasta donde se sabe en
+esta sesión (sin auditar directamente ese repo), un proyecto aparte sin
+acceso a ese backend. Para Predictor Eq sigue rigiendo el mecanismo manual
+original, puntos 1-3 de abajo — con una salvedad real: la "fuente canónica"
+del mapeo ya no es solo el archivo de Predictor Eq, ahora también existe
+como tabla viva del lado de Steel CRM/Steel Costos. Si algún día se conecta
+Predictor Eq a ese mismo backend (o se decide que la tabla pasa a ser la
+fuente canónica en vez del archivo), este documento necesita otra pasada —
+marcado como pendiente, no resuelto acá.
 
 1. **Predictor Eq v25 es la fuente canónica actual** del mapeo
-   Familia→Categoría — es el más completo, el más recientemente ajustado, y
-   el que ya tiene un historial de decisiones (v22→v25) sobre cómo agrupar.
-2. Cuando alguno de los tres necesite este mapeo, **copia el objeto
-   `DEFAULT_FAMILIES` tal cual está en la versión más nueva de Predictor
-   Eq** — no lo reinventa, no lo edita "un poco distinto para que quede
-   mejor" en su propio sistema.
+   Familia→Categoría **para Predictor Eq mismo** — es el más completo, el
+   más recientemente ajustado, y el que ya tiene un historial de decisiones
+   (v22→v25) sobre cómo agrupar.
+2. Cuando Predictor Eq necesite este mapeo, sigue usando su propio archivo
+   — no hay cambio ahí. Si Steel CRM o Steel Costos necesitan el mapeo
+   completo Familia→Categoría (no solo la Categoría, que ya viene de la
+   tabla), por ahora se sigue copiando de Predictor Eq del mismo modo que
+   antes — la tabla `categorias_trabajo` guarda `familia` como texto por
+   fila, no como un mapeo estructurado aparte.
 3. Si en cualquiera de los tres sistemas hace falta CAMBIAR el mapeo
-   (agregar categoría, mover una a otra familia, etc.), el cambio se hace
-   primero en Predictor Eq (dueño canónico), se anota en este documento
-   (actualizando la tabla de §2), y recién después se re-copia a los otros
-   dos. Nunca al revés.
-4. Cuando alguno de los tres proyectos tenga un backend real (Steel CRM ya
-   tiene esa visión de producto en su propio CLAUDE.md), este archivo pasa
-   a vivir ahí como una tabla/endpoint único, y los tres dejan de tener
-   copias — ese es el objetivo final, esto es el puente hasta llegar ahí.
+   (agregar categoría, mover una a otra familia, etc.): en Steel CRM/Steel
+   Costos, el cambio ya se hace directo en la tabla (alta al vuelo desde la
+   UI) — recién después, si corresponde, se replica a mano en Predictor Eq
+   y se anota acá. En Predictor Eq solo, sigue el flujo viejo: se hace ahí
+   primero y se anota acá antes de copiarlo a los otros dos.
 
 ### Un problema más grande que este documento no resuelve todavía
 
@@ -170,6 +194,12 @@ quiera encararla.
 ---
 
 ## 5. Qué implementar en cada sistema (a partir de esto)
+
+**✅ Resuelto para Steel CRM/Steel Costos, sin auditar para Predictor Eq.**
+Los tres puntos de abajo son el plan original (2026-08-06); hoy Steel CRM y
+Steel Costos ya clasifican por Categoría (y guardan Familia como dato,
+`categorias_trabajo.familia`) de forma compartida y automática — ver §4.
+Se deja el texto original como registro de la decisión, no como pendiente:
 
 - **steel-measurement**: agregar un archivo con el mapeo Familia→Categoría
   (copiado de Predictor Eq v25) y usarlo para agrupar el Benchmark de
@@ -234,6 +264,16 @@ justifica todavía. Queda así:
 
 ## 7. Esquema de IDs compartido — Presupuesto ↔ Cálculo (2026-08-15)
 
+**⚠️ Histórico — superado desde 2026-08-29.** El código de cálculo
+(`idsCalc`, texto libre en `presupuestos_crm`) sigue existiendo y sigue
+siendo válido para vínculos manuales/históricos, pero el vínculo real
+hoy es otro: la tabla `presupuesto_calculo_link` (FK real en los dos
+sentidos), escrita por el botón "Enviar a Steel CRM" en Steel Costos —
+ver `ENTIDADES-COMPARTIDAS.md` §6, mecanismos 1 y 2. Esta sección queda
+como registro de la decisión original (por qué es muchos-a-muchos, el
+formato `SM-AAAA-NNNN` que se usó un tiempo), no como el mecanismo
+vigente.
+
 **Acordado con Gino, desde la sesión de Steel CRM:** cada sistema es dueño de
 generar un identificador distinto, y la relación entre ambos es
 **muchos-a-muchos**, no uno-a-uno.
@@ -275,6 +315,15 @@ puede empezar a diseñarse sobre código real, no sobre un proyecto vacío.
 ---
 
 ## 8. Transporte de datos steel-measurement → Steel CRM (2026-08-17)
+
+**⚠️ Histórico — mecanismo dado de baja el 2026-08-29.** El botón "⬇️
+Steel CRM" y el `.json` que describe esta sección ya no existen en el
+código — reemplazados por el envío directo a Supabase ("☁️ Enviar a
+Steel CRM", sin archivo intermedio). Se deja esta sección como registro
+de cómo se resolvieron en su momento las dudas de mapeo de campos
+(`estado_sm`, `kg_total`→`kgCotizados`, etc.) — esas decisiones de fondo
+siguen vigentes, solo cambió el transporte. Mecanismo actual:
+`ENTIDADES-COMPARTIDAS.md` §6.
 
 Ambos proyectos son 100% cliente (localStorage, sin backend), así que hasta
 que exista uno compartido, la conexión es manual vía archivo — mismo
