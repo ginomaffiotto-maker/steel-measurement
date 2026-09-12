@@ -1038,7 +1038,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   };
   const [confirmarItemDelId, setConfirmarItemDelId] = useState(null);
   const [filt, setFilt] = useState(COMPUTO_FILT_DEFAULTS);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino).
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const bib = useBiblioteca();
 
   useEffect(() => { saveLS("smeas_computos", computos); }, [computos]);

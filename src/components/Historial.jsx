@@ -487,7 +487,8 @@ export default function Historial({ usuario, usuarios = [], logear }) {
   const [nuevoOpen, setNuevoOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [filt, setFilt] = useState(HIST_FILT_DEFAULTS);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino).
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
   // trabajos a la vez — mismo criterio que el borrado individual.

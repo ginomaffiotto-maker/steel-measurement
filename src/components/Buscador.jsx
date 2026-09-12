@@ -123,7 +123,8 @@ function buscadorCampos(usuarios) {
 
 export default function Buscador({ onIrA, usuarios = [] }) {
   const [filt, setFilt] = useState(FILT_DEFAULTS);
-  const [abierto, setAbierto] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino).
+  const [abierto, setAbierto] = useState(false);
   const [tipoFiltro, setTipoFiltro] = useState("");
   // Fila expandida (trazabilidad, 2026-09-12) — clave `${tipo}_${id}`, o
   // null si ninguna está abierta. El click en la fila alterna esto en vez

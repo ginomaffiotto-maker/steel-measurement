@@ -262,7 +262,9 @@ const TABS = [
 export default function Dashboard({ usuarios = [] }) {
   const [tab, setTab] = useState("resumen");
   const [filt, setFilt] = useState(FILT_DEFAULTS);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino) — mismo criterio en
+  // todas las pantallas de los dos sistemas.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   // Bug real (2026-09-02/03): Dashboard leía localStorage directo, sin
   // correr nunca el merge de Fase 5 — si el usuario entraba acá antes de

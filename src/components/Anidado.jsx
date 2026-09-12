@@ -1165,7 +1165,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const [confirmarGrupoId, setConfirmarGrupoId] = useState(null);
   const [verMateriales, setVerMateriales] = useState(false);
   const [filt, setFilt] = useState(ANIDADO_FILT_DEFAULTS);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino).
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   const computos    = useMemo(()=>loadLS("smeas_computos",[]),[]);
   const bibLineales = useBibliotecaLineales();

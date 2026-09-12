@@ -3035,7 +3035,8 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   const [selId,  setSelId]  = useState(null);
   const [nuevoOpen, setNuevoOpen] = useState(false);
   const [filt, setFilt] = useState(PRES_FILT_DEFAULTS);
-  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  // Arranca replegado (2026-09-12, a pedido de Gino).
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [filtEst, setFiltEst] = useState("");
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
