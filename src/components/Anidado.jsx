@@ -1276,6 +1276,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       vendedor:computoOrigen?.vendedor||usuario?.id||"",
       // Fase 3 (2026-09-06): mismo criterio que categoria/tipo_trabajo.
       link_archivos:computoOrigen?.link_archivos||"",
+      // 2026-09-12, a pedido de Gino: antes `computoSel` solo se usaba para
+      // importar materiales al crear, el vínculo en sí se perdía — sin esto
+      // era imposible trazar Cómputo→Anidado (ver migración
+      // 20260912110000_computo_id_anidados.sql).
+      computo_id:computoSel||null,
       grupos,comentarios:[],...stamp()};
     save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
     dualWriteAnidado(a);

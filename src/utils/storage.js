@@ -50,7 +50,7 @@ const COLUMNAS_PRESUPUESTO_SM = [
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "solicitud_id", "link_archivos"];
 const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id", "empresa", "empresa_id",
-  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos"];
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos", "computo_id"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];
