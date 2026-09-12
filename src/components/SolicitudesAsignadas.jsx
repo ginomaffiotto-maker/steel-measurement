@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { C, TH, TD, CARD, BTN, BDG } from "../styles/colors";
 import { supabase } from "../utils/supabaseClient";
 import { useSortable } from "../utils/useSortable";
+import FichaSolicitudModal, { ESTADO_SOLICITUD_COLOR as ESTADO_COLOR, PRIORIDAD_ICONO } from "./FichaSolicitud";
 
 // Lee directo de la tabla `solicitudes` de steelCRM — mismo backend
 // compartido, sin exportar/importar ningún archivo. Filtra por
@@ -9,17 +10,12 @@ import { useSortable } from "../utils/useSortable";
 // Supabase Auth en los dos sistemas). Solo alcanza a solicitudes de
 // usuarios que ya tienen cuenta real — mismo bloqueo de siempre
 // (meta_usuarios, vendedor_id) hasta que el resto del equipo la tenga.
-const ESTADO_COLOR = { recibida: C.info, "en elaboración": C.warn, enviada: C.pur, ganada: C.ok, perdida: C.err };
-// Solo la prioridad fijada a mano (2026-09-05, Steel CRM) — el score
-// automático depende de historial de cliente/presupuestos, datos que este
-// componente no trae (lee únicamente `solicitudes`) y que mostrar a medias
-// podría divergir del valor real que ve el vendedor en Steel CRM.
-const PRIORIDAD_ICONO = { alta: "🔴", media: "🟡", baja: "🟢" };
 
 export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  const [verFicha, setVerFicha] = useState(null);
   // solicitud_id → cantidad de cómputos vinculados (2026-09-05, extendido
   // 2026-09-12) — para avisar antes de crear otro por error, sin bloquear
   // (puede haber un caso real para un segundo cómputo). Guarda la
@@ -124,6 +120,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
 
   return (
     <div>
+      {verFicha && <FichaSolicitudModal s={verFicha} onClose={() => setVerFicha(null)} />}
       <div style={{ fontWeight: 800, fontSize: 20, color: C.text, marginBottom: 4 }}>📥 Mis solicitudes asignadas</div>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>
         Cargadas y asignadas desde Steel CRM — mismo backend, sin pasos manuales.
@@ -158,7 +155,8 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
             </thead>
             <tbody>
               {lista.map(s => (
-                <tr key={s.id}>
+                <tr key={s.id} onClick={() => setVerFicha(s)} style={{ cursor: "pointer" }}
+                  title="Ver ficha de la solicitud">
                   <td style={TD}>{PRIORIDAD_ICONO[s.prioridad_manual] ? `${PRIORIDAD_ICONO[s.prioridad_manual]} ${s.prioridad_manual[0].toUpperCase()}${s.prioridad_manual.slice(1)}` : "—"}</td>
                   <td style={TD}>{s.cliente_nombre || "—"}</td>
                   <td style={TD}>{s.obra || "—"}</td>
@@ -167,7 +165,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   <td style={TD}>{s.fecha_recepcion || "—"}</td>
                   <td style={TD}><span style={{ ...BDG(ESTADO_COLOR[s.estado] || C.muted, true) }}>{s.estado}</span></td>
                   <td style={TD}>{s.fecha_limite || "—"}</td>
-                  <td style={{ ...TD, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "nowrap" }}>
+                  <td onClick={e => e.stopPropagation()} style={{ ...TD, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "nowrap" }}>
                     {conComputo.has(s.id) && (
                       <button onClick={() => verComputosDeSolicitud(s)} style={{ ...BDG(C.ok, true), fontSize: 11, cursor: "pointer", border: "none", whiteSpace: "nowrap" }} title="Ver el/los cómputo(s) ya vinculados a esta solicitud">
                         ✅ Ver cómputo{conComputo.get(s.id) > 1 ? `s (${conComputo.get(s.id)})` : ""}
