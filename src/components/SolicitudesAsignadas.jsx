@@ -20,12 +20,14 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
-  // solicitud_id → id del cómputo vinculado (2026-09-05) — para avisar
-  // antes de crear otro por error, sin bloquear (puede haber un caso real
-  // para un segundo cómputo), y para poder abrir directo ese cómputo en
-  // vez de sólo mostrar un badge. Si hay más de uno vinculado, guarda el
-  // primero — "ver cómputo" ya está pensado como atajo, no como listado
-  // completo.
+  // solicitud_id → cantidad de cómputos vinculados (2026-09-05, extendido
+  // 2026-09-12) — para avisar antes de crear otro por error, sin bloquear
+  // (puede haber un caso real para un segundo cómputo). Guarda la
+  // CANTIDAD, no un id puntual: "ver cómputo(s)" navega a la lista de
+  // Cómputo filtrada por esta solicitud, nunca abre uno directo, porque
+  // puede haber varios vinculados a la misma (reportado por Gino,
+  // 2026-09-12 — antes se guardaba solo el primero y los demás quedaban
+  // invisibles desde acá).
   const [conComputo, setConComputo] = useState(new Map());
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
           supabase.from("computos").select("id, solicitud_id").in("solicitud_id", ids).eq("eliminado", false)
             .then(({ data: cs }) => {
               const m = new Map();
-              (cs || []).forEach(c => { if (!m.has(c.solicitud_id)) m.set(c.solicitud_id, c.id); });
+              (cs || []).forEach(c => m.set(c.solicitud_id, (m.get(c.solicitud_id) || 0) + 1));
               setConComputo(m);
             });
         }
@@ -89,11 +91,20 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
     irATab("Computo");
   }
 
-  // Abre directo el cómputo ya vinculado (evita crear un segundo cómputo
-  // por error) — mismo criterio liviano de sessionStorage, consumido una
-  // sola vez al montar Computo.jsx.
-  function abrirComputoDesde(computoId) {
-    try { sessionStorage.setItem("smeas_abrir_computo_id", computoId); } catch {}
+  // Lleva a la pantalla de Cómputo filtrada por esta solicitud (evita
+  // crear un cómputo de más por error) — nunca abre uno puntual, porque
+  // puede haber varios vinculados a la misma solicitud (bug real
+  // reportado por Gino, 2026-09-12: antes se guardaba y abría solo el
+  // primero encontrado, los demás quedaban invisibles desde acá). Mismo
+  // criterio liviano de sessionStorage que el resto de esta pantalla,
+  // consumido una sola vez al montar Computo.jsx.
+  function verComputosDeSolicitud(s) {
+    try {
+      sessionStorage.setItem("smeas_filtrar_computos_solicitud", JSON.stringify({
+        id: s.id,
+        label: s.obra || s.cliente_nombre || s.producto || "esta solicitud",
+      }));
+    } catch {}
     irATab("Computo");
   }
 
@@ -158,7 +169,9 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   <td style={TD}>{s.fecha_limite || "—"}</td>
                   <td style={{ ...TD, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "nowrap" }}>
                     {conComputo.has(s.id) && (
-                      <button onClick={() => abrirComputoDesde(conComputo.get(s.id))} style={{ ...BDG(C.ok, true), fontSize: 11, cursor: "pointer", border: "none", whiteSpace: "nowrap" }} title="Abrir el cómputo ya vinculado">✅ Ver cómputo</button>
+                      <button onClick={() => verComputosDeSolicitud(s)} style={{ ...BDG(C.ok, true), fontSize: 11, cursor: "pointer", border: "none", whiteSpace: "nowrap" }} title="Ver el/los cómputo(s) ya vinculados a esta solicitud">
+                        ✅ Ver cómputo{conComputo.get(s.id) > 1 ? `s (${conComputo.get(s.id)})` : ""}
+                      </button>
                     )}
                     <button onClick={() => crearComputoDesde(s)} style={{ ...BTN("primary"), whiteSpace: "nowrap" }}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
                   </td>

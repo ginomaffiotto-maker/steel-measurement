@@ -1003,21 +1003,24 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       }
     } catch {}
   }, []);
-  // "Ver cómputo" desde Mis solicitudes asignadas (2026-09-05) — a
-  // diferencia del prefill de arriba, el cómputo ya existe pero puede no
-  // estar todavía en el estado local (recién llegó por Fase 5) — reintenta
-  // en cada cambio de `computos` en vez de solo al montar, y recién ahí
-  // limpia la bandera.
+  // "Ver cómputo(s)" desde Mis solicitudes asignadas (2026-09-05, cambiado
+  // 2026-09-12) — antes abría directo UN cómputo puntual; una solicitud
+  // puede tener varios cómputos vinculados (`computos.solicitud_id`), así
+  // que ahora deja al usuario en la LISTA, filtrada por esa solicitud, en
+  // vez de asumir cuál abrir. `filtroSolicitud` es efímero (no persiste,
+  // se limpia con "✕ Ver todos"), mismo criterio liviano de sessionStorage
+  // que el resto de esta pantalla — se consume una sola vez al montar.
+  const [filtroSolicitud, setFiltroSolicitud] = useState(null);
   useEffect(() => {
-    let raw;
-    try { raw = sessionStorage.getItem("smeas_abrir_computo_id"); } catch { raw = null; }
-    if (!raw) return;
-    const c = computos.find(x => x.id === raw);
-    if (c) {
-      setSelId(c.id);
-      try { sessionStorage.removeItem("smeas_abrir_computo_id"); } catch {}
-    }
-  }, [computos]);
+    try {
+      const raw = sessionStorage.getItem("smeas_filtrar_computos_solicitud");
+      if (raw) {
+        setFiltroSolicitud(JSON.parse(raw));
+        setSelId(null);
+        sessionStorage.removeItem("smeas_filtrar_computos_solicitud");
+      }
+    } catch {}
+  }, []);
   const [confirmarDelId, setConfirmarDelId] = useState(null);
   // 2026-09-03, a pedido de Gino: checkboxes para actuar sobre varios
   // cómputos a la vez — mismo criterio que el borrado individual.
@@ -1167,7 +1170,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     const enVendedor = !filt.vendedor || String(c.vendedor) === filt.vendedor;
     const enTipo     = !filt.tipo || c.tipo_trabajo === filt.tipo;
     const enFamilia  = !filt.familia || familiaDe(c.categoria) === filt.familia;
-    return enNombre && enCliente && enEmpresa && enDesde && enHasta && enVendedor && enTipo && enFamilia;
+    const enSolicitud = !filtroSolicitud || c.solicitud_id === filtroSolicitud.id;
+    return enNombre && enCliente && enEmpresa && enDesde && enHasta && enVendedor && enTipo && enFamilia && enSolicitud;
   // Campos calculados (2026-09-06, a pedido de Gino: columnas con
   // encabezado clickeable, mismo criterio que Presupuesto/Historial) —
   // useSortable ordena por `item[campo]` directo, así que kg/monto/vendedor
@@ -1332,6 +1336,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
               style={{ ...BTN("primary"), padding:"6px 18px", fontSize:12 }}>+ Nuevo cómputo</button>
           </div>
         </div>
+
+        {filtroSolicitud && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, background:C.iron, border:`1px solid ${C.accent}44`,
+            borderRadius:8, padding:"8px 14px", marginBottom:16, fontSize:12.5, color:C.text }}>
+            🔗 Mostrando cómputo(s) de la Solicitud: <strong>{filtroSolicitud.label}</strong>
+            <button onClick={()=>setFiltroSolicitud(null)}
+              style={{ marginLeft:"auto", background:"none", border:`1px solid ${C.border}`, color:C.muted,
+                borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11.5 }}>✕ Ver todos</button>
+          </div>
+        )}
 
         {/* Formulario nuevo computo */}
         {creando && (
