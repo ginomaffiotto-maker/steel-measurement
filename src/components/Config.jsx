@@ -995,8 +995,13 @@ function PapeleraPanel({ usuario, usuarios, logear }) {
     setPresupuestos(next);
     saveLS("smeas_presupuestos", next);
     try {
-      const nombreParaClientes = (restaurado.contacto || restaurado.cliente || "").trim();
-      const empresaParaClientes = restaurado.contacto ? restaurado.cliente : null;
+      // Fix real (2026-09-12, reportado por Gino: empresas apareciendo como
+      // clientes en Steel CRM) — esta función se había quedado con el
+      // fallback viejo que el resto de los caminos ya sacó el 2026-08-31: sin
+      // Contacto, no se toca la tabla de clientes (evita escribir la razón
+      // social como si fuera una persona, tabla compartida con Steel CRM).
+      const nombreParaClientes = (restaurado.contacto || "").trim();
+      const empresaParaClientes = restaurado.cliente || null;
       const cliente_id = nombreParaClientes ? await resolverClienteId(nombreParaClientes, empresaParaClientes) : null;
       const vendedor = usuarios.find(u => String(u.id) === String(restaurado.vendedor))?.profileId || null;
       const { cliente, clonado_de, items, comentarios, ...resto } = restaurado;
