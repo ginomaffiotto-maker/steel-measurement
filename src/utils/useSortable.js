@@ -110,6 +110,21 @@ export function useResizableColumns(storageKey, defaults) {
   return { widths, setWidth, reset };
 }
 
+// Ancho mínimo real de la tabla para las columnas ajustables (2026-09-12,
+// bug real reportado por Gino: "las columnas al ensancharse se mueven
+// hacia el lado contrario"). Causa: con `table-layout:fixed` + la tabla en
+// `width:"100%"` pero SIN ningún `minWidth` propio, si la suma de los
+// anchos de columna queda por debajo del ancho real del contenedor, el
+// navegador estira TODAS las columnas de forma proporcional para llegar
+// al 100% — agrandar una achica a las demás para compensar, sintiéndose
+// como si se movieran "al revés". Pasarle esto como `minWidth` de la
+// `<table>` ancla su ancho real a la suma exacta de columnas (el
+// `overflowX:auto` del contenedor ya se encarga de scrollear si no entra),
+// así que nunca hace falta que el navegador redistribuya nada.
+export function sumAnchos(widths) {
+  return Object.values(widths).reduce((a, b) => a + (Number(b) || 0), 0);
+}
+
 // <th> con handle de arrastre en el borde derecho — mismo mecanismo que
 // SortTH de steelCRM, adaptado al patrón de este repo (headers armados
 // inline con onClick de ordenarPor, sin un componente <th> compartido

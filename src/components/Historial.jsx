@@ -7,7 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
-import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable } from "../utils/useSortable";
+import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import FiltrosBar from "./FiltrosBar";
 
@@ -685,7 +685,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
               </div>
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <table style={{ width:"100%", minWidth: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead><tr>
                   <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                     <input type="checkbox" checked={listaPagina.length>0 && listaPagina.every(t=>seleccionados.has(t.id))}

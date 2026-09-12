@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, useResizableColumns, ThResizable } from "../utils/useSortable";
+import { useSortable, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1456,7 +1456,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", minWidth: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
