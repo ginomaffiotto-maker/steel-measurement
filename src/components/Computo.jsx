@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, ColSort } from "../utils/useSortable";
+import { useSortable, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1180,6 +1180,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
       _vendedor_nombre: usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre || "" };
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
+  // Tabla real con columnas ajustables (2026-09-12, a pedido de Gino: mismo
+  // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
+  // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
+  // columnas ni anchos configurables.
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_computo", {
+    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 170,
+  });
 
   // Soft-delete (2026-08-24) — nunca se borra de verdad, se marca y se filtra
   // de la lista activa; un admin puede restaurarlo desde Sistema > Config >
@@ -1425,94 +1432,89 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
           </div>
         )}
-        {/* Encabezado de columnas clickeable (2026-09-06, a pedido de Gino:
-            mismo criterio que Presupuesto/Historial — acá con divs en vez de
-            <table>/<th> para no perder el layout de fila existente, que ya
-            tiene badges/subtítulos que no entran en celdas simples). */}
+        {/* Tabla real con columnas ordenables/ajustables (2026-09-12, a pedido
+            de Gino: unificar con Presupuesto/Historial de acá y Presupuestos
+            de Steel CRM) — reemplaza las filas armadas con divs sueltos del
+            2026-08-24, que no tenían línea divisoria entre columnas ni
+            anchos configurables. */}
         {computosFiltrados.length > 0 && (
-          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
-            <div style={{ width:15, flexShrink:0 }} />
-            <ColSort w={70} campo="nro" label="N°" {...{sortCampo,sortDir,ordenarPor}} />
-            <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            {/* 2026-09-07, a pedido de Gino: va después de "Nombre" (la
-                fecha ya se ve en su segunda línea) — acá solo hace falta
-                el control de orden, no otra columna que compita por ancho. */}
-            <ColSort w={80} campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} />
-            <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            <div style={{ textAlign:"right", minWidth:90 }}><ColSort campo="_kg" label="Kg" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
-            <div style={{ textAlign:"right", minWidth:100 }}><ColSort campo="_monto_usd" label="Monto U$S" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
-            <div style={{ marginLeft:"auto", width:150 }} />
+          <div style={{ overflowX:"auto" }}>
+            <div style={{ textAlign:"right", marginBottom:6 }}>
+              <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
+            </div>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <thead><tr>
+                <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
+                  <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
+                    onChange={()=>setSeleccionados(prev=>computosFiltrados.every(c=>prev.has(c.id)) ? new Set() : new Set(computosFiltrados.map(c=>c.id)))}
+                    style={{ width:15, height:15, cursor:"pointer" }} />
+                </ThResizable>
+                {[
+                  { h:"N°", campo:"nro", k:"nro" },
+                  { h:"Nombre", campo:"nombre", k:"nombre" },
+                  { h:"Fecha", campo:"fecha", k:"fecha" },
+                  { h:"Tipo / Familia", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
+                  { h:"Kg", campo:"_kg", k:"kg" },
+                  { h:"Monto U$S", campo:"_monto_usd", k:"monto" },
+                  { h:"", campo:null, k:"acc" },
+                ].map(({h,campo,k}) => (
+                  <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
+                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
+                    width={colW[k]} onResize={w=>setColW(k,w)}
+                    onClick={()=>campo && ordenarPor(campo)}>
+                    {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
+                  </ThResizable>
+                ))}
+              </tr></thead>
+              <tbody>
+                {computosFiltrados.map(c => {
+                  const multTotal = c.cantidad_total || 1;
+                  const tot = c._kg;
+                  const monto = c._monto_usd;
+                  const vendedorNombre = c._vendedor_nombre;
+                  return (
+                    <tr key={c.id} onClick={()=>setSelId(c.id)} style={{ cursor:"pointer" }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.iron+"55"}
+                      onMouseLeave={e=>e.currentTarget.style.background=""}>
+                      <td style={TD} onClick={e=>e.stopPropagation()}>
+                        <input type="checkbox" checked={seleccionados.has(c.id)} onChange={()=>toggleSelComputo(c.id)}
+                          style={{ width:15, height:15, cursor:"pointer" }} />
+                      </td>
+                      <td style={TD}>{c.nro ? <span style={BDG(C.accent,true)}>{c.nro}</span> : "—"}</td>
+                      <td style={TD}>
+                        <div style={{ fontWeight:800, color:C.text }}>{c.nombre||"Sin nombre"}
+                          {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginLeft:8, fontSize:10 }}>×{multTotal}</span>}
+                        </div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.cliente?`${c.cliente} · `:""}{c.items.length} ítem{c.items.length!==1?"s":""}</div>
+                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{c.fecha||"—"}</span></td>
+                      <td style={TD}>
+                        <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</div>
+                        <div style={{ fontSize:11, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</div>
+                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
+                      <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</td>
+                      <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
+                      <td style={TD} onClick={e=>e.stopPropagation()}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          <button onClick={()=>clonarComputo(c)} title="Clonar este cómputo completo"
+                            style={{ ...BTN("ghost"), padding:"3px 7px", fontSize:11 }}>⧉</button>
+                          <button onClick={()=>{saveLS("smeas_anidar_pending",c.id); onNidar&&onNidar();}} title="Anidar"
+                            style={{ ...BTN("ghost"), padding:"3px 7px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>✂️</button>
+                          {(usuario?.rol !== "vendedor" || !c.vendedor || String(c.vendedor) === String(usuario.id)) && (
+                            <button onClick={()=>setConfirmarDelId(c.id)} title="Eliminar"
+                              style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:15 }}>🗑</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-        {/* Lista de obras — una fila por cómputo, ancho completo (2026-08-24,
-            pedido de Gino: mas info visible, tipo Excel, no en grilla de
-            tarjetas angostas) */}
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {computosFiltrados.map(c => {
-            const multTotal = c.cantidad_total || 1;
-            const tot = c._kg;
-            const monto = c._monto_usd;
-            const vendedorNombre = c._vendedor_nombre;
-            return (
-              <div key={c.id}
-                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10,
-                  padding:"12px 16px", cursor:"pointer", transition:"border-color .15s",
-                  display:"flex", alignItems:"center", gap:18, flexWrap:"wrap" }}
-                onClick={()=>setSelId(c.id)}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                <input type="checkbox" checked={seleccionados.has(c.id)} onChange={()=>toggleSelComputo(c.id)}
-                  onClick={e=>e.stopPropagation()} style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
-                <div style={{ minWidth:70 }}>
-                  {c.nro && <span style={BDG(C.accent,true)}>{c.nro}</span>}
-                </div>
-                <div style={{ flex:"2 1 220px", minWidth:0 }}>
-                  <div style={{ fontWeight:800, fontSize:14, color:C.text, lineHeight:1.3 }}>{c.nombre||"Sin nombre"}
-                    {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginLeft:8, fontSize:10 }}>×{multTotal}</span>}
-                  </div>
-                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.cliente?`${c.cliente} · `:""}{c.items.length} ítem{c.items.length!==1?"s":""}</div>
-                </div>
-                {/* 2026-09-07, mismo fix que Anidado.jsx: la columna "Fecha"
-                    del header (2026-09-06) nunca tuvo celda de valor. */}
-                <div style={{ width:80, flexShrink:0, fontSize:12, color:C.muted }}>{c.fecha||"—"}</div>
-                <div style={{ flex:"1 1 130px", minWidth:0 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
-                  <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</div>
-                  <div style={{ fontSize:11, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</div>
-                </div>
-                <div style={{ flex:"1 1 110px", minWidth:0 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Vendedor</div>
-                  <div style={{ fontSize:12, color:C.text, fontWeight:600 }}>{vendedorNombre||"— Sin asignar —"}</div>
-                </div>
-                <div style={{ textAlign:"right", minWidth:90 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Kg</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</div>
-                </div>
-                <div style={{ textAlign:"right", minWidth:100 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Monto U$S</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</div>
-                </div>
-                <div style={{ display:"flex", gap:6, marginLeft:"auto" }} onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>clonarComputo(c)} title="Clonar este cómputo completo"
-                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
-                    ⧉ Clonar
-                  </button>
-                  <button onClick={()=>{saveLS("smeas_anidar_pending",c.id); onNidar&&onNidar();}}
-                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, borderColor:C.pur+"66", color:C.pur }}>
-                    ✂️ Anidar
-                  </button>
-                  {(usuario?.rol !== "vendedor" || !c.vendedor || String(c.vendedor) === String(usuario.id)) && (
-                    <button onClick={()=>setConfirmarDelId(c.id)}
-                      style={{ ...BTN("danger"), padding:"4px 10px", fontSize:11 }}>
-                      Eliminar
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
         {Toast}
       </div>
     );

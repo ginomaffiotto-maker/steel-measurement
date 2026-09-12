@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, ColSort } from "../utils/useSortable";
+import { useSortable, ColSort, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1305,6 +1305,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
       _vendedor_nombre: usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre || "" };
   });
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
+  // Tabla real con columnas ajustables (2026-09-12, a pedido de Gino: mismo
+  // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
+  // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
+  // columnas ni anchos configurables. Mismo cambio que Computo.jsx.
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_anidado", {
+    check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 130,
+  });
 
   const delAnidado=id=>{
     const a = anidados.find(x=>x.id===id);
@@ -1520,86 +1527,86 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             <button onClick={()=>setSeleccionados(new Set())} style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:12, marginLeft:"auto" }}>✕ Deseleccionar</button>
           </div>
         )}
-        {/* Encabezado de columnas clickeable (2026-09-06, a pedido de Gino),
-            mismo criterio que Cómputo. */}
+        {/* Tabla real con columnas ordenables/ajustables (2026-09-12, a pedido
+            de Gino: unificar con Presupuesto/Historial de acá y Presupuestos
+            de Steel CRM) — reemplaza las filas armadas con divs sueltos del
+            2026-08-24, que no tenían línea divisoria entre columnas ni
+            anchos configurables. Mismo cambio que Computo.jsx. */}
         {anidadosFiltrados.length > 0 && (
-          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", padding:"0 16px", marginBottom:4 }}>
-            <div style={{ width:15, flexShrink:0 }} />
-            <div style={{ flex:"2 1 220px", minWidth:0 }}><ColSort campo="nombre" label="Nombre" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            {/* 2026-09-07, a pedido de Gino: va después de "Nombre" (la
-                fecha ya se ve en su segunda línea) — acá solo hace falta
-                el control de orden, no otra columna que compita por ancho. */}
-            <div style={{ width:80, flexShrink:0 }}><ColSort campo="fecha" label="Fecha" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            <div style={{ flex:"1 1 130px", minWidth:0 }}><ColSort campo="tipo_trabajo" label="Tipo" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            <div style={{ flex:"1 1 110px", minWidth:0 }}><ColSort campo="_vendedor_nombre" label="Vendedor" {...{sortCampo,sortDir,ordenarPor}} /></div>
-            <div style={{ textAlign:"right", minWidth:90 }}><ColSort campo="_kg" label="Kg" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
-            <div style={{ textAlign:"right", minWidth:100 }}><ColSort campo="_monto_usd" label="Monto U$S" {...{sortCampo,sortDir,ordenarPor}} align="right" /></div>
-            <div style={{ marginLeft:"auto", width:130 }} />
+          <div style={{ overflowX:"auto" }}>
+            <div style={{ textAlign:"right", marginBottom:6 }}>
+              <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
+            </div>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <thead><tr>
+                <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
+                  <input type="checkbox" checked={anidadosFiltrados.every(a=>seleccionados.has(a.id))}
+                    onChange={()=>setSeleccionados(prev=>anidadosFiltrados.every(a=>prev.has(a.id)) ? new Set() : new Set(anidadosFiltrados.map(a=>a.id)))}
+                    style={{ width:15, height:15, cursor:"pointer" }} />
+                </ThResizable>
+                {[
+                  { h:"Nombre", campo:"nombre", k:"nombre" },
+                  { h:"Fecha", campo:"fecha", k:"fecha" },
+                  { h:"Tipo / Familia", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
+                  { h:"Kg", campo:"_kg", k:"kg" },
+                  { h:"Monto U$S", campo:"_monto_usd", k:"monto" },
+                  { h:"", campo:null, k:"acc" },
+                ].map(({h,campo,k}) => (
+                  <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
+                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
+                    width={colW[k]} onResize={w=>setColW(k,w)}
+                    onClick={()=>campo && ordenarPor(campo)}>
+                    {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
+                  </ThResizable>
+                ))}
+              </tr></thead>
+              <tbody>
+                {anidadosFiltrados.map(a=>{
+                  const nG=a.grupos?.length||0;
+                  const kg = a._kg;
+                  const monto = a._monto_usd;
+                  const vendedorNombre = a._vendedor_nombre;
+                  return(
+                    <tr key={a.id} onClick={()=>setSelId(a.id)} style={{ cursor:"pointer" }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.iron+"55"}
+                      onMouseLeave={e=>e.currentTarget.style.background=""}>
+                      <td style={TD} onClick={e=>e.stopPropagation()}>
+                        <input type="checkbox" checked={seleccionados.has(a.id)} onChange={()=>toggleSelAnidado(a.id)}
+                          style={{ width:15, height:15, cursor:"pointer" }} />
+                      </td>
+                      <td style={TD}>
+                        <div style={{ fontWeight:800, color:C.text }}>{a.nombre||"Sin nombre"}</div>
+                        <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
+                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{a.fecha||"—"}</span></td>
+                      <td style={TD}>
+                        <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</div>
+                        <div style={{ fontSize:11, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</div>
+                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
+                      <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{kg>0?n2(kg):"—"}</td>
+                      <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
+                      <td style={TD} onClick={e=>e.stopPropagation()}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          <button onClick={()=>clonarAnidado(a)} title="Clonar este anidado completo"
+                            style={{ ...BTN("ghost"), padding:"3px 7px", fontSize:11 }}>⧉</button>
+                          {/* 2026-09-02, a pedido de Gino: "Eliminar" vivía solo
+                              adentro del detalle — lo movió acá para borrar sin
+                              tener que entrar al anidado primero. */}
+                          {(usuario?.rol !== "vendedor" || !a.vendedor || String(a.vendedor) === String(usuario.id)) && (
+                            <button onClick={()=>setConfirmarDelId(a.id)} title="Eliminar este anidado"
+                              style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:15 }}>🗑</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-        {/* Lista — una fila por anidado, ancho completo (2026-08-24, mismo
-            criterio que Cómputo: mas info visible, tipo Excel) */}
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {anidadosFiltrados.map(a=>{
-            const nG=a.grupos?.length||0;
-            const kg = a._kg;
-            const monto = a._monto_usd;
-            const vendedorNombre = a._vendedor_nombre;
-            return(
-              <div key={a.id} onClick={()=>setSelId(a.id)}
-                style={{ background:C.card,border:`1px solid ${C.border}`,borderRadius:10,
-                  padding:"12px 16px",cursor:"pointer",transition:"border-color .15s",
-                  display:"flex",alignItems:"center",gap:18,flexWrap:"wrap" }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"88"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                <input type="checkbox" checked={seleccionados.has(a.id)} onChange={()=>toggleSelAnidado(a.id)}
-                  onClick={e=>e.stopPropagation()} style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }} />
-                <div style={{ flex:"2 1 220px", minWidth:0 }}>
-                  <div style={{ fontWeight:800,fontSize:14,color:C.text }}>{a.nombre||"Sin nombre"}</div>
-                  <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
-                </div>
-                {/* 2026-09-07, reportado por Gino con captura: la columna
-                    "Fecha" del encabezado (agregada el 2026-09-06) nunca
-                    tuvo una celda de valor debajo — la fecha solo se veía
-                    (mezclada) en el subtítulo de arriba. Ahora tiene su
-                    propia celda, mismo ancho que el header (80px). */}
-                <div style={{ width:80, flexShrink:0, fontSize:12, color:C.muted }}>{a.fecha||"—"}</div>
-                <div style={{ flex:"1 1 130px", minWidth:0 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Tipo / Familia</div>
-                  <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</div>
-                  <div style={{ fontSize:11, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</div>
-                </div>
-                <div style={{ flex:"1 1 110px", minWidth:0 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Vendedor</div>
-                  <div style={{ fontSize:12, color:C.text, fontWeight:600 }}>{vendedorNombre||"— Sin asignar —"}</div>
-                </div>
-                <div style={{ textAlign:"right", minWidth:90 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Kg</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:C.ok }}>{kg>0?n2(kg):"—"}</div>
-                </div>
-                <div style={{ textAlign:"right", minWidth:100 }}>
-                  <div style={{ fontSize:9, color:C.muted, textTransform:"uppercase" }}>Monto U$S</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</div>
-                </div>
-                <div style={{ display:"flex", gap:6, marginLeft:"auto" }} onClick={e=>e.stopPropagation()}>
-                  <button onClick={()=>clonarAnidado(a)} title="Clonar este anidado completo"
-                    style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11 }}>
-                    ⧉ Clonar
-                  </button>
-                  {/* 2026-09-02, a pedido de Gino: "Eliminar" vivía solo
-                      adentro del detalle — lo movió acá para borrar sin
-                      tener que entrar al anidado primero. */}
-                  {(usuario?.rol !== "vendedor" || !a.vendedor || String(a.vendedor) === String(usuario.id)) && (
-                    <button onClick={()=>setConfirmarDelId(a.id)} title="Eliminar este anidado"
-                      style={{ ...BTN("ghost"), padding:"4px 10px", fontSize:11, color:C.err, borderColor:C.err+"66" }}>
-                      🗑 Eliminar
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </>
       )}
 
