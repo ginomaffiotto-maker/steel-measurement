@@ -11,6 +11,7 @@ import Dashboard from "./components/Dashboard";
 import Config from "./components/Config";
 import Buscador from "./components/Buscador";
 import SolicitudesAsignadas from "./components/SolicitudesAsignadas";
+import ExportModal from "./components/ExportModal";
 import { hidratarFamiliasDesdeNube } from "./utils/taxonomia";
 import { useToastBus } from "./components/Toast";
 
@@ -479,6 +480,10 @@ export default function App() {
     hidratarFamiliasDesdeNube().then(cambio => { if (cambio) setFamiliasTick(t => t + 1); });
   }, [usuario?.profileId]);
   const [tcGlobal, setTcGlobal] = useState(() => loadLS("smeas_tc_global", 40));
+  // Centro de exportación (2026-09-13) — botón en el topbar, visible desde
+  // cualquier pantalla, igual criterio que Steel CRM: es una acción de uso
+  // frecuente, no algo que deba vivir escondido dentro de Config.
+  const [exportOpen, setExportOpen] = useState(false);
   // Link de invitación o de "olvidé mi contraseña": Supabase redirige acá con
   // ?type=invite o ?type=recovery en el hash de la URL. Se lee una sola vez
   // al montar (antes de que el cliente de Supabase procese y limpie el hash)
@@ -666,11 +671,16 @@ export default function App() {
                 style={{ width: 56, background: "transparent", border: "none", color: C.gold, fontWeight: 700, fontSize: 11, textAlign: "right", outline: "none" }} />
               <span style={{ fontSize: 11, color: C.muted }}>UYU</span>
             </div>
+            <button onClick={() => setExportOpen(true)}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: C.iron, border: `1px solid ${C.border}`, borderRadius: 4, padding: "5px 10px", color: C.text, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              📊 Exportar
+            </button>
             <span style={{ fontSize: 11, color: C.muted, background: C.iron, padding: "3px 10px", borderRadius: 4, border: `1px solid ${C.border}` }}>
               {usuario.emoji} {usuario.nombre}
             </span>
           </div>
         </div>
+        {exportOpen && <ExportModal usuarios={usuarios} onClose={() => setExportOpen(false)} />}
 
         {/* Tab activo */}
         <div style={{ padding: 24, flex: 1 }}>

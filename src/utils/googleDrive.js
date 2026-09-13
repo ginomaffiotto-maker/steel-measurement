@@ -154,6 +154,85 @@ export async function restoreFromDrive(clientId) {
   return JSON.parse(text); // validado con parseBackup() del lado del llamador
 }
 
+// ─── GOOGLE SHEETS: exportar datos a una hoja en vivo ──────────────────────
+// Portado 1:1 de Steel CRM (2026-09-13) — mismo token y scope (drive.file)
+// que el backup, la propia referencia de la API de Sheets lista drive.file
+// como scope válido para spreadsheets.create y para leer/escribir hojas
+// creadas por la app, así que no hace falta pedir un scope más amplio ni
+// un nuevo consentimiento de Google.
+const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
+
+async function sheetsFetch(url, opts = {}) {
+  const resp = await fetch(url, {
+    ...opts,
+    headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    const e = new Error(err.error?.message || `Sheets error ${resp.status}`);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.status === 204 ? {} : resp.json();
+}
+
+const quoteSheetName = n => `'${String(n).replace(/'/g, "''")}'`;
+
+// wb: workbook de SheetJS (window.XLSX.utils.book_new() ya poblado).
+// existingSheetId: spreadsheetId ya vinculado (guardado en tenant_settings),
+// o null/undefined para crear uno nuevo. Devuelve { spreadsheetId, url } —
+// actualiza en vez de duplicar si el vínculo ya existe y sigue siendo válido.
+export async function syncToGoogleSheet(clientId, wb, existingSheetId) {
+  await ensureToken(clientId);
+  const X = window.XLSX;
+  const nombres = wb.SheetNames;
+
+  let spreadsheetId = existingSheetId || null;
+  let existentes = [];
+  if (spreadsheetId) {
+    try {
+      const meta = await sheetsFetch(`${SHEETS_API}/${spreadsheetId}?fields=sheets.properties.title`);
+      existentes = (meta.sheets || []).map(s => s.properties.title);
+    } catch (e) {
+      if (e.status === 404 || e.status === 403) spreadsheetId = null;
+      else throw e;
+    }
+  }
+
+  if (!spreadsheetId) {
+    const fecha = new Date().toISOString().split('T')[0];
+    const created = await sheetsFetch(SHEETS_API, {
+      method: 'POST',
+      body: JSON.stringify({
+        properties: { title: `Steel Costos ${fecha}` },
+        sheets: nombres.map(title => ({ properties: { title } })),
+      }),
+    });
+    spreadsheetId = created.spreadsheetId;
+    existentes = nombres;
+  } else {
+    const faltantes = nombres.filter(n => !existentes.includes(n));
+    if (faltantes.length) {
+      await sheetsFetch(`${SHEETS_API}/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        body: JSON.stringify({ requests: faltantes.map(title => ({ addSheet: { properties: { title } } })) }),
+      });
+    }
+  }
+
+  for (const nombre of nombres) {
+    const rows = X.utils.sheet_to_json(wb.Sheets[nombre], { header: 1 });
+    const q = quoteSheetName(nombre);
+    await sheetsFetch(`${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(q + '!A1:ZZ20000')}:clear`, { method: 'POST', body: '{}' });
+    await sheetsFetch(`${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(q + '!A1')}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      body: JSON.stringify({ values: rows, majorDimension: 'ROWS' }),
+    });
+  }
+
+  return { spreadsheetId, url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` };
+}
+
 // ── Formatear fecha legible ───────────────────────────────────────────────
 export function formatBackupDate(iso) {
   if (!iso) return '—';
