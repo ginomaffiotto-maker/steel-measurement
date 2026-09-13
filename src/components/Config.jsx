@@ -471,6 +471,30 @@ function BackupYDatos({ usuario }) {
   const [driveRestorePend, setDriveRestorePend] = useState(null);
   const driveIntervalRef = useRef(null);
 
+  // Sync entre dispositivos (2026-09-12, a pedido de Gino — mismo patrón que
+  // empresa/moneda/numeración: gana la nube al montar, con backfill si este
+  // dispositivo ya tenía un Client ID cargado y la nube todavía no tiene
+  // nada). Antes vivía 100% local por navegador — a diferencia de Steel CRM
+  // (que ya lo sincroniza vía Config desde hoy también), acá no había forma
+  // de compartirlo entre la PC de trabajo y otro dispositivo del mismo
+  // usuario sin volver a pegarlo a mano.
+  const driveCloudReady = useRef(false);
+  useEffect(() => {
+    loadTenantSettingDB("drive_client_id").then(remoto => {
+      if (remoto) {
+        setDriveClientId(remoto);
+        localStorage.setItem("smeas_drive_client_id", remoto);
+      } else if (driveClientId) {
+        saveTenantSettingDB("drive_client_id", driveClientId).catch(err => console.warn("saveTenantSettingDB drive_client_id (backfill)", err));
+      }
+      driveCloudReady.current = true;
+    }).catch(err => { console.warn("[Fase 5] No se pudo leer el Client ID de Drive de la nube:", err); driveCloudReady.current = true; });
+    loadTenantSettingDB("drive_freq").then(remoto => {
+      if (remoto) { setDriveFreq(remoto); localStorage.setItem("smeas_drive_freq", remoto); }
+    }).catch(err => console.warn("[Fase 5] No se pudo leer la frecuencia de Drive de la nube:", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runBackup = useCallback(async () => {
     if (!driveClientId) return;
     setDriveLoading(true); setDriveStatus("Guardando en Drive...");
@@ -490,9 +514,20 @@ function BackupYDatos({ usuario }) {
     return () => { if (driveIntervalRef.current) clearInterval(driveIntervalRef.current); };
   }, [driveFreq, driveClientId, runBackup]);
 
-  function saveDriveSettings() {
-    localStorage.setItem("smeas_drive_client_id", driveClientId);
-    localStorage.setItem("smeas_drive_freq", driveFreq);
+  function saveDriveSettings(overrides = {}) {
+    // overrides cubre el caso del <select> de frecuencia: setDriveFreq() y
+    // esta llamada corren en el mismo tick, así que leer `driveFreq` acá
+    // todavía daría el valor viejo (setState es asíncrono) — el caller pasa
+    // el valor nuevo explícito en vez de depender del closure (mismo bug ya
+    // corregido en Steel CRM el 2026-09-12).
+    const clientId = overrides.clientId ?? driveClientId;
+    const freq = overrides.freq ?? driveFreq;
+    localStorage.setItem("smeas_drive_client_id", clientId);
+    localStorage.setItem("smeas_drive_freq", freq);
+    if (driveCloudReady.current) {
+      saveTenantSettingDB("drive_client_id", clientId).catch(err => console.warn("saveTenantSettingDB drive_client_id", err));
+      saveTenantSettingDB("drive_freq", freq).catch(err => console.warn("saveTenantSettingDB drive_freq", err));
+    }
   }
   async function handleConnect() {
     if (!driveClientId.trim()) { setDriveStatus("❌ Ingresá el Client ID"); return; }
@@ -580,13 +615,13 @@ function BackupYDatos({ usuario }) {
           <div>
             <label style={LBL}>Client ID de Google</label>
             <input style={{ ...INP, fontFamily:"monospace", fontSize:11 }} value={driveClientId}
-              onChange={e => setDriveClientId(e.target.value.trim())} placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
+              onChange={e => setDriveClientId(e.target.value.trim())} onBlur={() => saveDriveSettings()} placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
               disabled={!puedeEliminar(usuario)} />
           </div>
           <div>
             <label style={LBL}>Frecuencia de respaldo automático</label>
             <select style={INP} value={driveFreq} disabled={!puedeEliminar(usuario)}
-              onChange={e => { setDriveFreq(e.target.value); saveDriveSettings(); }}>
+              onChange={e => { const v = e.target.value; setDriveFreq(v); saveDriveSettings({ freq: v }); }}>
               <option value="manual">Solo manual</option>
               <option value="1h">Cada hora</option>
               <option value="1d">Cada día</option>
@@ -599,10 +634,10 @@ function BackupYDatos({ usuario }) {
             <button onClick={handleConnect} disabled={driveLoading} style={{ ...BTN("ghost"), borderColor:"#34a85366", color:"#34a853" }}>
               {driveConnected ? "Reconectar" : "Conectar"}
             </button>
-            <button onClick={runBackup} disabled={driveLoading || !driveConnected} style={{ ...BTN("ghost"), borderColor:C.info+"66", color:C.info }}>
+            <button onClick={runBackup} disabled={driveLoading || !driveClientId.trim()} style={{ ...BTN("ghost"), borderColor:C.info+"66", color:C.info }}>
               Respaldar ahora
             </button>
-            <button onClick={handleRestoreDrive} disabled={driveLoading || !driveConnected} style={{ ...BTN("ghost") }}>
+            <button onClick={handleRestoreDrive} disabled={driveLoading || !driveClientId.trim()} style={{ ...BTN("ghost") }}>
               Restaurar desde Drive
             </button>
           </div>
