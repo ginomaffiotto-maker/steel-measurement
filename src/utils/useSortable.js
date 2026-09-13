@@ -127,6 +127,13 @@ export function sumAnchos(widths) {
 // SortTH de steelCRM, adaptado al patrón de este repo (headers armados
 // inline con onClick de ordenarPor, sin un componente <th> compartido
 // previo). Sin `width`/`onResize`, se comporta igual que un <th> normal.
+// 2026-09-13: le faltaban 2 cosas que SortTH sí tiene, causa real de que
+// Costos nunca se sintiera tan sólido como Presupuestos de Steel CRM —
+// (1) sin `minWidth` (solo tenía `maxWidth`), la columna se podía
+// comprimir por debajo de su ancho real en vez de quedar fija de los dos
+// lados; (2) sin `stopPropagation` en el `onClick` del handle, soltar el
+// mouse después de arrastrar también reordenaba la columna (el click
+// burbujeaba hasta el `<th>`, que tiene su propio `onClick` de orden).
 export function ThResizable({ children, style, width, onResize, minWidth = 40, onClick, title }) {
   function iniciarResize(e) {
     e.preventDefault(); e.stopPropagation();
@@ -138,10 +145,10 @@ export function ThResizable({ children, style, width, onResize, minWidth = 40, o
   }
   return (
     <th onClick={onClick} title={title}
-      style={{ ...style, position: "relative", ...(width ? { width, maxWidth: width } : {}) }}>
+      style={{ ...style, position: "relative", ...(width ? { width, minWidth: width, maxWidth: width } : {}) }}>
       {children}
       {onResize && (
-        <span onMouseDown={iniciarResize}
+        <span onMouseDown={iniciarResize} onClick={e => e.stopPropagation()}
           style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
       )}
     </th>
