@@ -169,8 +169,8 @@ por `tenant_id` vía RLS + Supabase Auth (`profiles`) — desde 2026-09-03,
 un segundo nivel de RLS ("candado de dueño") también restringe por
 propiedad en 7 tablas más sensibles (`ENTIDADES-COMPARTIDAS.md` §8), y
 desde 2026-09-04 `profiles.acceso_crm`/`acceso_costos` controla el acceso
-a cada producto por separado (**solo verificado en el cliente, no en
-RLS** — límite conocido, ver misma sección).
+a cada producto por separado — desde 2026-09-12 también con policies
+RESTRICTIVE de RLS, no solo en el cliente (`ENTIDADES-COMPARTIDAS.md` §8).
 
 ---
 

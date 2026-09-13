@@ -445,6 +445,46 @@ directamente ausentes en una, un tercero con estado desactualizado).
 - Kanban muestra por defecto el pipeline propio del vendedor logueado
   (antes, el de todo el equipo).
 
+## 2026-09-12 — Cierra los dos límites de RLS conocidos: acceso por módulo y DELETE admin-only en el resto del esquema
+
+- **Control de acceso por módulo, ahora también en RLS** — hasta acá
+  `profiles.acceso_crm`/`acceso_costos` (04/9) solo se verificaba al
+  hacer login; con la sesión ya abierta, nada impedía leer/escribir
+  tablas del otro módulo pegándole directo a la API. Dos helpers +
+  policies RESTRICTIVE (se combinan con AND sobre las policies
+  permisivas ya existentes, sin tocarlas) sobre ~37 tablas de Steel
+  Costos y 15 de Steel CRM. `presupuestos_crm` queda deliberadamente
+  compartida ("alcance A", decisión explícita con Gino) porque Steel
+  Costos necesita leerla/escribirla para "Enviar a Steel CRM".
+- **DELETE (purga real) restringido a admin, extendido a 16 tablas
+  más** (antes solo cubría las tablas con candado de dueño): `clientes`/
+  `obras`/`empresas`/`competencia` en un lote, 12 más (`metas`,
+  `categorias_trabajo`, biblioteca, tarifario_config, etc.) en un
+  segundo — dejando afuera, con evidencia real por grep de código, ~31
+  tablas con patrón de reemplazo total/cascada que "solo admin" hubiera
+  roto.
+- **`autor_id` real en las 6 tablas de Comentarios** (antes solo
+  `autor` en texto libre) — DELETE (RLS) pasa de "cualquiera del tenant"
+  a "autor propio o admin/supervisor", con backfill best-effort del
+  autor real cuando el nombre matchea a una sola persona.
+- **RPC `actualizar_estado_crm_en_costos()`**: Aceptar/No aprobar/Reabrir
+  en Steel CRM ahora también actualiza el `estado` real del cálculo
+  vinculado en Steel Costos (antes `estado_crm` era puramente
+  informativo) — security definer porque el candado de dueño de
+  `presupuestos_sm` normalmente bloquearía ese UPDATE (el vendedor de
+  CRM no suele ser quien hizo el cálculo). Conectada a una alarma nueva
+  en Steel CRM ("Cálculo listo en Steel Costos").
+- **Trazabilidad Solicitud→...→Presupuesto, ahora también directa**:
+  `anidados.solicitud_id`/`presupuestos_sm.solicitud_id` (antes solo
+  `computos.solicitud_id`, 05/9) — permite crear un Anidado o un
+  Presupuesto directo desde "Mis solicitudes asignadas" sin pasar por
+  Cómputo. `anidados.computo_id` (mismo día) cierra el eslabón
+  Cómputo→Anidado que faltaba en esa misma cadena.
+- **Fix real**: `solicitudes.mensaje_cliente` (el mail/WhatsApp original
+  pegado en el formulario) existía desde antes pero nunca se
+  sincronizaba — cerrado para que "Mis solicitudes asignadas" (que lee
+  la tabla directo) pueda mostrarlo.
+
 ---
 
 ## Mantenimiento de este documento

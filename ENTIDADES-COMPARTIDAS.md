@@ -49,7 +49,9 @@ local y a qué función de `storage.js` corresponde cada tabla.
 | Tabla | PK | FKs | Notas |
 |---|---|---|---|
 | `tenants` | `id` | — | Una fila por empresa cliente del SaaS. Hoy solo existe un tenant real. |
-| `profiles` | `id` (= `auth.users.id`) | `tenant_id → tenants` | El usuario real de Supabase Auth. `rol` en (`admin`,`supervisor`,`vendedor`). No tiene trigger de `tenant_id` automático (se crea explícito al alta, antes de que exista sesión). **`acceso_crm`/`acceso_costos`** (booleanos, default `true` — 2026-09-04): control de acceso por módulo, para poder vender Steel CRM y Steel Costos por separado dentro de la misma empresa — el default `true` no bloquea a nadie ya invitado, el bloqueo real arranca cuando alguien destilda el checkbox correspondiente en Config > Usuarios (mismo campo, editable desde cualquiera de los dos sistemas). **Solo aplicado en el cliente (React)** — RLS hoy no lo verifica, solo `tenant_id`; alguien con credenciales reales pero `acceso_crm:false` podría igual leer/escribir contra la API de Supabase directo. `invitado_pendiente` (boolean, default `false` — 2026-09-03): se marca `true` al invitar, se limpia sola en el primer login real — alimenta el badge "⏳ Invitado — pendiente" en Config > Usuarios de los dos sistemas. |
+| `profiles` | `id` (= `auth.users.id`) | `tenant_id → tenants` | El usuario real de Supabase Auth. `rol` en (`admin`,`supervisor`,`vendedor`). No tiene trigger de `tenant_id` automático (se crea explícito al alta, antes de que exista sesión). **`acceso_crm`/`acceso_costos`** (booleanos, default `true` — 2026-09-04): control de acceso por módulo, para poder vender Steel CRM y Steel Costos por separado dentro de la misma empresa — el default `true` no bloquea a nadie ya invitado, el bloqueo real arranca cuando alguien destilda el checkbox correspondiente en Config > Usuarios (mismo campo, editable desde cualquiera de los dos sistemas). Hasta el 2026-09-11 solo se aplicaba en el cliente (React); desde el
+2026-09-12 también hay policies RESTRICTIVE de RLS que lo hacen cumplir
+a nivel de base — ver §8. `invitado_pendiente` (boolean, default `false` — 2026-09-03): se marca `true` al invitar, se limpia sola en el primer login real — alimenta el badge "⏳ Invitado — pendiente" en Config > Usuarios de los dos sistemas. |
 | `tenant_settings` | (`tenant_id`,`key`) | `tenant_id → tenants` | Config libre por tenant, `value jsonb`. Uso real desde 2026-09-02: Config completo de Steel CRM (key `"config"`) y la API key de IA (key `"ai_key"`) viajan entre dispositivos por acá; Steel Costos sincroniza acá mismo nombre de empresa/datos de empresa/numeración/moneda, cada ajuste con su propia key. |
 | `categorias_trabajo` | `id` | `tenant_id → tenants` | Familia/Categoría de trabajo — hasta 2026-09-06 era una constante fija en código (`CATEGORIAS_DEFAULT` en steelcrm, `utils/taxonomia.js` en Steel Costos); ahora es tabla real, **compartida entre los dos sistemas**, con alta al vuelo desde cualquiera de los dos (`CategoriaField`/`CategoriaRapidaModal` en Steel CRM, el mismo flujo ya existente en Steel Costos). `familia`+`categoria` son texto (`unique(tenant_id, categoria)`) — los campos `categoria`/`tipo` de `presupuestos_crm`/`solicitudes`/`computos` la referencian **por valor, no por FK** (sin columna uuid de por medio), mismo criterio que ya tenía la taxonomía antes de ser tabla. Backfill automático de las 32 categorías canónicas (Predictor Eq v25) por cada tenant existente. |
 
@@ -179,6 +181,9 @@ flowchart TB
     LINK -->|"presupuesto_sm_id"| PSM
     SOL -->|"solicitud_id (2026-09-05, FK real)"| COMPU
     COMPU -->|"computo_id (2026-09-12, FK real)"| ANID
+    SOL -.->|"solicitud_id directo (2026-09-12)"| ANID
+    SOL -.->|"solicitud_id directo (2026-09-12)"| PSM
+    LINK -.->|"actualizar_estado_crm_en_costos() (2026-09-12, RPC)"| PSM
 ```
 
 **Cómo leer las líneas punteadas**: son vínculos débiles, sin integridad
@@ -216,7 +221,7 @@ el resto del diagrama.
 
 | Tabla | PK | FKs | Local↔DB (`storage.js`) | Soft-delete | Notas |
 |---|---|---|---|---|---|
-| `presupuestos_sm` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles` | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. `obra` (texto) convive con `obra_id` (real, resuelto contra la lista ya cargada — sin auto-creación silenciosa, a diferencia de `cliente_id`/`resolverClienteId`; la única forma de crear una obra nueva es `ObraRapidaModal`). `empresa` (texto, razón social — el campo local se llama `cliente`, no `empresa`) tenía columna real en la base pero **nunca se sincronizaba** (bug real, cerrado 2026-08-29 junto con `empresa_id`): quedaba explícitamente descartado antes del insert. **`costo_real_usd`** (2026-09-03) — Steel Costos lo calcula (desglose real por rubro, sin markup) y lo guarda; Steel CRM solo lee vía `presupuesto_calculo_link` (§6). **`estado_crm`** (2026-09-04) — espejo inverso de `estado_sm`: solo referencia, escrito desde Steel CRM cuando cambia el `estado_nativo` de un presupuesto ya vinculado, nunca pisa el `estado` real de Steel Costos. **Candado de dueño (RLS, 2026-09-03) — ver §8**: mismo criterio que `presupuestos_crm`. |
+| `presupuestos_sm` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `clonado_de_id→presupuestos_sm` (self), `vendedor→profiles`, `solicitud_id→solicitudes` (2026-09-12) | `loadDBPresupuestosSM`/`saveDBPresupuestoSM` | ✅ | `codigo_calculo` es el identificador que exporta a Steel CRM (§6) — antes NOT NULL, hoy nullable (presupuestos históricos sin uno). `estado` (4 valores: `borrador/enviado/aprobado/rechazado`) es un vocabulario **distinto** al `estado_nativo` de Steel CRM — nunca se mapean 1:1. `obra` (texto) convive con `obra_id` (real, resuelto contra la lista ya cargada — sin auto-creación silenciosa, a diferencia de `cliente_id`/`resolverClienteId`; la única forma de crear una obra nueva es `ObraRapidaModal`). `empresa` (texto, razón social — el campo local se llama `cliente`, no `empresa`) tenía columna real en la base pero **nunca se sincronizaba** (bug real, cerrado 2026-08-29 junto con `empresa_id`): quedaba explícitamente descartado antes del insert. **`costo_real_usd`** (2026-09-03) — Steel Costos lo calcula (desglose real por rubro, sin markup) y lo guarda; Steel CRM solo lee vía `presupuesto_calculo_link` (§6). **`estado_crm`** (2026-09-04) — espejo inverso de `estado_sm`: se escribe desde Steel CRM cuando cambia el `estado_nativo` de un presupuesto ya vinculado. Hasta el 2026-09-11 era puramente informativo; desde el 2026-09-12, al Aceptar/No aprobar/Reabrir en Steel CRM, la RPC `actualizar_estado_crm_en_costos()` (security definer) **sí** actualiza también `estado` acá — ver §6, mecanismo nuevo. **Candado de dueño (RLS, 2026-09-03) — ver §8**: mismo criterio que `presupuestos_crm`, salvo por esa RPC puntual, que la esquiva a propósito (ver §6). |
 | `items_presupuesto_sm` | `id` | `presupuesto_id→presupuestos_sm`, `computo_id→computos` (opcional), `anidado_id→anidados` (opcional) | `loadDBItems`/`saveDBItem` | — | Un ítem puede traer material de un cómputo o de un anidado, no ambos a la vez en general. |
 | `item_hierros`, `item_mat_generales`, `item_mo_fabricacion`, `item_mo_montajes`, `item_terc_fabricacion`, `item_terc_montajes`, `item_traslados`, `item_corte_pantografo`, `item_maquinado` | `id` c/u | `item_id→items_presupuesto_sm` | dentro de `saveDBItem` | — | Los 10 rubros de costo por ítem (9 tablas de línea + 1 de tratamiento). `item_maquinado` (2026-09-02): Plegado/Cilindrado/Corte de máquina, se auto-completa al importar materiales de Anidado si la pieza tenía alguna marcada. |
 | `item_trat_superficie` | `id` (unique por item) | `item_id→items_presupuesto_sm` (1:1) | dentro de `saveDBItem` | — | `item_trat_pinturas`/`item_trat_otros` cuelgan de esta, no directo del ítem. |
@@ -224,7 +229,7 @@ el resto del diagrama.
 | `computos` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles`, `solicitud_id→solicitudes` (2026-09-05) | `loadDBComputos`/`saveDBComputo` | ✅ | `categoria`/`tipo_trabajo` viajan de acá hacia Anidado y Presupuesto (traspaso automático, no piso lo ya cargado a mano). `obra`/`obra_id` y `empresa`/`empresa_id` son campos nuevos (2026-08-29) — antes Cómputo no distinguía "obra" de su propio `nombre`, y no tenía ninguna columna de empresa (el valor sólo viajaba embebido en el cliente vía `resolverClienteId`). **`solicitud_id`** — primer FK real que cruza de Steel Costos hacia una tabla propiedad de Steel CRM (nullable, `on delete set null`); antes "Crear cómputo" desde una solicitud asignada solo dejaba un payload en `sessionStorage` sin ningún rastro persistente — ver mecanismo #4/#5 en §6. |
 | `computo_items` | `id` | `computo_id→computos` | dentro de `saveDBComputo` | — | |
 | `computo_piezas` | `id` | `computo_item_id→computo_items` | dentro de `saveDBComputo` | — | Perfil o plancha, con % de granallado/pintura/galvanizado y corte por máquina. |
-| `anidados` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles`, `computo_id→computos` (2026-09-12) | `loadDBAnidados`/`saveDBAnidado` | ✅ | `obra` (texto) convive con `obra_id` (real) — mismo criterio que `presupuestos_sm`. `empresa_id` es nueva; `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día — faltaba en el allowlist de columnas). `computo_id` — "Importar desde cómputo" (Anidado.jsx) ya copiaba materiales/categoría/vendedor/`link_archivos` del cómputo de origen, pero nunca guardaba el vínculo en sí; cierra la trazabilidad Solicitud→Cómputo→Anidado→Presupuesto (mismo criterio que `computos.solicitud_id`, §6, e `items_presupuesto_sm.anidado_id`). |
+| `anidados` | `id` | `cliente_id→clientes`, `obra_id→obras` (2026-08-29), `empresa_id→empresas` (2026-08-29), `vendedor→profiles`, `computo_id→computos` (2026-09-12) | `loadDBAnidados`/`saveDBAnidado` | ✅ | `obra` (texto) convive con `obra_id` (real) — mismo criterio que `presupuestos_sm`. `empresa_id` es nueva; `empresa` (texto) ya existía en la tabla pero nunca se sincronizaba (bug real, cerrado el mismo día — faltaba en el allowlist de columnas). `computo_id` — "Importar desde cómputo" (Anidado.jsx) ya copiaba materiales/categoría/vendedor/`link_archivos` del cómputo de origen, pero nunca guardaba el vínculo en sí; cierra la trazabilidad Solicitud→Cómputo→Anidado→Presupuesto (mismo criterio que `computos.solicitud_id`, §6, e `items_presupuesto_sm.anidado_id`). `solicitud_id→solicitudes` (2026-09-12, directa, no solo heredada vía `computo_id`) — desde "Mis solicitudes asignadas" ahora se puede crear directamente un Anidado o un Presupuesto sin pasar por Cómputo, y sin este campo esa trazabilidad se perdía al saltear etapas. |
 | `anidado_grupos` | `id` | `anidado_id→anidados` | dentro de `saveDBAnidado` | — | `resultado jsonb` = salida calculada del algoritmo de optimización de corte (única columna jsonb "libre" del esquema, a propósito). |
 | `anidado_piezas` | `id` | `grupo_id→anidado_grupos` | dentro de `saveDBAnidado` | — | |
 | `historial_trabajos` | `id` | `cliente_id→clientes`, `vendedor→profiles`, `empresa_id→empresas` (2026-09-05) | `loadDBHistorialTrabajos`/`saveDBTrabajoHistorico` | ✅ | Benchmark ("Comparativa"): % de cada rubro sobre el total (`pct_hier`, `pct_mat`, `pct_mo_fab`, etc.) — insumo de Predictor Eq. `horas_fab_est/real`, `horas_mon_est/real` (2026-09-05) agregados. Queda **afuera a propósito** del candado de dueño (RLS) — Gino solo lo pidió para Cómputo/Anidado/Presupuesto. |
@@ -238,7 +243,7 @@ el resto del diagrama.
 
 ## 6. El vínculo cruzado Steel CRM ↔ Steel Costos
 
-Hay **cinco mecanismos** en el esquema — cuatro activos, uno viejo dado de baja:
+Hay **seis mecanismos** en el esquema — cinco activos, uno viejo dado de baja:
 
 1. **`presupuesto_calculo_link` — activo desde 2026-08-29 (reemplaza al `.json` manual).**
    Tabla real (`presupuesto_crm_id`, `presupuesto_sm_id`, ambas FK con
@@ -320,6 +325,27 @@ Hay **cinco mecanismos** en el esquema — cuatro activos, uno viejo dado de baj
    Costos escribiendo una referencia dura a una tabla propiedad de Steel
    CRM (antes solo la leía).
 
+6. **`actualizar_estado_crm_en_costos()` — RPC real, activo desde
+   2026-09-12.** Al Aceptar/No aprobar/Reabrir un presupuesto en Steel CRM,
+   esta función (security definer) actualiza `presupuestos_sm.estado_crm`
+   **y también** `presupuestos_sm.estado` del cálculo vinculado —
+   convierte a `estado_crm` de puramente informativo a un disparador real
+   de cambio de estado del otro lado. Existe como RPC (no un `UPDATE`
+   directo desde el cliente) porque `presupuestos_sm` tiene candado de
+   dueño (RLS, 2026-09-03) — el vendedor que acepta en CRM normalmente no
+   es quien hizo el cálculo en Costos, así que un `UPDATE` normal fallaría
+   por RLS la mayoría de las veces. El único chequeo real dentro de la
+   función es `tenant_id`, a propósito — es una decisión comercial
+   legítima entre sistemas, no alguien tocando el cálculo de otro sin
+   motivo. Conectado a una alarma nueva en Steel CRM ("Cálculo listo en
+   Steel Costos", con su propio toggle en Config > Alarmas).
+   `anidados.solicitud_id`/`presupuestos_sm.solicitud_id` (mismo commit)
+   extienden la trazabilidad directa Solicitud→Anidado y
+   Solicitud→Presupuesto (antes solo existía indirecta, vía
+   `computos.solicitud_id` + `computo_id`) — necesario porque ahora se
+   puede crear un Anidado o un Presupuesto directo desde "Mis solicitudes
+   asignadas", saltando la etapa de Cómputo.
+
 **El otro vínculo real, más simple**: `clientes` es una tabla **única**,
 compartida entre los dos sistemas (no hay `clientes_crm`/`clientes_sm`) —
 un cliente cargado desde cualquiera de los dos aparece en el otro.
@@ -382,7 +408,8 @@ logueado en la empresa podía leer y escribir cualquier fila, sin importar
 quién la había creado (el filtro de "esto es tuyo" vivía solo en la UI, ej.
 el vendedor que no veía presupuestos ajenos en la tabla). A partir de esa
 fecha se agregó un segundo nivel de restricción, real a nivel de base — no
-solo escondiendo un botón — sobre 7 tablas, en 3 rondas:
+solo escondiendo un botón — sobre 7 tablas + las 6 de Comentarios, en 4
+rondas:
 
 **Ronda 1 (2026-09-03) — `presupuestos_crm`, `computos`, `anidados`,
 `presupuestos_sm`.** SELECT/INSERT sin cambios (todo el equipo ve todo,
@@ -418,20 +445,103 @@ resto de las entidades" pendiente desde la ronda 1.**
   quedaría bloqueado porque la fila resultante ya no cumple "asignado_a =
   auth.uid()", aunque quien edita sí era el dueño antes del cambio.
 
+**Ronda 4 (2026-09-12) — `autor_id` real en las 6 tablas de Comentarios**
+(`comentarios_presupuesto`, `comentarios_obra`, `comentarios_ficha_aceptado`,
+`comentarios_computo`, `comentarios_anidado`, `comentarios_presupuesto_sm`).
+Hasta acá el autor de un comentario era solo texto libre (columna `autor`,
+nombre) sin ninguna referencia real a `profiles` — la regla "autor propio o
+admin/supervisor puede borrar" solo se aplicaba en la UI, cualquiera del
+tenant podía borrar un comentario ajeno pegándole directo a la API. Columna
+`autor_id uuid → profiles` nueva (nullable, completada sola por trigger en
+cada INSERT nuevo) + **backfill best-effort** de lo ya existente:
+matchea `autor` contra `profiles.nombre` del mismo tenant, solo si matchea
+a **exactamente una** persona (ambiguo o sin match → queda `null`, nunca
+asigna al azar). SELECT/INSERT/UPDATE sin cambios; DELETE ahora sí
+restringido a nivel de base a `autor_id = auth.uid()` o admin/supervisor —
+antes era la única entidad "deliberadamente afuera" del candado por este
+motivo puntual, ver el párrafo de abajo.
+
 **Deliberadamente afuera del candado de dueño**: `historial_trabajos`
 (Gino solo lo pidió para Cómputo/Anidado/Presupuesto), `clientes`/`obras`/
 `empresas` (Gino confirmó que cualquiera puede modificarlos, sin concepto
 de dueño), `historial_interacciones` (sin flujo de edición — solo el
 borrado quedó restringido a admin/supervisor, sin excepción de "quien lo
-cargó", ver §4), y comentarios internos (los ve y agrega cualquiera, sin
-relación con el dueño del padre).
+cargó", ver §4).
 
-**Límite conocido, sin resolver a propósito**: el control de acceso por
-módulo (`profiles.acceso_crm`/`acceso_costos`, §2) solo se verifica en el
-cliente — RLS no lo chequea, solo `tenant_id`. Bajo riesgo hoy (todas las
-cuentas reales tienen ambos módulos activados por default), pero alguien
-con credenciales reales y `acceso_crm:false` podría igual leer/escribir
-contra la API de Supabase directo, saltándose la app.
+### DELETE (purga real) restringido a admin — extendido al resto del esquema (2026-09-12)
+
+Hasta el 2026-09-11, fuera de las tablas con candado de dueño, el DELETE
+real (purga definitiva — distinto del soft-delete/UPDATE que dispara
+"Eliminar" desde la UI, abierto a cualquier rol desde el 25/8) solo estaba
+bloqueado en la UI: cualquier sesión válida podía pegarle un DELETE directo
+a la API de Supabase. Cerrado en dos lotes:
+
+- **Lote 1**: `clientes`, `obras`, `empresas`, `competencia` — políticas
+  separadas por operación (antes una sola "for all" genérica), DELETE
+  restringido a `current_user_rol() = 'admin'`.
+- **Lote 2**, 12 tablas más: `tenant_settings`, `descuentos_pendientes`,
+  `solicitud_versiones`, `metas`, `historial_trabajos`,
+  `biblioteca_perfiles`/`planchuelas`/`planchas`/`rejillas`,
+  `material_historial_precios`, `categorias_trabajo`, `tarifario_config`.
+
+**Deliberadamente afuera de los dos lotes, con evidencia real por grep de
+código (no supuesta)**: `obra_presupuestos`, `meta_usuarios`,
+`presupuesto_calculo_link` (se borran y reinsertan enteros al editar, por
+cualquier rol); las 7 tablas de `tarifario_*` de línea (mismo patrón de
+reemplazo total de una lista de precios); `items_presupuesto_sm` y sus 12
+tablas hijas, `computo_items`/`computo_piezas`, `anidado_grupos`/
+`anidado_piezas` (cuelgan con `on delete cascade` del padre, que se borra
+por ítem al editar — sin confirmar si Postgres aplica RLS también al
+borrado en cascada, restringir la hija podría romper el DELETE legítimo
+del padre); `ficha_ordenes_compra`/`ficha_facturas`/`ficha_fechas_pago`
+(se reemplazan enteras al guardar una Ficha, por el dueño o admin/
+supervisor — "solo admin" rompería el guardado normal de un vendedor
+dueño). Estas ~31 tablas necesitan una policy más fina (dueño-o-admin,
+no "solo admin" a secas) en vez de la que ya tienen las demás — queda
+como punto aparte, no resuelto en esta pasada. También sin gate de rol en
+la UI, encontrado de paso: las herramientas de "clientes/obras duplicados"
+de Importar > Mantenimiento hacen DELETE real y esa pestaña no está
+restringida a admin/supervisor — con las policies nuevas, si un no-admin
+las usa, el DELETE falla en silencio (`catch` con solo `console.warn`, sin
+toast) — anotado, no corregido en esta pasada.
+
+### Control de acceso por módulo — ahora también en RLS, no solo en el login (2026-09-12)
+
+**Cierra el límite que este documento marcaba como "sin resolver a
+propósito" hasta el 2026-09-11.** `profiles.acceso_crm`/`acceso_costos`
+(§2) hasta acá solo se usaban para desloguear a alguien sin el módulo
+correspondiente al iniciar sesión — con la sesión ya abierta, nada impedía
+leer/escribir tablas del otro módulo pegándole directo a la API. Ahora,
+además: dos helpers (`current_user_acceso_crm()`/`current_user_acceso_costos()`,
+mismo patrón que `current_user_rol()`) y una policy **RESTRICTIVE** por
+tabla — en Postgres, una policy restrictive se combina con AND sobre
+cualquier policy permisiva ya existente, así que no hizo falta tocar ni
+conocer la condición de las policies de dueño/rol ya armadas en las rondas
+de arriba, solo sumar la restricción de módulo encima.
+
+- **Solo-Costos** (`current_user_acceso_costos()`): las ~37 tablas
+  propiedad de Steel Costos (`presupuestos_sm` y sus hijas, `computos`,
+  `anidados` y sus hijas, `historial_trabajos`, biblioteca, tarifario,
+  comentarios de Costos).
+- **Solo-CRM** (`current_user_acceso_crm()`): 15 tablas — `seguimientos`,
+  `historial_interacciones`, `competencia`, `descuentos_pendientes`,
+  `metas`/`meta_usuarios`, `fichas_aceptados` y sus hijas, `solicitud_versiones`,
+  comentarios de presupuesto/obra/ficha.
+- **Sin restricción de módulo, tratadas como compartidas**: `tenants`/
+  `profiles` (hacen falta para saber si tenés acceso, antes de poder
+  chequear el acceso), `clientes`, `obras`, `empresas`,
+  `categorias_trabajo`, `tenant_settings`, `presupuesto_calculo_link`,
+  `solicitudes` — confirmado por código que Steel Costos realmente lee/
+  escribe estas tablas (algunas parecían "solo CRM" a primera vista y no
+  lo son). **`presupuestos_crm` también queda sin restricción, decisión
+  explícita con Gino (2026-09-12) — "alcance A", el más simple**: aunque
+  nominalmente es una tabla de CRM, Steel Costos necesita leerla/escribirla
+  para "Enviar a Steel CRM" y el badge de vínculo. Limitación conocida y
+  aceptada por ahora: un usuario Costos-only podría, en teoría, leer
+  presupuestos de CRM sin relación con él si consulta la API directo — no
+  importa hoy (un solo tenant, sin clientes externos); si en el futuro hay
+  un cliente real de un solo módulo, retomar con una policy más precisa
+  (limitar a filas con un `presupuesto_calculo_link` real).
 
 ---
 
