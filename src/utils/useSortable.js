@@ -110,17 +110,22 @@ export function useResizableColumns(storageKey, defaults) {
   return { widths, setWidth, reset };
 }
 
-// Ancho mínimo real de la tabla para las columnas ajustables (2026-09-12,
-// bug real reportado por Gino: "las columnas al ensancharse se mueven
-// hacia el lado contrario"). Causa: con `table-layout:fixed` + la tabla en
-// `width:"100%"` pero SIN ningún `minWidth` propio, si la suma de los
-// anchos de columna queda por debajo del ancho real del contenedor, el
-// navegador estira TODAS las columnas de forma proporcional para llegar
-// al 100% — agrandar una achica a las demás para compensar, sintiéndose
-// como si se movieran "al revés". Pasarle esto como `minWidth` de la
-// `<table>` ancla su ancho real a la suma exacta de columnas (el
-// `overflowX:auto` del contenedor ya se encarga de scrollear si no entra),
-// así que nunca hace falta que el navegador redistribuya nada.
+// Ancho real de la tabla para las columnas ajustables (2026-09-12, bug real
+// reportado por Gino: "las columnas al ensancharse se mueven hacia el lado
+// contrario"). Causa: con `table-layout:fixed` + la tabla en `width:"100%"`,
+// si la suma de los anchos de columna queda por debajo del ancho real del
+// contenedor, el navegador estira TODAS las columnas de forma proporcional
+// para llegar al 100% — agrandar una achica a las demás para compensar.
+// **Corregido el 2026-09-13**: el intento original pasaba esto como
+// `minWidth` de la `<table>` (dejando `width:"100%"`) — eso solo evita que
+// las columnas se ACHIQUEN por debajo de la suma cuando el contenedor es
+// angosto, pero no evita que se ESTIREN cuando el contenedor es más ancho
+// (el caso típico en una pantalla grande), que es exactamente lo que Gino
+// seguía viendo. La corrección real es usar este valor como `width` (no
+// `minWidth`) de la `<table>` — así el navegador nunca tiene que redistribuir
+// nada: cada columna mantiene siempre su ancho exacto, el `overflowX:auto`
+// del contenedor scrollea si no entra, y si sobra espacio queda en blanco a
+// la derecha, como en Excel.
 export function sumAnchos(widths) {
   return Object.values(widths).reduce((a, b) => a + (Number(b) || 0), 0);
 }
