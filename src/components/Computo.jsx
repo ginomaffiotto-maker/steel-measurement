@@ -608,11 +608,18 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 
   // No cierra el formulario — así se puede seguir cargando largo/cantidad
   // del mismo material sin tener que volver a buscarlo cada vez.
-  const agregarPieza  = p     => { onChange({ ...item, piezas: [...item.piezas, p] }); };
-  const eliminarPieza = id    => onChange({ ...item, piezas: item.piezas.filter(p=>p.id!==id) });
+  // 2026-09-13: `onChange` ahora recibe un MUTATOR `(itemFresco) => itemNuevo`
+  // en vez del ítem ya armado — `item` (prop de este componente) puede estar
+  // desactualizado si dos ediciones se disparan sin que React re-renderice
+  // entre medio (bug real: piezas cargadas rápido, una por ítem, se perdían
+  // las DOS al recargar). El mutator corre contra el ítem más fresco del
+  // lado de `Computo` (ver `updateItemMutator`/`mutateComputo`), nunca
+  // contra esta variable `item` capturada en el render.
+  const agregarPieza  = p     => onChange(actual => ({ ...actual, piezas: [...actual.piezas, p] }));
+  const eliminarPieza = id    => onChange(actual => ({ ...actual, piezas: actual.piezas.filter(p=>p.id!==id) }));
   const piezaAEliminar = confirmarPiezaId ? item.piezas.find(p=>p.id===confirmarPiezaId) : null;
-  const editarPieza   = (id,k,v) => onChange({ ...item, piezas: item.piezas.map(p=>p.id===id?{...p,[k]:v}:p) });
-  const updatePieza   = (actualizada)  => onChange({ ...item, piezas: item.piezas.map(p=>p.id===actualizada.id?actualizada:p) });
+  const editarPieza   = (id,k,v) => onChange(actual => ({ ...actual, piezas: actual.piezas.map(p=>p.id===id?{...p,[k]:v}:p) }));
+  const updatePieza   = (actualizada)  => onChange(actual => ({ ...actual, piezas: actual.piezas.map(p=>p.id===actualizada.id?actualizada:p) }));
   // Mismo criterio que elegirMaterial() en FormPieza — sólo toca los campos
   // que dependen del material (id/nombre/kg); dimensiones, cantidad, plano
   // y el resto de la ficha de la pieza quedan intactos. No copia el precio
@@ -625,20 +632,20 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
     updatePieza(actualizada);
     setCambiandoMaterialId(null);
   };
-  const duplicarPieza = id => {
-    const idx=item.piezas.findIndex(p=>p.id===id);
-    const orig=item.piezas[idx]; if (!orig) return;
+  const duplicarPieza = id => onChange(actual => {
+    const idx=actual.piezas.findIndex(p=>p.id===id);
+    const orig=actual.piezas[idx]; if (!orig) return actual;
     const copia={...orig, id:uid(), ficha:{...(orig.ficha||fichaVacia())}};
-    const nuevas=[...item.piezas.slice(0,idx+1),copia,...item.piezas.slice(idx+1)];
-    onChange({ ...item, piezas:nuevas });
-  };
-  const moverPieza = (id,dir) => {
-    const idx=item.piezas.findIndex(p=>p.id===id);
-    if (dir===-1&&idx===0) return;
-    if (dir===1&&idx===item.piezas.length-1) return;
-    const arr=[...item.piezas]; [arr[idx],arr[idx+dir]]=[arr[idx+dir],arr[idx]];
-    onChange({ ...item, piezas:arr });
-  };
+    const nuevas=[...actual.piezas.slice(0,idx+1),copia,...actual.piezas.slice(idx+1)];
+    return { ...actual, piezas:nuevas };
+  });
+  const moverPieza = (id,dir) => onChange(actual => {
+    const idx=actual.piezas.findIndex(p=>p.id===id);
+    if (dir===-1&&idx===0) return actual;
+    if (dir===1&&idx===actual.piezas.length-1) return actual;
+    const arr=[...actual.piezas]; [arr[idx],arr[idx+dir]]=[arr[idx+dir],arr[idx]];
+    return { ...actual, piezas:arr };
+  });
 
   const { filas, totalKg:kgUd } = calcResumen(item.piezas);
   const supUd    = item.piezas.reduce((s,p)=>s+calcPieza(p).total_sup,0);
@@ -692,7 +699,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
 
           {/* Título editable */}
           <input value={item.titulo}
-            onChange={e=>{e.stopPropagation();onChange({...item,titulo:e.target.value});}}
+            onChange={e=>{e.stopPropagation();const v=e.target.value;onChange(actual=>({...actual,titulo:v}));}}
             onClick={e=>e.stopPropagation()}
             onFocus={e=>{e.stopPropagation();e.target.style.background=C.bg;e.target.style.borderColor=C.accent;}}
             onBlur={e=>{e.target.style.background="transparent";e.target.style.borderColor=C.border+"66";}}
@@ -706,7 +713,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
           <div style={{ display:"flex",alignItems:"center",gap:4 }} onClick={e=>e.stopPropagation()}>
             <span style={{ fontSize:10,color:C.muted }}>Plano:</span>
             <input type="text" placeholder="352-S-001" value={item.n_plano||""}
-              onChange={e=>onChange({...item,n_plano:e.target.value})}
+              onChange={e=>{const v=e.target.value;onChange(actual=>({...actual,n_plano:v}));}}
               style={{ ...INP,width:180,padding:"3px 6px",fontSize:11,background:"transparent",border:`1px solid ${C.border}66` }} />
           </div>
 
@@ -714,7 +721,7 @@ function TablaItem({ item, bib, onChange, expanded, onToggle, onEliminar, onClon
           <div style={{ display:"flex",alignItems:"center",gap:4 }} onClick={e=>e.stopPropagation()}>
             <span style={{ fontSize:10,color:C.muted }}>Ud:</span>
             <input type="number" min="1" value={item.cantidad??1}
-              onChange={e=>onChange({...item,cantidad:parseInt(e.target.value)||1})}
+              onChange={e=>{const v=parseInt(e.target.value)||1;onChange(actual=>({...actual,cantidad:v}));}}
               onFocus={e=>e.target.select()}
               style={{ ...INP,width:46,padding:"3px 5px",textAlign:"center",fontSize:13,fontWeight:800,color:C.accent,background:"transparent",border:`1px solid ${C.accent}55` }} />
           </div>
@@ -1081,6 +1088,41 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     }
   };
 
+  // Bug real (2026-09-13, reportado por Gino con una pieza real perdida —
+  // "Reguera N° 4" — y reproducido en QA: 2 piezas cargadas rápido, una a
+  // cada ítem, desaparecían las DOS al recargar la página, local y remoto).
+  // Causa raíz: `computo`/`item` son variables calculadas en el render
+  // ACTUAL — si dos ediciones (agregar un ítem, agregar una pieza a otro
+  // ítem) se disparan sin que React llegue a re-renderizar entre medio
+  // (edición rápida seguida, típico al cargar varias piezas), la segunda
+  // arma su objeto nuevo a partir de una base ya vieja y pisa a la primera
+  // al reemplazar el cómputo entero en el array. `mutateComputo` resuelve
+  // siempre contra el estado MÁS FRESCO (el `prev` real del updater
+  // funcional de React, no una variable capturada en el render) — el
+  // mutator corre de forma síncrona dentro de `setComputos`, así que
+  // `actualizado` ya está resuelto cuando esta función retorna.
+  const mutateComputo = (id, mutator) => {
+    let actualizado = null;
+    setComputos(prev => {
+      const current = prev.find(c => c.id === id);
+      if (!current) return prev;
+      actualizado = touch(mutator(current));
+      return prev.map(c => (c.id === id ? actualizado : c));
+    });
+    if (actualizado) dualWriteComputo(actualizado);
+    return actualizado;
+  };
+
+  // Mismo mecanismo para mutar UN ítem puntual sin perder ediciones
+  // concurrentes a otros ítems del mismo cómputo.
+  const updateItemMutator = (itemId, mutator) => {
+    if (!computo) return;
+    mutateComputo(computo.id, (current) => ({
+      ...current,
+      items: current.items.map((it) => (it.id === itemId ? mutator(it) : it)),
+    }));
+  };
+
   // Comentarios internos (2026-08-24): guardado directo, independiente del
   // guardado general del cómputo.
   const agregarComentarioComputo = async (c, comentario) => {
@@ -1219,17 +1261,18 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     dualWriteComputo(actualizado);
   };
 
-  const updateItem = (itemAct) => {
-    if (!computo) return;
-    updateComputo({ ...computo, items:computo.items.map(it=>it.id===itemAct.id?itemAct:it) });
-  };
+  // 2026-09-13: ya no arma el ítem actualizado a mano — ver `updateItemMutator`
+  // (mutateComputo más arriba), que resuelve contra el estado más fresco.
 
   const agregarItem = () => {
     if (!computo) return;
-    const n = computo.items.length+1;
-    const nuevo = itemVacio(n);
-    updateComputo({ ...computo, items:[...computo.items, nuevo] });
-    setExpandedItems(prev=>new Set([...prev, nuevo.id]));
+    let nuevoId = null;
+    mutateComputo(computo.id, (current) => {
+      const nuevo = itemVacio(current.items.length + 1);
+      nuevoId = nuevo.id;
+      return { ...current, items: [...current.items, nuevo] };
+    });
+    if (nuevoId) setExpandedItems(prev => new Set([...prev, nuevoId]));
   };
 
   const eliminarItem = (id) => {
@@ -1242,12 +1285,19 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     // pantalla para el cómputo entero (`showUndo`), aplicado acá también —
     // 7 segundos para arrepentirse sin tener que volver a cargar todo a mano.
     const itemBorrado = computo.items.find(it=>it.id===id);
-    const computoAntes = computo;
-    updateComputo({ ...computo, items:computo.items.filter(it=>it.id!==id) });
+    const idxBorrado = computo.items.findIndex(it=>it.id===id);
+    mutateComputo(computo.id, (current) => ({ ...current, items: current.items.filter(it=>it.id!==id) }));
     setExpandedItems(prev=>{ const n=new Set(prev); n.delete(id); return n; });
     if (itemBorrado) {
+      // Reinserta el ítem borrado en el array ACTUAL (no pisa el cómputo
+      // entero con una foto vieja de antes del borrado — eso descartaría
+      // cualquier otra edición hecha mientras el toast estaba en pantalla).
       showUndo(`Ítem "${itemBorrado.titulo||"Sin nombre"}" eliminado`, () => {
-        updateComputo({ ...computoAntes });
+        mutateComputo(computo.id, (current) => {
+          const items = [...current.items];
+          items.splice(Math.min(idxBorrado, items.length), 0, itemBorrado);
+          return { ...current, items };
+        });
         setExpandedItems(prev=>new Set([...prev, id]));
       });
     }
@@ -1255,15 +1305,18 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
   const clonarItem = (item) => {
     if (!computo) return;
-    const nuevo = {
-      ...item, id: uid(), titulo: `${item.titulo} (copia)`,
-      piezas: item.piezas.map(p => ({ ...p, id: uid(), ficha: { ...p.ficha } })),
-    };
-    const idx = computo.items.findIndex(it => it.id === item.id);
-    const items = [...computo.items];
-    items.splice(idx+1, 0, nuevo);
-    updateComputo({ ...computo, items });
-    setExpandedItems(prev => new Set([...prev, nuevo.id]));
+    const nuevoId = uid();
+    mutateComputo(computo.id, (current) => {
+      const nuevo = {
+        ...item, id: nuevoId, titulo: `${item.titulo} (copia)`,
+        piezas: item.piezas.map(p => ({ ...p, id: uid(), ficha: { ...p.ficha } })),
+      };
+      const idx = current.items.findIndex(it => it.id === item.id);
+      const items = [...current.items];
+      items.splice(idx === -1 ? items.length : idx + 1, 0, nuevo);
+      return { ...current, items };
+    });
+    setExpandedItems(prev => new Set([...prev, nuevoId]));
   };
 
   const toggleItem = id => setExpandedItems(prev=>{
@@ -1457,7 +1510,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", minWidth: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
@@ -1481,6 +1534,14 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
+                {/* Columna "filler" sin ancho (2026-09-13) — absorbe el
+                    espacio sobrante para que la tabla siga llenando el
+                    ancho disponible como antes, sin que el navegador
+                    redistribuya proporcionalmente las columnas con ancho
+                    fijo (eso hacía que se "movieran" al resizear una). No
+                    hace falta un <td> por fila — HTML deja en blanco la
+                    columna de más en filas que no la tienen. */}
+                <th style={TH}></th>
               </tr></thead>
               <tbody>
                 {computosFiltrados.map(c => {
@@ -1677,7 +1738,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             key={item.id}
             item={item}
             bib={bib}
-            onChange={updateItem}
+            onChange={mutator => updateItemMutator(item.id, mutator)}
             expanded={expandedItems.has(item.id)}
             onToggle={()=>toggleItem(item.id)}
             onEliminar={()=>setConfirmarItemDelId(item.id)}
