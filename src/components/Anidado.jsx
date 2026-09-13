@@ -1133,6 +1133,27 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   const [empresa,    setEmpresa]    = useState("");
   const [obra,       setObra]       = useState("");
   const [computoSel, setComputoSel] = useState("");
+  // "Crear anidado" directo desde una Solicitud (2026-09-12, a pedido de
+  // Gino: "se puede pasar a cualquier etapa") — mismo criterio liviano de
+  // sessionStorage que ya usa Cómputo (smeas_prefill_computo). nombre/
+  // cliente/empresa/obra ya tienen su propio input en este formulario, se
+  // precargan ahí directo; categoria/tipo_trabajo/link_archivos/solicitud_id
+  // no tienen campo propio acá (siempre se heredaban solo de computoOrigen)
+  // — se guardan aparte y se aplican en `crear()` como respaldo cuando no
+  // se elige un Cómputo de origen.
+  const [precargaSolicitud, setPrecargaSolicitud] = useState(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("smeas_prefill_anidado");
+      if (raw) {
+        const p = JSON.parse(raw);
+        setNombre(p.nombre || ""); setCliente(p.cliente || ""); setEmpresa(p.empresa || ""); setObra(p.obra || "");
+        setPrecargaSolicitud(p);
+        setCreando(true);
+        sessionStorage.removeItem("smeas_prefill_anidado");
+      }
+    } catch {}
+  }, []);
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
   const [showEmpresaRapida, setShowEmpresaRapida] = useState(false);
@@ -1273,17 +1294,24 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     // el arranque del flujo en vez de recién al presupuestar.
     const computoOrigen = computoSel ? computos.find(c=>c.id===computoSel) : null;
     const a={id:uid(),nombre:nombre.trim(),fecha,cliente:cliente.trim(),empresa:empresa.trim(),obra:obra.trim(),
-      categoria:computoOrigen?.categoria||"", tipo_trabajo:computoOrigen?.tipo_trabajo||"Fabricación",
+      categoria:computoOrigen?.categoria||precargaSolicitud?.categoria||"",
+      tipo_trabajo:computoOrigen?.tipo_trabajo||precargaSolicitud?.tipoTrabajo||"Fabricación",
       vendedor:computoOrigen?.vendedor||usuario?.id||"",
       // Fase 3 (2026-09-06): mismo criterio que categoria/tipo_trabajo.
-      link_archivos:computoOrigen?.link_archivos||"",
+      link_archivos:computoOrigen?.link_archivos||precargaSolicitud?.linkArchivos||"",
       // 2026-09-12, a pedido de Gino: antes `computoSel` solo se usaba para
       // importar materiales al crear, el vínculo en sí se perdía — sin esto
       // era imposible trazar Cómputo→Anidado (ver migración
       // 20260912110000_computo_id_anidados.sql).
       computo_id:computoSel||null,
+      // Propaga la Solicitud de origen hacia adelante (2026-09-12) — del
+      // Cómputo elegido si vino de ahí, o directo de la precarga si el
+      // Anidado se creó saltando esa etapa. Así el aviso a Steel CRM y la
+      // trazabilidad del Buscador no dependen de recorrer joins en cada
+      // consulta.
+      solicitud_id:computoOrigen?.solicitud_id||precargaSolicitud?.solicitudId||null,
       grupos,comentarios:[],...stamp()};
-    save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel("");
+    save([a,...anidados]); setSelId(a.id); setCreando(false); setNombre(""); setCliente(""); setEmpresa(""); setObra(""); setComputoSel(""); setPrecargaSolicitud(null);
     dualWriteAnidado(a);
     logear?.("Anidado creado", a.nombre);
   };
@@ -1712,6 +1740,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                         // porque `anidado_id` vive en el ÍTEM, no en el
                         // presupuesto (ver importarMaterialesComoPresNuevo).
                         anidado_id: actual.id,
+                        // Propaga la Solicitud de origen (2026-09-12) — mismo
+                        // criterio que el resto de los campos heredados acá.
+                        solicitud_id: actual.solicitud_id || null,
                       });
                       onExportarPresupuesto?.();
                     }} style={{ ...BTN("ghost"),borderColor:C.ok+"66",color:C.ok,fontSize:12 }}>

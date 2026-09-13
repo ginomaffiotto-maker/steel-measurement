@@ -45,12 +45,12 @@ const COLUMNAS_PRESUPUESTO_SM = [
   "id", "nro", "codigo_calculo", "nombre", "cliente_id", "contacto", "obra", "obra_id", "empresa", "empresa_id", "detalle",
   "tipo_trabajo", "categoria", "estado", "clonado_de_id", "negociacion_pct", "negociacion_usd",
   "neg_modo", "interes_pct", "interes_dias", "notas", "fecha", "tc", "vendedor", "costo_real_usd",
-  "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos",
+  "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos", "solicitud_id",
 ];
 const COLUMNAS_COMPUTO = ["id", "nombre", "fecha", "cliente_id", "cantidad_total", "nro", "obra", "obra_id", "empresa", "empresa_id",
   "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "solicitud_id", "link_archivos"];
 const COLUMNAS_ANIDADO = ["id", "nombre", "fecha", "cliente_id", "obra", "obra_id", "empresa", "empresa_id",
-  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos", "computo_id"];
+  "categoria", "tipo_trabajo", "vendedor", "eliminado", "eliminado_por", "eliminado_fecha", "link_archivos", "computo_id", "solicitud_id"];
 const COLUMNAS_ITEM_PRESUPUESTO = [
   "id", "presupuesto_id", "titulo", "cantidad", "n_plano", "no_agrega_kg", "computo_id", "anidado_id", "tipo", "orden",
 ];

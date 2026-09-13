@@ -458,8 +458,12 @@ function generarResumenInterno(pres, usuarios) {
 }
 
 // ─── MODAL NUEVO PRESUPUESTO ─────────────────────────────────────
-function ModalNuevo({ onSave, onClose }) {
-  const [form, setForm] = useState({ nombre:"", cliente:"", contacto:"", obra:"", detalle:"", tipo_trabajo:"Fabricación", categoria:"" });
+function ModalNuevo({ onSave, onClose, valoresIniciales }) {
+  // valoresIniciales (2026-09-12): precarga desde "Crear presupuesto"
+  // directo en Mis solicitudes asignadas — mismo criterio que la precarga
+  // ya usada al pasar de Anidado a Presupuesto, pero acá abre el modal
+  // liviano en vez de crear directo, para que el vendedor revise antes.
+  const [form, setForm] = useState(() => ({ nombre:"", cliente:"", contacto:"", obra:"", detalle:"", tipo_trabajo:"Fabricación", categoria:"", ...valoresIniciales }));
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const [showClienteRapido, setShowClienteRapido] = useState(false);
   const [showObraRapida, setShowObraRapida] = useState(false);
@@ -2556,12 +2560,13 @@ function DetallePresupuesto({ pres, onChange, onBack, origenNro, tcGlobal, usuar
   const [vinculosCRM, setVinculosCRM] = useState([]); // [{crmId, nro, estado}]
   const [enviandoCRM, setEnviandoCRM] = useState(false);
   const [confirmReabrirSM, setConfirmReabrirSM] = useState(false);
-  // Si CUALQUIERA de los presupuestos vinculados ya está aceptado o
-  // facturado en Steel CRM (2026-09-04, a pedido de Gino), el estado acá
-  // queda fijo — alguien ya cerró un trato real con estos números, no
-  // tiene sentido que se muevan desde Costos, sin importar qué pasó con
-  // los otros presupuestos vinculados al mismo cálculo.
-  const crmCerrado = vinculosCRM.some(v => ["aceptado", "facturado"].includes(v.estado));
+  // Si CUALQUIERA de los presupuestos vinculados ya está aceptado,
+  // facturado o no aprobado en Steel CRM (2026-09-04, extendido
+  // 2026-09-12 a "no aprobado" — a pedido de Gino), el estado acá queda
+  // fijo — alguien ya cerró un trato real (o lo rechazó) con estos
+  // números, no tiene sentido que se muevan desde Costos, sin importar
+  // qué pasó con los otros presupuestos vinculados al mismo cálculo.
+  const crmCerrado = vinculosCRM.some(v => ["aceptado", "facturado", "no aprobado"].includes(v.estado));
 
   // Chequea si este presupuesto ya tiene presupuesto(s) real(es) vinculado(s)
   // en Steel CRM (tabla presupuesto_calculo_link).
@@ -3051,6 +3056,23 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   });
   const [materialesPend, setMaterialesPend] = useState(() => loadLS("smeas_material_export_pending", null));
   const [precargaPend, setPrecargaPend] = useState(() => loadLS("smeas_presupuesto_precarga_pending", null));
+  // "Crear presupuesto" directo desde una Solicitud (2026-09-12, a pedido
+  // de Gino: "se puede pasar a cualquier etapa") — a diferencia de
+  // precargaPend/materialesPend (que ya traen materiales reales de un
+  // Anidado), este abre el modal liviano de "Nuevo presupuesto" con los
+  // datos de la Solicitud precargados, sin ítems — mismo criterio de
+  // sessionStorage consumido una sola vez que usa el resto de la app.
+  const [nuevoPrefill, setNuevoPrefill] = useState(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("smeas_prefill_presupuesto");
+      if (raw) {
+        setNuevoPrefill(JSON.parse(raw));
+        setNuevoOpen(true);
+        sessionStorage.removeItem("smeas_prefill_presupuesto");
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => { saveLS("smeas_presupuestos", presupuestos); }, [presupuestos]);
 
@@ -3570,7 +3592,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
 
-      {nuevoOpen && <ModalNuevo onSave={crearPres} onClose={() => setNuevoOpen(false)} />}
+      {nuevoOpen && <ModalNuevo onSave={crearPres} valoresIniciales={nuevoPrefill} onClose={() => { setNuevoOpen(false); setNuevoPrefill(null); }} />}
       {materialesPend && (
         <ImportarMaterialesModal materiales={materialesPend} presupuestos={presupuestos} precarga={precargaPend} onImportar={importarMateriales} onImportarNuevoPres={importarMaterialesComoPresNuevo} onClose={cerrarImportMateriales} />
       )}
