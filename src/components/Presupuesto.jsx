@@ -3211,7 +3211,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto", {
+  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_presupuesto", {
     check: 34, nro: 70, nombre: 160, cliente: 130, obra: 130, tipo: 90,
     vendedor: 110, fecha: 90, items: 55, total: 100, estado: 100, acc: 30,
   });
@@ -3246,8 +3246,25 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // puede romper el guardado local (localStorage sigue siendo la fuente de
   // verdad). Resuelve `cliente` (texto libre local) a `cliente_id` real
   // contra la tabla `clientes` — mismo helper que usa registrarCliente.
-  const dualWritePresupuesto = async (p, intentosRegen = 0) => {
-    if (!supabase) return;
+  //
+  // Bug real (2026-09-13), mismo síntoma y causa raíz ya encontrados y
+  // corregidos en Computo.jsx/dualWriteComputo (ver comentario ahí): acá es
+  // todavía más expuesto, porque `saveDBItem` hace un DELETE + INSERT
+  // COMPLETO de los 9 rubros de costo por CADA ítem del presupuesto (no solo
+  // la fila del presupuesto en sí) — un presupuesto con varios ítems dispara
+  // varias tandas de delete+insert por guardado. Si dos guardados seguidos
+  // del mismo presupuesto (ej. editar dos ítems distintos, uno detrás del
+  // otro) se disparan sin esperar, el orden en que sus respuestas de red
+  // vuelven no tiene por qué coincidir con el orden en que se dispararon —
+  // el más viejo (con menos datos) puede terminar después y borrar lo que el
+  // más nuevo ya había guardado bien. `dualWritePresupuestoCore` (el cuerpo
+  // real, sin encolar) queda separado para que el reintento por choque de
+  // `codigo_calculo` (más abajo) pueda llamarse a sí mismo directo, sin
+  // volver a pasar por la cola — ya está corriendo dentro de su propio turno,
+  // encolarlo de nuevo esperaría a que él mismo termine (deadlock).
+  const dualWriteQueueRef = useRef(new Map());
+
+  const dualWritePresupuestoCore = async (p, intentosRegen = 0) => {
     // Fix real (2026-09-04, reportado por Gino): un mismo presupuesto
     // fallaba en distintas tablas en cada reintento (a veces
     // presupuestos_sm, a veces clientes) mientras el resto sincronizaba
@@ -3314,7 +3331,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         console.warn(`[Fase 3] Código de cálculo duplicado en presupuesto "${p.nro || p.id}" — regenerado a ${nuevoCodigo}, reintentando (${intentosRegen + 1}/5).`);
         const corregido = { ...p, codigo_calculo: nuevoCodigo };
         setPres(prev => prev.map(x => x.id === p.id ? corregido : x));
-        return dualWritePresupuesto(corregido, intentosRegen + 1);
+        return dualWritePresupuestoCore(corregido, intentosRegen + 1);
       }
       console.warn(`[Fase 3] No se pudo sincronizar presupuesto "${p.nro || p.id}" con el backend:`, e.message || e);
       // Bug real detectado 2026-08-29 (mismo del lado de Steel CRM): sin
@@ -3327,6 +3344,19 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       // causa, el cartel se ve idéntico al de antes. Se muestra el motivo.
       setSyncError(`"${p.nro || p.id}": ${e.message || e}`);
     }
+  };
+
+  // Cola de escritura serializada por presupuesto (ver comentario arriba de
+  // `dualWritePresupuestoCore`) — todos los call-sites siguen llamando a
+  // `dualWritePresupuesto`, que ahora solo encola; el cuerpo real corre en
+  // `dualWritePresupuestoCore` una vez que le toca el turno.
+  const dualWritePresupuesto = (p, intentosRegen = 0) => {
+    if (!supabase) return Promise.resolve();
+    const queue = dualWriteQueueRef.current;
+    const anterior = queue.get(p.id) || Promise.resolve();
+    const propia = anterior.then(() => dualWritePresupuestoCore(p, intentosRegen));
+    queue.set(p.id, propia);
+    return propia;
   };
 
   // 2026-09-07: nro se asigna con peekNroPresupuesto (instantáneo, no
@@ -3528,11 +3558,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
       {lista.length > 0 && (
-        <div style={{ overflowX:"auto" }}>
+        <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
-          <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+          <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
             <thead><tr>
               <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                 <input type="checkbox" checked={lista.length>0 && lista.every(p=>seleccionados.has(p.id))}

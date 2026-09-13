@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
@@ -1069,23 +1069,46 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
   const computo = computos.find(c=>c.id===selId) || null;
 
-  // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
-  // puede romper el guardado local. Mismo criterio que Presupuesto.jsx.
-  const dualWriteComputo = async (c) => {
-    if (!supabase) return;
-    try {
-      const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
-      const obra_id = c.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === c.obra.trim().toLowerCase())?.id || null) : null;
-      const empresa_id = c.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === c.empresa.trim().toLowerCase())?.id || null) : null;
-      // vendedor es un id local (Date.now()) hasta que esa persona inicia
-      // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
-      // completa profileId (mismo patrón que meta_usuarios en steelCRM).
-      const vendedor = usuarios.find(u => String(u.id) === String(c.vendedor))?.profileId || null;
-      const { cliente, comentarios, ...resto } = c;
-      await saveDBComputo({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
-    } catch (e) {
-      console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
-    }
+  // Bug real (2026-09-13), confirmado con datos reales en Supabase: un
+  // cómputo con piezas recién cargadas (confirmadas en pantalla, correctas
+  // en localStorage) aparecía con `computo_piezas` vacío del lado del
+  // backend — mismo síntoma en 2 cómputos de QA distintos. Causa raíz:
+  // `saveDBComputo` hace un DELETE + INSERT del `computo_items`/
+  // `computo_piezas` COMPLETO en cada edición (no solo lo que cambió), y
+  // `dualWriteComputo` se dispara sin esperar en cada `mutateComputo` — si
+  // dos ediciones seguidas (ej. una pieza a cada ítem) disparan dos
+  // llamadas casi juntas, el orden en que sus respuestas de red vuelven no
+  // tiene por qué coincidir con el orden en que se dispararon: si la
+  // llamada más vieja (con menos datos) tarda más y termina DESPUÉS que la
+  // más nueva, su DELETE+INSERT corre último y borra lo que la más nueva
+  // ya había guardado bien. Esta cola serializa por cómputo: cada llamada
+  // espera a que la anterior (para el MISMO id) termine antes de escribir
+  // — así el orden real de escritura en la base siempre respeta el orden
+  // en que se dispararon los cambios, sin importar la latencia de red de
+  // cada una.
+  const dualWriteQueueRef = useRef(new Map());
+
+  const dualWriteComputo = (c) => {
+    if (!supabase) return Promise.resolve();
+    const queue = dualWriteQueueRef.current;
+    const anterior = queue.get(c.id) || Promise.resolve();
+    const propia = anterior.then(async () => {
+      try {
+        const cliente_id = c.cliente ? await resolverClienteId(c.cliente, c.empresa) : null;
+        const obra_id = c.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === c.obra.trim().toLowerCase())?.id || null) : null;
+        const empresa_id = c.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === c.empresa.trim().toLowerCase())?.id || null) : null;
+        // vendedor es un id local (Date.now()) hasta que esa persona inicia
+        // sesión real al menos una vez — recién ahí resolverUsuarioLocal le
+        // completa profileId (mismo patrón que meta_usuarios en steelCRM).
+        const vendedor = usuarios.find(u => String(u.id) === String(c.vendedor))?.profileId || null;
+        const { cliente, comentarios, ...resto } = c;
+        await saveDBComputo({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
+      } catch (e) {
+        console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
+      }
+    });
+    queue.set(c.id, propia);
+    return propia;
   };
 
   // Bug real (2026-09-13, reportado por Gino con una pieza real perdida —
@@ -1098,20 +1121,31 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // arma su objeto nuevo a partir de una base ya vieja y pisa a la primera
   // al reemplazar el cómputo entero en el array. `mutateComputo` resuelve
   // siempre contra el estado MÁS FRESCO (el `prev` real del updater
-  // funcional de React, no una variable capturada en el render) — el
-  // mutator corre de forma síncrona dentro de `setComputos`, así que
-  // `actualizado` ya está resuelto cuando esta función retorna.
+  // funcional de React), nunca contra una variable capturada en el render.
+  //
+  // El mutator NO se puede asumir síncrono respecto de esta función (se
+  // probó que no lo es siempre — React puede diferir cuándo lo corre) —
+  // por eso lo que hace falta sincronizar a Supabase se junta en
+  // `pendingSyncRef` y se despacha desde un efecto que corre después de
+  // cada commit, nunca leyendo un valor "de vuelta" de `setComputos`.
+  const pendingSyncRef = useRef([]);
   const mutateComputo = (id, mutator) => {
-    let actualizado = null;
     setComputos(prev => {
       const current = prev.find(c => c.id === id);
       if (!current) return prev;
-      actualizado = touch(mutator(current));
+      const actualizado = touch(mutator(current));
+      pendingSyncRef.current.push(actualizado);
       return prev.map(c => (c.id === id ? actualizado : c));
     });
-    if (actualizado) dualWriteComputo(actualizado);
-    return actualizado;
   };
+  // Sin array de dependencias a propósito: tiene que revisar el ref en
+  // CADA commit, no solo cuando cambia una referencia en particular.
+  useEffect(() => {
+    if (!pendingSyncRef.current.length) return;
+    const aSincronizar = pendingSyncRef.current;
+    pendingSyncRef.current = [];
+    aSincronizar.forEach(dualWriteComputo);
+  });
 
   // Mismo mecanismo para mutar UN ítem puntual sin perder ediciones
   // concurrentes a otros ítems del mismo cómputo.
@@ -1231,7 +1265,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables.
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_computo", {
+  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_computo", {
     check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 170,
   });
 
@@ -1266,13 +1300,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
 
   const agregarItem = () => {
     if (!computo) return;
-    let nuevoId = null;
-    mutateComputo(computo.id, (current) => {
-      const nuevo = itemVacio(current.items.length + 1);
-      nuevoId = nuevo.id;
-      return { ...current, items: [...current.items, nuevo] };
-    });
-    if (nuevoId) setExpandedItems(prev => new Set([...prev, nuevoId]));
+    // El id se genera ACÁ (no depende de que el mutator haya corrido para
+    // poder usarlo) — mismo criterio que ya usaba `clonarItem`. Solo la
+    // etiqueta "Ítem N" necesita el conteo fresco, y eso sí se calcula
+    // dentro del mutator, contra `current.items` real.
+    const nuevoId = uid();
+    mutateComputo(computo.id, (current) => ({
+      ...current,
+      items: [...current.items, { ...itemVacio(current.items.length + 1), id: nuevoId }],
+    }));
+    setExpandedItems(prev => new Set([...prev, nuevoId]));
   };
 
   const eliminarItem = (id) => {
@@ -1506,11 +1543,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. */}
         {computosFiltrados.length > 0 && (
-          <div style={{ overflowX:"auto" }}>
+          <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}

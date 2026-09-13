@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { BTN, C } from "../styles/colors";
 
 // Hook de orden reusable para listas — un click en una columna/opción ordena
@@ -85,10 +85,36 @@ export function ColSort({ campo, label, sortCampo, sortDir, ordenarPor, align })
   );
 }
 
+// Suma de anchos de columna — el ancho real que se le da a la `<table>`
+// (ver `useResizableColumns` más abajo). Al ser un número exacto (nunca
+// "100%"), el navegador no tiene ningún sobrante que redistribuir entre
+// columnas — elimina de raíz el bug de "las columnas se mueven al
+// ensancharlas" sin depender de que el navegador respete `min-width`/
+// `max-width` en celdas de tabla (no lo hace de forma confiable con
+// `table-layout:fixed` — confirmado en vivo el 2026-09-13: fijar
+// min=max=width en cada `<th>` no evitó que el navegador igual estirara
+// una columna para llenar el 100%).
+export function sumAnchos(widths) {
+  return Object.values(widths).reduce((a, b) => a + (Number(b) || 0), 0);
+}
+
 // Columnas ajustables tipo Excel (2026-09-07, a pedido de Gino, mismo
 // mecanismo ya construido en steelCRM/shared.jsx) — persiste el ancho de
 // cada columna por dispositivo (localStorage), igual criterio que las
 // preferencias de columnas de Kanban. `defaults` es un objeto {colKey:px}.
+//
+// `containerRef` (2026-09-13, arreglo real y definitivo del bug de
+// resize — 3 intentos fallidos antes, ver historial de commits del mismo
+// día): se lo pasa al `<div style={{overflowX:"auto"}}>` que envuelve la
+// tabla. Al montar y en cada resize de ventana, si ese contenedor es más
+// ANCHO que la suma actual de columnas, escala TODAS proporcionalmente
+// para llenarlo — mismo efecto visual que el `width:"100%"` de siempre
+// (la tabla se ve "llena"), pero calculado una sola vez por JS, nunca por
+// el navegador en tiempo real. Arrastrar una columna después solo cambia
+// ESA columna (`setWidth`, sin tocar las demás) — nunca dispara este
+// recálculo, así que las demás no se mueven mientras se arrastra. Si el
+// contenedor es más angosto que la suma, no se toca nada — aparece
+// scroll horizontal, como siempre.
 export function useResizableColumns(storageKey, defaults) {
   const [widths, setWidths] = useState(() => {
     try {
@@ -96,6 +122,26 @@ export function useResizableColumns(storageKey, defaults) {
       return { ...defaults, ...saved };
     } catch { return defaults; }
   });
+  const containerRef = useRef(null);
+  useEffect(() => {
+    function fit() {
+      const el = containerRef.current;
+      if (!el) return;
+      const disponible = el.clientWidth;
+      setWidths(prev => {
+        const total = sumAnchos(prev);
+        if (!total || disponible <= total) return prev;
+        const factor = disponible / total;
+        const next = {};
+        for (const k in prev) next[k] = Math.round(prev[k] * factor);
+        try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [storageKey]);
   function setWidth(key, px) {
     setWidths(prev => {
       const next = { ...prev, [key]: Math.max(30, Math.round(px)) };
@@ -107,20 +153,7 @@ export function useResizableColumns(storageKey, defaults) {
     setWidths(defaults);
     try { localStorage.removeItem(storageKey); } catch {}
   }
-  return { widths, setWidth, reset };
-}
-
-// Suma de anchos de columna — quedó sin uso en las tablas de este archivo
-// (2026-09-13): se probaron 3 variantes para el bug real "las columnas se
-// mueven al ensancharse" (`minWidth` con esta suma; luego `width` real =
-// esta suma; luego una columna "filler" al final de la tabla) — Gino pidió
-// revertir todo a como estaba antes de ese día (mismo `width:"100%"`
-// simple que ya usa Presupuestos de Steel CRM) porque las 2 primeras se
-// veían mal (columnas que no se movían pero con un hueco vacío a la
-// derecha) y la 3ª tampoco convenció. Se deja sin usar (no sin borrar) por
-// si hace falta retomar el diagnóstico más adelante con otro enfoque.
-export function sumAnchos(widths) {
-  return Object.values(widths).reduce((a, b) => a + (Number(b) || 0), 0);
+  return { widths, setWidth, reset, containerRef };
 }
 
 // <th> con handle de arrastre en el borde derecho — mismo mecanismo que

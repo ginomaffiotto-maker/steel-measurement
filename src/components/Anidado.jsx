@@ -1204,18 +1204,37 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
 
   // Fase 3 (piloto, 2026-08-22): dual-write en paralelo, nunca bloquea ni
   // puede romper el guardado local. Mismo criterio que Presupuesto/Cómputo.
-  const dualWriteAnidado = async (a) => {
-    if (!supabase) return;
-    try {
-      const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
-      const obra_id = a.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === a.obra.trim().toLowerCase())?.id || null) : null;
-      const empresa_id = a.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === a.empresa.trim().toLowerCase())?.id || null) : null;
-      const vendedor = usuarios.find(u => String(u.id) === String(a.vendedor))?.profileId || null;
-      const { cliente, comentarios, ...resto } = a;
-      await saveDBAnidado({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
-    } catch (e) {
-      console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
-    }
+  //
+  // Bug real (2026-09-13), mismo síntoma y causa raíz ya encontrados y
+  // corregidos en Computo.jsx/dualWriteComputo (ver comentario ahí):
+  // `saveDBAnidado` hace un DELETE + INSERT COMPLETO de
+  // anidado_grupos/anidado_piezas en cada guardado, y este dual-write se
+  // disparaba sin esperar en cada edición — dos guardados seguidos del mismo
+  // anidado podían llegar a Supabase en cualquier orden según la latencia de
+  // red de cada uno, y el más viejo (con menos datos) podía terminar después
+  // y borrar lo que el más nuevo ya había guardado bien. Se encola por
+  // anidado: cada escritura espera a que la ANTERIOR (mismo id) termine
+  // antes de arrancar — mismo mecanismo que dualWriteComputo.
+  const dualWriteQueueRef = useRef(new Map());
+
+  const dualWriteAnidado = (a) => {
+    if (!supabase) return Promise.resolve();
+    const queue = dualWriteQueueRef.current;
+    const anterior = queue.get(a.id) || Promise.resolve();
+    const propia = anterior.then(async () => {
+      try {
+        const cliente_id = a.cliente ? await resolverClienteId(a.cliente, a.empresa) : null;
+        const obra_id = a.obra ? (listaObras.find(o => (o.nombre || "").trim().toLowerCase() === a.obra.trim().toLowerCase())?.id || null) : null;
+        const empresa_id = a.empresa ? (listaEmpresas.find(e => (e.nombre || "").trim().toLowerCase() === a.empresa.trim().toLowerCase())?.id || null) : null;
+        const vendedor = usuarios.find(u => String(u.id) === String(a.vendedor))?.profileId || null;
+        const { cliente, comentarios, ...resto } = a;
+        await saveDBAnidado({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
+      } catch (e) {
+        console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
+      }
+    });
+    queue.set(a.id, propia);
+    return propia;
   };
 
   const upd = a => { const t = touch(a); save(anidados.map(x=>x.id===a.id?t:x)); dualWriteAnidado(t); };
@@ -1343,7 +1362,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables. Mismo cambio que Computo.jsx.
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_anidado", {
+  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_anidado", {
     check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 130,
   });
 
@@ -1567,11 +1586,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. Mismo cambio que Computo.jsx. */}
         {anidadosFiltrados.length > 0 && (
-          <div style={{ overflowX:"auto" }}>
+          <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={anidadosFiltrados.every(a=>seleccionados.has(a.id))}

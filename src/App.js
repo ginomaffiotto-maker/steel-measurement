@@ -654,7 +654,7 @@ export default function App() {
       </div>
 
       {/* ── CONTENIDO ── */}
-      <div style={{ marginLeft: SW, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", transition: "margin-left .2s" }}>
+      <div style={{ marginLeft: SW, flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: "100vh", transition: "margin-left .2s" }}>
 
         {/* Topbar */}
         <div style={{ background: C.card, borderBottom: `1px solid ${C.border}33`, padding: "8px 20px", display: "flex", alignItems: "center", gap: 8, position: "sticky", top: 0, zIndex: 50 }}>
