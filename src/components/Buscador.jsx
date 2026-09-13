@@ -62,29 +62,36 @@ function normalizar(computos, anidados, presupuestos, historial, solicitudes, us
 
 // Trazabilidad del recorrido completo (2026-09-12, a pedido de Gino: "que
 // se pueda trazar el recorrido y las solicitudes, cómputos, anidados o
-// presupuestos asociados"). A partir de cualquier resultado, calcula qué
-// otros registros de la cadena Solicitud→Cómputo(s)→Anidado(s)→
-// Presupuesto(s) están relacionados — usando los vínculos reales que ya
-// existen (`computos.solicitud_id`, `anidados.computo_id`,
-// `items_presupuesto_sm.anidado_id` por ítem). Un presupuesto puede tener
-// varios ítems de anidados distintos, y una solicitud puede tener varios
-// cómputos — por eso todo se maneja como arrays, nunca "el primero".
+// presupuestos asociados" — extendido el mismo día a "se puede pasar a
+// cualquier etapa": ahora Anidado y Presupuesto también pueden tener su
+// PROPIO `solicitud_id` directo, no solo heredado vía computo_id/
+// anidado_id, para el caso de saltar Cómputo/Anidado al crear). A partir
+// de cualquier resultado, calcula qué otros registros de la cadena
+// Solicitud→Cómputo(s)→Anidado(s)→Presupuesto(s) están relacionados. Un
+// presupuesto puede tener varios ítems de anidados distintos, y una
+// solicitud puede tener varios cómputos — por eso todo se maneja como
+// arrays, nunca "el primero".
 function cadenaDe(fila, { computos, anidados, presupuestos, solicitudes }) {
   let solicitud = null, comps = [], anids = [], preses = [];
+  const solPorId = (id) => id ? (solicitudes.find(s => s.id === id) || null) : null;
   if (fila.tipo === "solicitud") {
     solicitud = fila._raw;
     comps = computos.filter(c => c.solicitud_id === solicitud.id);
   } else if (fila.tipo === "computo") {
     comps = [fila._raw];
-    if (fila._raw.solicitud_id) solicitud = solicitudes.find(s => s.id === fila._raw.solicitud_id) || null;
+    solicitud = solPorId(fila._raw.solicitud_id);
   } else if (fila.tipo === "anidado") {
     anids = [fila._raw];
+    // solicitud_id propio (creado directo desde una Solicitud, sin
+    // Cómputo) tiene prioridad; si no, se deriva del Cómputo de origen.
+    solicitud = solPorId(fila._raw.solicitud_id);
     if (fila._raw.computo_id) {
       const c = computos.find(x => x.id === fila._raw.computo_id);
-      if (c) { comps = [c]; if (c.solicitud_id) solicitud = solicitudes.find(s => s.id === c.solicitud_id) || null; }
+      if (c) { comps = [c]; if (!solicitud) solicitud = solPorId(c.solicitud_id); }
     }
   } else if (fila.tipo === "presupuesto") {
     preses = [fila._raw];
+    solicitud = solPorId(fila._raw.solicitud_id);
     const anidadoIds = (fila._raw.items || []).map(it => it.anidado_id).filter(Boolean);
     anids = anidados.filter(a => anidadoIds.includes(a.id));
   }
@@ -93,11 +100,16 @@ function cadenaDe(fila, { computos, anidados, presupuestos, solicitudes }) {
   if (solicitud && fila.tipo !== "solicitud" && comps.length === 0) {
     comps = computos.filter(c => c.solicitud_id === solicitud.id);
   }
-  if (comps.length && fila.tipo !== "anidado" && anids.length === 0) {
+  if (solicitud && anids.length === 0) {
+    anids = anidados.filter(a => a.solicitud_id === solicitud.id || (a.computo_id && comps.some(c => c.id === a.computo_id)));
+  } else if (comps.length && fila.tipo !== "anidado" && anids.length === 0) {
     const compIds = comps.map(c => c.id);
     anids = anidados.filter(a => compIds.includes(a.computo_id));
   }
-  if (anids.length && fila.tipo !== "presupuesto" && preses.length === 0) {
+  if (solicitud && preses.length === 0) {
+    const anidIds = anids.map(a => a.id);
+    preses = presupuestos.filter(p => p.solicitud_id === solicitud.id || (p.items || []).some(it => anidIds.includes(it.anidado_id)));
+  } else if (anids.length && fila.tipo !== "presupuesto" && preses.length === 0) {
     const anidIds = anids.map(a => a.id);
     preses = presupuestos.filter(p => (p.items || []).some(it => anidIds.includes(it.anidado_id)));
   }
