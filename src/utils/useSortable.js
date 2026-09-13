@@ -110,29 +110,15 @@ export function useResizableColumns(storageKey, defaults) {
   return { widths, setWidth, reset };
 }
 
-// Ancho mínimo real de la tabla para las columnas ajustables (bug real
-// reportado por Gino: "las columnas al ensancharse se mueven hacia el lado
-// contrario"). Causa: con `table-layout:fixed` + la tabla en `width:"100%"`
-// y TODAS las columnas con ancho explícito, si la suma queda por debajo
-// del ancho real del contenedor el navegador estira TODAS las columnas de
-// forma proporcional para llegar al 100% — agrandar una achica a las
-// demás para compensar.
-// Se probaron 2 arreglos antes de este (2026-09-12 y 2026-09-13, ver
-// historial de commits) — el primero solo pasaba esto como `minWidth`
-// (dejando `width:"100%"`, no evitaba el estiramiento); el segundo ponía
-// el `width` real = esta suma exacta (evitaba el estiramiento pero dejaba
-// un hueco en blanco a la derecha en pantallas anchas, que Gino no
-// quería — se veía "roto" respecto a como se veía antes).
-// **Arreglo definitivo (2026-09-13)**: se agrega una columna "filler" sin
-// ancho propio al final de cada tabla (ver el `<th>` extra en
-// Computo/Anidado/Presupuesto/Historial) — esa es la ÚNICA columna sin
-// ancho explícito, así que es la que absorbe el espacio sobrante (o se
-// comprime) en vez de que el navegador redistribuya las columnas con
-// ancho fijo. Con eso, `width` puede volver a ser `"100%"` (la tabla
-// vuelve a verse "llena" como antes) y este valor queda solo como
-// `minWidth` — red de seguridad para que en pantalla angosta la tabla no
-// comprima las columnas fijas por debajo de su suma real, sino que
-// aparezca scroll horizontal (el `overflowX:auto` del contenedor).
+// Suma de anchos de columna — quedó sin uso en las tablas de este archivo
+// (2026-09-13): se probaron 3 variantes para el bug real "las columnas se
+// mueven al ensancharse" (`minWidth` con esta suma; luego `width` real =
+// esta suma; luego una columna "filler" al final de la tabla) — Gino pidió
+// revertir todo a como estaba antes de ese día (mismo `width:"100%"`
+// simple que ya usa Presupuestos de Steel CRM) porque las 2 primeras se
+// veían mal (columnas que no se movían pero con un hueco vacío a la
+// derecha) y la 3ª tampoco convenció. Se deja sin usar (no sin borrar) por
+// si hace falta retomar el diagnóstico más adelante con otro enfoque.
 export function sumAnchos(widths) {
   return Object.values(widths).reduce((a, b) => a + (Number(b) || 0), 0);
 }

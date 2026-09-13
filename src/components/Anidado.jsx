@@ -1571,7 +1571,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width:"100%", minWidth: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={anidadosFiltrados.every(a=>seleccionados.has(a.id))}
@@ -1594,8 +1594,6 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
-                {/* Columna "filler" sin ancho — ver Computo.jsx (2026-09-13) */}
-                <th style={TH}></th>
               </tr></thead>
               <tbody>
                 {anidadosFiltrados.map(a=>{
