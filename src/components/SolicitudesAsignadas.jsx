@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { C, TH, TD, CARD, BTN, BDG } from "../styles/colors";
+import { C, INP, LBL, TH, TD, CARD, BTN, BDG } from "../styles/colors";
 import { supabase } from "../utils/supabaseClient";
 import { useSortable } from "../utils/useSortable";
+import { TIPOS_TRABAJO, SelectCategoria } from "../utils/taxonomia";
 import FichaSolicitudModal, { ESTADO_SOLICITUD_COLOR as ESTADO_COLOR, PRIORIDAD_ICONO } from "./FichaSolicitud";
 
 // Lee directo de la tabla `solicitudes` de steelCRM — mismo backend
@@ -10,6 +11,83 @@ import FichaSolicitudModal, { ESTADO_SOLICITUD_COLOR as ESTADO_COLOR, PRIORIDAD_
 // Supabase Auth en los dos sistemas). Solo alcanza a solicitudes de
 // usuarios que ya tienen cuenta real — mismo bloqueo de siempre
 // (meta_usuarios, vendedor_id) hasta que el resto del equipo la tenga.
+
+// Alta directa de Solicitud, sin pasar por Steel CRM (2026-09-12, a pedido
+// de Gino) — pensado para un cliente que compra SOLO Steel Costos y hace
+// el proceso comercial con otra herramienta (o directo por correo/WhatsApp):
+// necesita una bandeja de entrada real sin depender del CRM. Reusa la
+// misma tabla compartida `solicitudes` (sin duplicar esquema) con un
+// formulario liviano — a diferencia de Solicitudes.jsx (CRM), sin motivo
+// de pérdida ni prioridad automática (dependen de historial de
+// presupuestos que este componente no trae). Campos de dueño (estado
+// "recibida", asignado_a/creado_por = quien la crea) se completan solos.
+function NuevaSolicitudModal({ usuario, onClose, onCreated }) {
+  const [f, setF] = useState({ cliente_nombre: "", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación", mensaje_cliente: "", fecha_limite: "", link_archivos: "" });
+  const [guardando, setGuardando] = useState(false);
+  const [errCliente, setErrCliente] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const guardar = async () => {
+    const faltaCliente = !f.cliente_nombre.trim();
+    setErrCliente(faltaCliente);
+    if (faltaCliente) return;
+    setGuardando(true); setErr("");
+    const { data, error } = await supabase.from("solicitudes").insert({
+      cliente_nombre: f.cliente_nombre.trim(),
+      empresa: f.empresa.trim() || null,
+      obra: f.obra.trim() || null,
+      categoria: f.categoria || null,
+      tipo_trabajo: f.tipo_trabajo || null,
+      mensaje_cliente: f.mensaje_cliente.trim() || null,
+      fecha_recepcion: new Date().toISOString().slice(0, 10),
+      fecha_limite: f.fecha_limite || null,
+      link_archivos: f.link_archivos.trim() || null,
+      estado: "recibida", asignado_a: usuario.profileId, creado_por: usuario.profileId, eliminado: false,
+    }).select().single();
+    setGuardando(false);
+    if (error) { setErr("No se pudo guardar: " + error.message); return; }
+    onCreated(data);
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 3500, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      onClick={onClose}>
+      <div style={{ background: C.card, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: 24, width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto" }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ color: C.accent, fontWeight: 800, fontSize: 15 }}>📥 Nueva solicitud</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+        <label style={LBL}>Cliente *</label>
+        <input style={{ ...INP, marginBottom: errCliente ? 4 : 10, ...(errCliente ? { border: "1px solid " + C.err } : {}) }}
+          value={f.cliente_nombre} autoFocus placeholder="Nombre del contacto"
+          onChange={e => { set("cliente_nombre", e.target.value); if (e.target.value.trim()) setErrCliente(false); }} />
+        {errCliente && <div style={{ fontSize: 11, color: C.err, fontWeight: 500, marginBottom: 10 }}>⚠ Indicá el Cliente</div>}
+        <label style={LBL}>Empresa</label>
+        <input style={{ ...INP, marginBottom: 10 }} value={f.empresa} placeholder="Razón social" onChange={e => set("empresa", e.target.value)} />
+        <label style={LBL}>Obra</label>
+        <input style={{ ...INP, marginBottom: 10 }} value={f.obra} placeholder="Ej: Nave Industrial" onChange={e => set("obra", e.target.value)} />
+        <label style={LBL}>Categoría</label>
+        <SelectCategoria value={f.categoria} onChange={v => set("categoria", v)} style={{ marginBottom: 10 }} />
+        <label style={LBL}>Tipo de trabajo</label>
+        <select style={{ ...INP, marginBottom: 10 }} value={f.tipo_trabajo} onChange={e => set("tipo_trabajo", e.target.value)}>
+          {TIPOS_TRABAJO.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <label style={LBL}>Mensaje del cliente / notas</label>
+        <textarea style={{ ...INP, marginBottom: 10, minHeight: 70 }} value={f.mensaje_cliente}
+          placeholder="Pegá acá el mail, WhatsApp, o el pedido tal cual llegó..." onChange={e => set("mensaje_cliente", e.target.value)} />
+        <label style={LBL}>Fecha límite</label>
+        <input type="date" style={{ ...INP, marginBottom: 10 }} value={f.fecha_limite} onChange={e => set("fecha_limite", e.target.value)} />
+        <label style={LBL}>Link de archivos (Drive, Dropbox, etc.)</label>
+        <input style={{ ...INP, marginBottom: 14 }} value={f.link_archivos} placeholder="https://..." onChange={e => set("link_archivos", e.target.value)} />
+        {err && <div style={{ fontSize: 12, color: C.err, marginBottom: 10 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={guardar} disabled={guardando} style={{ ...BTN("ok"), flex: 1, opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "Crear"}</button>
+          <button onClick={onClose} style={{ ...BTN("ghost"), flex: 1 }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SolicitudesAsignadas({ usuario, irATab }) {
   const [solicitudes, setSolicitudes] = useState([]);
@@ -25,6 +103,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   // 2026-09-12 — antes se guardaba solo el primero y los demás quedaban
   // invisibles desde acá).
   const [conComputo, setConComputo] = useState(new Map());
+  const [nuevaSolicitud, setNuevaSolicitud] = useState(false);
 
   useEffect(() => {
     if (!supabase || !usuario?.profileId) { setCargando(false); return; }
@@ -87,6 +166,39 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
     irATab("Computo");
   }
 
+  // "Se puede pasar a cualquier etapa" (2026-09-12, a pedido de Gino) —
+  // mismo criterio de precarga liviana que crearComputoDesde, pero
+  // saltando directo a Anidado o Presupuesto. `solicitud_id` viaja en los
+  // dos para no perder la trazabilidad (ver migración
+  // 20260912120000_solicitud_id_anidados_presupuestos_sm.sql).
+  function crearAnidadoDesde(s) {
+    try {
+      sessionStorage.setItem("smeas_prefill_anidado", JSON.stringify({
+        nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
+        cliente: s.cliente_nombre || "", empresa: s.empresa || "", obra: s.obra || "",
+        categoria: s.categoria || "", tipoTrabajo: s.tipo_trabajo || "",
+        linkArchivos: s.link_archivos || "", solicitudId: s.id,
+      }));
+    } catch {}
+    irATab("Anidado");
+  }
+
+  // Presupuesto invierte los nombres respecto a Solicitud/Anidado: acá
+  // "cliente" es la razón social y "contacto" es la persona — mismo
+  // mapeo que ya usa el resto de la app (ver "Pasar a Presupuesto" en
+  // Anidado.jsx).
+  function crearPresupuestoDesde(s) {
+    try {
+      sessionStorage.setItem("smeas_prefill_presupuesto", JSON.stringify({
+        nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
+        cliente: s.empresa || "", contacto: s.cliente_nombre || "", obra: s.obra || "",
+        categoria: s.categoria || "", tipo_trabajo: s.tipo_trabajo || "Fabricación",
+        link_archivos: s.link_archivos || "", solicitud_id: s.id,
+      }));
+    } catch {}
+    irATab("Presupuesto");
+  }
+
   // Lleva a la pantalla de Cómputo filtrada por esta solicitud (evita
   // crear un cómputo de más por error) — nunca abre uno puntual, porque
   // puede haber varios vinculados a la misma solicitud (bug real
@@ -121,9 +233,16 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   return (
     <div>
       {verFicha && <FichaSolicitudModal s={verFicha} onClose={() => setVerFicha(null)} />}
-      <div style={{ fontWeight: 800, fontSize: 20, color: C.text, marginBottom: 4 }}>📥 Mis solicitudes asignadas</div>
+      {nuevaSolicitud && (
+        <NuevaSolicitudModal usuario={usuario} onClose={() => setNuevaSolicitud(false)}
+          onCreated={s => { setSolicitudes(prev => [s, ...prev]); setNuevaSolicitud(false); }} />
+      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: 20, color: C.text }}>📥 Mis solicitudes asignadas</div>
+        <button onClick={() => setNuevaSolicitud(true)} style={{ ...BTN("primary"), fontSize: 12 }}>+ Nueva solicitud</button>
+      </div>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>
-        Cargadas y asignadas desde Steel CRM — mismo backend, sin pasos manuales.
+        Cargadas y asignadas desde Steel CRM, o creadas directo acá — mismo backend, sin pasos manuales.
       </div>
 
       {cargando && <div style={{ color: C.muted, fontSize: 13 }}>Cargando…</div>}
@@ -171,7 +290,21 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                         ✅ Ver cómputo{conComputo.get(s.id) > 1 ? `s (${conComputo.get(s.id)})` : ""}
                       </button>
                     )}
-                    <button onClick={() => crearComputoDesde(s)} style={{ ...BTN("primary"), whiteSpace: "nowrap" }}>📐 {conComputo.has(s.id) ? "Crear otro cómputo" : "Crear cómputo"}</button>
+                    {/* "Se puede pasar a cualquier etapa" (2026-09-12) — antes solo
+                        había "Crear cómputo". Select nativo en vez de un menú
+                        propio: mismo patrón ya usado en el resto de esta app para
+                        no manejar clicks-fuera a mano. */}
+                    <select value="" onChange={e => {
+                      const v = e.target.value;
+                      if (v === "computo") crearComputoDesde(s);
+                      else if (v === "anidado") crearAnidadoDesde(s);
+                      else if (v === "presupuesto") crearPresupuestoDesde(s);
+                    }} style={{ ...BTN("primary"), whiteSpace: "nowrap", cursor: "pointer" }}>
+                      <option value="" disabled>+ Crear…</option>
+                      <option value="computo">📐 Cómputo</option>
+                      <option value="anidado">✂️ Anidado</option>
+                      <option value="presupuesto">💰 Presupuesto</option>
+                    </select>
                   </td>
                 </tr>
               ))}
