@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, INP, LBL, CARD, BTN } from "../styles/colors";
 import { loadLS } from "../utils/storage";
 import { toastError, toastWarn, toastOk } from "../utils/toastBus";
@@ -61,6 +61,19 @@ export default function ExportModal({ usuarios = [], onClose }) {
   const [colsPresupuesto, setColsPresupuesto] = useState(new Set(COLS_PRESUPUESTO.map(c => c.key)));
   const [colsHistorial, setColsHistorial] = useState(new Set(COLS_HISTORIAL.map(c => c.key)));
   const [sheetsBusy, setSheetsBusy] = useState(false);
+  // Steel Costos nunca cargó SheetJS antes de este modal (2026-09-13) — el
+  // único "export" que tenía la app (lista de corte de Anidado) es un .txt
+  // plano por Blob, no un Excel real. Mismo mecanismo de carga por CDN que
+  // ya usa Importar.jsx en Steel CRM.
+  const [xlsxReady, setXlsxReady] = useState(!!window.XLSX);
+  useEffect(() => {
+    if (window.XLSX) { setXlsxReady(true); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = () => setXlsxReady(true);
+    s.onerror = () => toastError("No se pudo cargar la librería de Excel — revisá tu conexión y volvé a intentar.");
+    document.head.appendChild(s);
+  }, []);
 
   const toggleHoja = k => setHojasSel(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const toggleCol = (set, setSet, k) => setSet(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -217,12 +230,13 @@ export default function ExportModal({ usuarios = [], onClose }) {
         {hojasSel.has("presupuestos") && seccionCols("📋 Columnas — Presupuestos", COLS_PRESUPUESTO, colsPresupuesto, setColsPresupuesto)}
         {hojasSel.has("historial") && seccionCols("🗂 Columnas — Historial", COLS_HISTORIAL, colsHistorial, setColsHistorial)}
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", marginTop: 8 }}>
+          {!xlsxReady && <span style={{ fontSize: 11, color: C.muted, marginRight: "auto" }}>⏳ Cargando librería de Excel...</span>}
           <button onClick={onClose} style={{ ...BTN("ghost"), padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Cancelar</button>
-          <button onClick={enviarASheets} disabled={sheetsBusy} style={{ ...BTN("ghost"), padding: "8px 16px", borderRadius: 8, cursor: sheetsBusy ? "default" : "pointer", fontWeight: 700, opacity: sheetsBusy ? .6 : 1 }}>
+          <button onClick={enviarASheets} disabled={sheetsBusy || !xlsxReady} style={{ ...BTN("ghost"), padding: "8px 16px", borderRadius: 8, cursor: (sheetsBusy || !xlsxReady) ? "default" : "pointer", fontWeight: 700, opacity: (sheetsBusy || !xlsxReady) ? .6 : 1 }}>
             {sheetsBusy ? "Enviando..." : "🔗 Google Sheets"}
           </button>
-          <button onClick={exportar} style={{ ...BTN("primary"), padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>⬇ Exportar Excel</button>
+          <button onClick={exportar} disabled={!xlsxReady} style={{ ...BTN("primary"), padding: "8px 16px", borderRadius: 8, cursor: xlsxReady ? "pointer" : "default", fontWeight: 700, opacity: xlsxReady ? 1 : .6 }}>⬇ Exportar Excel</button>
         </div>
       </div>
     </div>
