@@ -128,6 +128,54 @@ test("agregar una pieza a un ítem y crear otro ítem en el mismo batch conserva
   expect(c.items[0].piezas[0].material_nombre).toBe("Perfil de prueba");
 });
 
+test("editar un campo de cabecera (Nombre) justo después de agregar un ítem, en el mismo batch, no pierde el ítem nuevo ni la pieza ya cargada", () => {
+  // Tercera causa real del mismo bug (2026-09-14), reproducida en vivo con
+  // datos reales de Supabase (C-016: 2 piezas cargadas, ninguna sobrevivió
+  // ni local ni remoto). A diferencia de `agregarItem`/`eliminarItem`
+  // (ya arreglados el 2026-09-13, ver test de arriba), `updateComputo`
+  // — usado por Nombre/Tipo de trabajo/Categoría/Vendedor/Archivos/
+  // Cantidad total — seguía armando el objeto de reemplazo a partir del
+  // `computo` capturado en el render ANTES de aplicar el patch. Si esa
+  // edición de cabecera se dispara justo después de una edición de
+  // ítem/pieza dentro del mismo batch (típico: tocar el selector de
+  // Vendedor o Cantidad total apenas se termina de cargar una pieza), el
+  // reemplazo completo pisaba lo que la edición de ítem ya había agregado
+  // — aunque esa SÍ usara el patrón seguro (`mutateComputo`). El fix hace
+  // que `updateComputo` también resuelva contra el estado más fresco.
+  const piezaDePrueba = {
+    id: "pieza-1", tipo: "perfil", material_id: "MAT-1", material_nombre: "Perfil de prueba",
+    kg_m: 2, sup_m2m: 0, largo_mm_input: "1000", largo_mm: "", ancho_mm: "", cantidad: 1, ficha: {},
+  };
+  localStorage.setItem("smeas_computos", JSON.stringify([{
+    id: "computo-1", nro: "C-TEST", nombre: "Cómputo de prueba QA", fecha: "2026-09-13",
+    cliente: "Cliente QA", empresa: "", obra: "", categoria: "", tipo_trabajo: "Fabricación",
+    vendedor: "", cantidad_total: 1,
+    items: [{ id: "item-1", titulo: "Ítem 1", cantidad: 1, n_plano: "", piezas: [piezaDePrueba] }],
+  }]));
+
+  render(<Computo usuario={USUARIO} usuarios={[]} tcGlobal={40} logear={() => {}} />);
+  fireEvent.click(screen.getByText("Cómputo de prueba QA"));
+
+  const agregarItemBtn = screen.getByText("+ Ítem");
+  const nombreInput = screen.getByDisplayValue("Cómputo de prueba QA");
+
+  // Orden real del bug: primero la edición de ítem (agrega Ítem 2, ya
+  // arreglada — funcional y fresca), DESPUÉS la edición de cabecera (la
+  // que todavía armaba su reemplazo con el `computo` viejo) — sin
+  // re-render entre medio.
+  act(() => {
+    fireEvent.click(agregarItemBtn);
+    fireEvent.change(nombreInput, { target: { value: "Cómputo renombrado" } });
+  });
+
+  const guardado = JSON.parse(localStorage.getItem("smeas_computos"));
+  const c = guardado.find((x) => x.id === "computo-1");
+  expect(c.nombre).toBe("Cómputo renombrado");
+  expect(c.items).toHaveLength(2);
+  expect(c.items[0].piezas).toHaveLength(1);
+  expect(c.items[0].piezas[0].material_nombre).toBe("Perfil de prueba");
+});
+
 test("dualWriteComputo serializa: la escritura de una edición vieja no puede pisar en Supabase a una más nueva", async () => {
   saveDBComputo.mockClear();
   const resolvers = [];
