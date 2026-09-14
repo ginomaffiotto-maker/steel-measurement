@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BTN, C } from "../styles/colors";
 
 // Hook de orden reusable para listas — un click en una columna/opción ordena
@@ -115,6 +115,19 @@ export function sumAnchos(widths) {
 // recálculo, así que las demás no se mueven mientras se arrastra. Si el
 // contenedor es más angosto que la suma, no se toca nada — aparece
 // scroll horizontal, como siempre.
+// 2026-09-14 — se sacó el `fit()` que reescalaba TODAS las columnas
+// proporcionalmente al montar/resizear la ventana (agregado sin querer
+// por `d75f4a5`, sin relación con el fix real de ese commit — el header
+// fuera de pantalla). Ese `fit()` guardaba en localStorage el resultado
+// ya agrandado, así que cualquier ajuste de ancho por default (achicar
+// "acc", por ejemplo) quedaba pisado en el próximo mount si la pantalla
+// era más ancha que la suma de columnas — la causa real, más de fondo
+// que cualquier cosa de CSS, de que "la columna de la derecha siga
+// viéndose muy ancha" pasara lo que pasara con los defaults. Steel CRM
+// (`SortTH`/`useResizableColumns`, shared.jsx) nunca tuvo este mecanismo
+// — de ahí que ahí las columnas se sintieran predecibles y acá no. Se
+// alinea a exactamente lo mismo que ya usa Steel CRM: leer de
+// localStorage o los defaults, sin ningún reescalado automático.
 export function useResizableColumns(storageKey, defaults) {
   const [widths, setWidths] = useState(() => {
     try {
@@ -122,26 +135,6 @@ export function useResizableColumns(storageKey, defaults) {
       return { ...defaults, ...saved };
     } catch { return defaults; }
   });
-  const containerRef = useRef(null);
-  useEffect(() => {
-    function fit() {
-      const el = containerRef.current;
-      if (!el) return;
-      const disponible = el.clientWidth;
-      setWidths(prev => {
-        const total = sumAnchos(prev);
-        if (!total || disponible <= total) return prev;
-        const factor = disponible / total;
-        const next = {};
-        for (const k in prev) next[k] = Math.round(prev[k] * factor);
-        try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
-        return next;
-      });
-    }
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [storageKey]);
   function setWidth(key, px) {
     setWidths(prev => {
       const next = { ...prev, [key]: Math.max(30, Math.round(px)) };
@@ -153,7 +146,7 @@ export function useResizableColumns(storageKey, defaults) {
     setWidths(defaults);
     try { localStorage.removeItem(storageKey); } catch {}
   }
-  return { widths, setWidth, reset, containerRef };
+  return { widths, setWidth, reset };
 }
 
 // <th> con handle de arrastre en el borde derecho — mismo mecanismo que
@@ -168,20 +161,27 @@ export function useResizableColumns(storageKey, defaults) {
 // mouse después de arrastrar también reordenaba la columna (el click
 // burbujeaba hasta el `<th>`, que tiene su propio `onClick` de orden).
 //
-// 2026-09-14 — columna "flex" (Nombre/Obra): pedido de Gino de que las
-// columnas angostas (Fecha/Tipo/KG/Monto/Acc) no queden con tanto aire
-// de más cuando la tabla se estira a 100%. No pasarle `width`/`onResize`
-// a UNA columna del array (dejarla sin declarar, "auto") hace que esa
-// columna absorba casi todo el espacio sobrante en vez de que el
-// navegador lo reparta proporcional entre todas — verificado en vivo
-// con un HTML aislado: el resto de las columnas queda con una inflación
-// mínima (no perfecta — Chrome igual las infla ~15-20% aunque tengan
-// min=max=width, no encontramos forma de evitar eso del todo con CSS
-// puro) en vez del ~78% de antes, y arrastrar una columna bloqueada
-// solo descuenta/suma a la columna flex, sin mover a las demás. La
-// columna flex pierde su drag propio a propósito (no tiene sentido
-// arrastrar algo que siempre ocupa "lo que sobra") — por eso no se le
-// pasa `onResize`, así tampoco se dibuja su handle.
+// 2026-09-14 — columna "flex" (Nombre/Obra), PROBADO Y REVERTIDO EL
+// MISMO DÍA: pedido de Gino de que las columnas angostas (Fecha/Tipo/
+// KG/Monto/Acc) no quedaran con tanto aire de más al estirar la tabla a
+// 100%. Dejar una sola columna sin `width`/`onResize` (para que absorba
+// el sobrante) funcionaba para eso, pero rompió el drag — como esa
+// columna vive cerca del principio de la fila, CUALQUIER resize de una
+// columna a su derecha (sobre todo la última, "Acc", que ya está pegada
+// al borde derecho de la tabla y no tiene a dónde crecer hacia la
+// derecha) le pedía a ella sola toda la compensación, y visualmente el
+// bloque de columnas del medio se corría entero para la izquierda —
+// Gino lo describió como "quiero agrandar hacia la derecha y se agranda
+// hacia la izquierda". Con TODAS las columnas bloqueadas (sin ninguna
+// columna elástica, como quedó más abajo) esa compensación se reparte
+// fina entre todas en vez de concentrarse en una sola, así que no se
+// nota — es el mismo motivo, verificado hoy, por el que Steel CRM
+// (que nunca tuvo columna flex) no tiene este problema. Se vuelve a
+// EXACTAMENTE el mismo mecanismo que ya usa Steel CRM (`SortTH`) — cada
+// columna con `width`/`onResize` normal, ninguna elástica — a pedido
+// explícito de Gino de que las dos apps se sientan iguales. El aire de
+// más en las columnas angostas queda como un costo aceptado (mismo
+// costo que ya acepta CRM) en vez de resolverse con esta técnica.
 export function ThResizable({ children, style, width, onResize, minWidth = 40, onClick, title }) {
   function iniciarResize(e) {
     e.preventDefault(); e.stopPropagation();

@@ -3211,7 +3211,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_presupuesto", {
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto", {
     check: 34, nro: 70, nombre: 160, cliente: 130, obra: 130, tipo: 90,
     vendedor: 110, fecha: 90, items: 55, total: 100, estado: 100, acc: 30,
   });
@@ -3558,7 +3558,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
       {lista.length > 0 && (
-        <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
+        <div style={{ overflowX:"auto", minWidth:0 }}>
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
@@ -3576,7 +3576,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                 { h:"Estado", campo:"estado", k:"estado" }, { h:"", campo:null, k:"acc" },
               ].map(({h,campo,k}) => (
                 <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
-                  width={k==="nombre" ? undefined : colW[k]} onResize={k==="nombre" ? undefined : w => setColW(k, w)}
+                  width={colW[k]} onResize={w => setColW(k, w)}
                   onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                 </ThResizable>

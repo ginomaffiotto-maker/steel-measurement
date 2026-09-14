@@ -537,7 +537,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .map(t => ({ ...t, _usd_kg: usdKgDe(t) })),
     [trabajosActivos, filt]); // eslint-disable-line react-hooks/exhaustive-deps
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_historial", {
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_historial", {
     check: 34, ot: 70, fecha: 85, cliente: 130, obra: 130, categoria: 110,
     vendedor: 100, kg: 80, usd: 90, usdkg: 80, origen: 90, acc: 30,
   });
@@ -682,7 +682,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
             </div>
           )}
           {lista.length > 0 && (
-            <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
+            <div style={{ overflowX:"auto", minWidth:0 }}>
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
               </div>
@@ -701,7 +701,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                     { h:"", campo:null, k:"acc" },
                   ].map(({h,campo,k}) => (
                     <ThResizable key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
-                      width={k==="obra" ? undefined : colW[k]} onResize={k==="obra" ? undefined : w => setColW(k, w)}
+                      width={colW[k]} onResize={w => setColW(k, w)}
                       onClick={() => campo && ordenarPor(campo)}>
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                     </ThResizable>

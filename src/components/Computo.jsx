@@ -1265,7 +1265,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables.
-  const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_computo", {
+  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_computo", {
     check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 100,
   });
 
@@ -1552,7 +1552,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. */}
         {computosFiltrados.length > 0 && (
-          <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
+          <div style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
@@ -1575,7 +1575,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                 ].map(({h,campo,k}) => (
                   <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
                     style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
-                    width={k==="nombre" ? undefined : colW[k]} onResize={k==="nombre" ? undefined : w=>setColW(k,w)}
+                    width={colW[k]} onResize={w=>setColW(k,w)}
                     onClick={()=>campo && ordenarPor(campo)}>
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
