@@ -42,7 +42,7 @@ function NuevaSolicitudModal({ usuario, onClose, onCreated }) {
       fecha_recepcion: new Date().toISOString().slice(0, 10),
       fecha_limite: f.fecha_limite || null,
       link_archivos: f.link_archivos.trim() || null,
-      estado: "recibida", asignado_a: usuario.profileId, creado_por: usuario.profileId, eliminado: false,
+      estado: "recibida", asignado_a: usuario.profileId, creado_por: usuario.nombre || "", eliminado: false,
     }).select().single();
     setGuardando(false);
     if (error) { setErr("No se pudo guardar: " + error.message); return; }
