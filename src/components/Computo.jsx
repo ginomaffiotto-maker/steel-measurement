@@ -1289,10 +1289,19 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   };
   const computoAEliminar = confirmarDelId ? computos.find(c=>c.id===confirmarDelId) : null;
 
-  const updateComputo = (upd) => {
-    const actualizado = touch(upd);
-    setComputos(prev=>prev.map(c=>c.id===upd.id?actualizado:c));
-    dualWriteComputo(actualizado);
+  // Bug real (2026-09-14): a diferencia de `mutateComputo` (piezas/ítems),
+  // esta función seguía armando el objeto nuevo a partir del `computo`
+  // capturado en el render — si se editaba un campo de encabezado (Nombre/
+  // Tipo/Categoría/Vendedor/Archivos/Cant. total) justo después de agregar
+  // una pieza, antes de que React re-renderizara con el estado fresco, el
+  // spread `{...computo, campo}` no incluía la pieza recién agregada y la
+  // pisaba al reemplazar el cómputo entero — reproducido con datos reales
+  // (C-016: 2 piezas cargadas, ninguna sobrevivió ni local ni en Supabase).
+  // Ahora recibe solo el patch y resuelve contra el estado más fresco, mismo
+  // criterio que `mutateComputo`.
+  const updateComputo = (patch) => {
+    if (!computo) return;
+    mutateComputo(computo.id, (current) => ({ ...current, ...patch }));
   };
 
   // 2026-09-13: ya no arma el ítem actualizado a mano — ver `updateItemMutator`
@@ -1547,7 +1556,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
@@ -1671,7 +1680,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         gap:16, flexWrap:"wrap" }}>
         <div>
           <input value={computo.nombre}
-            onChange={e=>updateComputo({...computo,nombre:e.target.value})}
+            onChange={e=>updateComputo({nombre:e.target.value})}
             onFocus={e=>{e.target.style.background=C.iron;e.target.style.borderColor=C.accent;}}
             onBlur={e=>{e.target.style.background="transparent";e.target.style.borderColor=C.border+"66";}}
             title="Click para editar el nombre de la obra"
@@ -1683,11 +1692,11 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         {/* Tipo de trabajo + Categoría — se heredan solos en Anidado/Presupuesto */}
         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
           <select value={computo.tipo_trabajo||"Fabricación"}
-            onChange={e=>updateComputo({...computo,tipo_trabajo:e.target.value})}
+            onChange={e=>updateComputo({tipo_trabajo:e.target.value})}
             style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
             {TIPOS_TRABAJO.map(t=><option key={t}>{t}</option>)}
           </select>
-          <SelectCategoria value={computo.categoria} onChange={v=>updateComputo({...computo,categoria:v})}
+          <SelectCategoria value={computo.categoria} onChange={v=>updateComputo({categoria:v})}
             style={{ padding:"3px 6px", fontSize:11, width:140 }} />
           {computo.categoria && <div style={{ fontSize:11, color:C.steel, fontWeight:600 }}>Familia: {familiaDe(computo.categoria)}</div>}
         </div>
@@ -1695,7 +1704,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         {/* Vendedor */}
         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
           <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>Vendedor</span>
-          <select value={computo.vendedor||""} onChange={e=>updateComputo({...computo,vendedor:e.target.value})}
+          <select value={computo.vendedor||""} onChange={e=>updateComputo({vendedor:e.target.value})}
             style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }}>
             <option value="">— Sin asignar —</option>
             {usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}
@@ -1707,7 +1716,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
           <span style={{ fontSize:10, color:C.muted, textTransform:"uppercase" }}>🔗 Archivos</span>
           <div style={{ display:"flex", gap:4 }}>
-            <input value={computo.link_archivos||""} onChange={e=>updateComputo({...computo,link_archivos:e.target.value})}
+            <input value={computo.link_archivos||""} onChange={e=>updateComputo({link_archivos:e.target.value})}
               placeholder="https://..." style={{ ...INP, padding:"3px 6px", fontSize:11, width:140 }} />
             {computo.link_archivos && <a href={computo.link_archivos} target="_blank" rel="noreferrer" style={{ ...BTN("ghost"), padding:"3px 8px", fontSize:11 }}>📁</a>}
           </div>
@@ -1719,7 +1728,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           <span style={{ fontSize:11, color:C.muted }}>Cant. total obra:</span>
           <input type="number" min="1" step="1"
             value={computo.cantidad_total ?? 1}
-            onChange={e=>updateComputo({...computo,cantidad_total:parseInt(e.target.value)||1})}
+            onChange={e=>updateComputo({cantidad_total:parseInt(e.target.value)||1})}
             onFocus={e=>e.target.select()}
             style={{ ...INP,width:50,padding:"3px 6px",textAlign:"center",background:"transparent",border:`1px solid ${C.accent}66`,fontSize:14,fontWeight:800,color:C.accent }} />
           <span style={{ fontSize:10, color:C.muted }}>estructura{(computo.cantidad_total??1)!==1?"s":""} igual{(computo.cantidad_total??1)!==1?"es":""}</span>

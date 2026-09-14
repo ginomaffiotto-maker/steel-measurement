@@ -1590,7 +1590,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width: sumAnchos(colW), borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={anidadosFiltrados.every(a=>seleccionados.has(a.id))}
