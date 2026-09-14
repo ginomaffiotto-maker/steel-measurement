@@ -1317,6 +1317,10 @@ export const enviarPresupuestoASteelCRM = async (pres, calc, usuario) => {
     fecha: pres.fecha || null,
     tipo: pres.categoria || "",
     categoria: pres.categoria || "",
+    // Bug real (2026-09-14, reportado por Gino): "producto" nunca viajaba acá
+    // — el presupuesto llegaba a Steel CRM con ese campo vacío. `pres.nombre`
+    // es el nombre real del presupuesto del lado de Costos, análogo directo.
+    producto: pres.nombre || "",
     obra: pres.obra || "",
     kg_cotizados: calc.total_kg,
     precio_usd_kg: calc.usd_kg,
