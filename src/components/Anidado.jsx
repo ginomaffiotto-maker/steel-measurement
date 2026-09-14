@@ -1613,6 +1613,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
+                {/* Columna filler (2026-09-14) — sin width propio, absorbe
+                    el sobrante para que las columnas reales no se inflen. */}
+                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {anidadosFiltrados.map(a=>{
@@ -1653,6 +1656,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                           )}
                         </div>
                       </td>
+                      <td style={TD}></td>
                     </tr>
                   );
                 })}

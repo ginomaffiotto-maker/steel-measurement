@@ -173,20 +173,47 @@ export function useResizableColumns(storageKey, defaults) {
 // bloque de columnas del medio se corría entero para la izquierda —
 // Gino lo describió como "quiero agrandar hacia la derecha y se agranda
 // hacia la izquierda". Con TODAS las columnas bloqueadas (sin ninguna
-// columna elástica, como quedó más abajo) esa compensación se reparte
-// fina entre todas en vez de concentrarse en una sola, así que no se
-// nota — es el mismo motivo, verificado hoy, por el que Steel CRM
-// (que nunca tuvo columna flex) no tiene este problema. Se vuelve a
-// EXACTAMENTE el mismo mecanismo que ya usa Steel CRM (`SortTH`) — cada
-// columna con `width`/`onResize` normal, ninguna elástica — a pedido
-// explícito de Gino de que las dos apps se sientan iguales. El aire de
-// más en las columnas angostas queda como un costo aceptado (mismo
-// costo que ya acepta CRM) en vez de resolverse con esta técnica.
-export function ThResizable({ children, style, width, onResize, minWidth = 40, onClick, title }) {
+// columna elástica) esa compensación se reparte fina entre todas en vez
+// de concentrarse en una sola, así que no se nota — es el mismo motivo,
+// verificado ese mismo día, por el que Steel CRM (que nunca tuvo
+// columna flex) no tiene este problema. Se volvió a EXACTAMENTE el
+// mismo mecanismo que ya usa Steel CRM (`SortTH`) — cada columna con
+// `width`/`onResize` normal, ninguna elástica.
+//
+// 2026-09-14 (misma noche) — con el drag ya arreglado, Gino reportó dos
+// cosas más: "Acc" seguía por defecto muy ancha, y las columnas se
+// podían agrandar tanto que las de los extremos se salían de pantalla.
+// Lo primero es un comportamiento real del navegador (confirmado con 3
+// HTML aislados distintos, no una sola vez): con `table-layout:fixed` +
+// tabla al 100% y columnas "bloqueadas" (min=max=width), Chrome IGUAL
+// reparte una porción de lo que sobra entre TODAS ellas — el
+// `min`/`max` no las inmuniza del todo contra esto — así que cuanto más
+// angosta es una columna respecto al resto, más notorio se ve el
+// agrandado. La solución real no es tocar min/max (ya está bien puesto,
+// ver comentario del 2026-09-13) sino agregar una columna FILLER
+// invisible al final de la fila (sin `width` propio, sin borde) — al
+// haber una columna genuinamente sin restricciones, el navegador le
+// manda a ELLA la enorme mayoría del sobrante (verificado: de +230px de
+// slack total, las 8 columnas reales sumaron solo +17px cada una en vez
+// de inflarse proporcional). Es la MISMA idea que ya se había probado y
+// revertido el 2026-09-13 ("Ronda 2" del historial de este mismo mes) —
+// pero en aquel momento `ThResizable` todavía NO tenía el lock
+// `min=max=width` (solo `maxWidth`, agregado recién ese mismo día un
+// poco después) — sin ese lock, las columnas reales sí se podían
+// comprimir de más al convivir con un filler, dando el resultado
+// "desproporcionado" que Gino rechazó en su momento. Con el lock ya en
+// su lugar desde hace un día, el filler se comporta bien: cada columna
+// real queda muy cerca de su ancho declarado, y arrastrar cualquiera de
+// ellas (incluida la última) solo le pide espacio al filler, sin tocar
+// a ninguna otra columna real — confirmado en un HTML aislado antes de
+// aplicarlo acá. Para lo segundo (columnas saliéndose de pantalla), se
+// suma un tope máximo al arrastre (`maxWidth`, default 500px) — hasta
+// ahora `iniciarResize` solo tenía un piso (`minWidth`), nunca un techo.
+export function ThResizable({ children, style, width, onResize, minWidth = 40, maxWidth = 500, onClick, title }) {
   function iniciarResize(e) {
     e.preventDefault(); e.stopPropagation();
     const startX = e.clientX, startW = width || 100;
-    function onMove(ev) { onResize(Math.max(minWidth, startW + (ev.clientX - startX))); }
+    function onMove(ev) { onResize(Math.min(maxWidth, Math.max(minWidth, startW + (ev.clientX - startX)))); }
     function onUp() { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);

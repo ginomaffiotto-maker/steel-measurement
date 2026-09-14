@@ -1580,6 +1580,9 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
+                {/* Columna filler (2026-09-14) — sin width propio, absorbe
+                    el sobrante para que las columnas reales no se inflen. */}
+                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {computosFiltrados.map(c => {
@@ -1622,6 +1625,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                           )}
                         </div>
                       </td>
+                      <td style={TD}></td>
                     </tr>
                   );
                 })}

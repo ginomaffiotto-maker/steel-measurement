@@ -706,6 +706,9 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                     </ThResizable>
                   ))}
+                  {/* Columna filler (2026-09-14) — sin width propio, absorbe
+                      el sobrante para que las columnas reales no se inflen. */}
+                  <th style={{ ...TH, borderRight:"none" }}></th>
                 </tr></thead>
                 <tbody>
                   {listaPagina.map(t => {
@@ -733,6 +736,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                           <button onClick={() => setConfirmarDelId(t.id)}
                             style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
                         </td>
+                        <td style={TD}></td>
                       </tr>
                     );
                   })}
