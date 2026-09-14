@@ -13,7 +13,7 @@ import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { abrirResumenInterno } from "../utils/resumenInterno";
-import { useSortable, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
+import { useSortable, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";

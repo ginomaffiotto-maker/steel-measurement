@@ -7,7 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
-import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
+import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import FiltrosBar from "./FiltrosBar";
 

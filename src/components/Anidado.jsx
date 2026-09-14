@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, ColSort, useResizableColumns, ThResizable, sumAnchos } from "../utils/useSortable";
+import { useSortable, ColSort, useResizableColumns, ThResizable } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
