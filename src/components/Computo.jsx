@@ -1266,7 +1266,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables.
   const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_computo", {
-    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 170,
+    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 100,
   });
 
   // Soft-delete (2026-08-24) — nunca se borra de verdad, se marca y se filtra

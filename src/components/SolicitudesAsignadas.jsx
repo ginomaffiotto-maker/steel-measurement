@@ -263,7 +263,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
                   { h: "Prioridad", campo: "prioridad_manual", w: 100 }, { h: "Cliente", campo: "cliente_nombre", w: 160 }, { h: "Obra", campo: "obra", w: 180 },
                   { h: "Tipo", campo: "tipo_trabajo", w: 100 }, { h: "Categoría", campo: "categoria", w: 140 },
                   { h: "Recepción", campo: "fecha_recepcion", w: 100 }, { h: "Estado", campo: "estado", w: 110 },
-                  { h: "Fecha límite", campo: "fecha_limite", w: 100 }, { h: "", campo: null, w: 260 },
+                  { h: "Fecha límite", campo: "fecha_limite", w: 100 }, { h: "", campo: null, w: 200 },
                 ].map(({ h, campo, w }) => (
                   <th key={h} title={campo ? "Ordenar por " + h : ""} style={{ ...TH, width: w, cursor: campo ? "pointer" : "default", userSelect: "none" }}
                     onClick={() => campo && ordenarPor(campo)}>

@@ -1363,7 +1363,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables. Mismo cambio que Computo.jsx.
   const { widths: colW, setWidth: setColW, reset: resetColW, containerRef: colContainerRef } = useResizableColumns("smeas_cols_anidado", {
-    check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 130,
+    check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 70,
   });
 
   const delAnidado=id=>{
