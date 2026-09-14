@@ -167,6 +167,21 @@ export function useResizableColumns(storageKey, defaults) {
 // lados; (2) sin `stopPropagation` en el `onClick` del handle, soltar el
 // mouse después de arrastrar también reordenaba la columna (el click
 // burbujeaba hasta el `<th>`, que tiene su propio `onClick` de orden).
+//
+// 2026-09-14 — columna "flex" (Nombre/Obra): pedido de Gino de que las
+// columnas angostas (Fecha/Tipo/KG/Monto/Acc) no queden con tanto aire
+// de más cuando la tabla se estira a 100%. No pasarle `width`/`onResize`
+// a UNA columna del array (dejarla sin declarar, "auto") hace que esa
+// columna absorba casi todo el espacio sobrante en vez de que el
+// navegador lo reparta proporcional entre todas — verificado en vivo
+// con un HTML aislado: el resto de las columnas queda con una inflación
+// mínima (no perfecta — Chrome igual las infla ~15-20% aunque tengan
+// min=max=width, no encontramos forma de evitar eso del todo con CSS
+// puro) en vez del ~78% de antes, y arrastrar una columna bloqueada
+// solo descuenta/suma a la columna flex, sin mover a las demás. La
+// columna flex pierde su drag propio a propósito (no tiene sentido
+// arrastrar algo que siempre ocupa "lo que sobra") — por eso no se le
+// pasa `onResize`, así tampoco se dibuja su handle.
 export function ThResizable({ children, style, width, onResize, minWidth = 40, onClick, title }) {
   function iniciarResize(e) {
     e.preventDefault(); e.stopPropagation();

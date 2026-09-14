@@ -1608,7 +1608,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 ].map(({h,campo,k}) => (
                   <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
                     style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
-                    width={colW[k]} onResize={w=>setColW(k,w)}
+                    width={k==="nombre" ? undefined : colW[k]} onResize={k==="nombre" ? undefined : w=>setColW(k,w)}
                     onClick={()=>campo && ordenarPor(campo)}>
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>

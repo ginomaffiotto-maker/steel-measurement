@@ -701,7 +701,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                     { h:"", campo:null, k:"acc" },
                   ].map(({h,campo,k}) => (
                     <ThResizable key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
-                      width={colW[k]} onResize={w => setColW(k, w)}
+                      width={k==="obra" ? undefined : colW[k]} onResize={k==="obra" ? undefined : w => setColW(k, w)}
                       onClick={() => campo && ordenarPor(campo)}>
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                     </ThResizable>

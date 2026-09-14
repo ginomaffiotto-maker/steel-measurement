@@ -3576,7 +3576,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                 { h:"Estado", campo:"estado", k:"estado" }, { h:"", campo:null, k:"acc" },
               ].map(({h,campo,k}) => (
                 <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
-                  width={colW[k]} onResize={w => setColW(k, w)}
+                  width={k==="nombre" ? undefined : colW[k]} onResize={k==="nombre" ? undefined : w => setColW(k, w)}
                   onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                 </ThResizable>
