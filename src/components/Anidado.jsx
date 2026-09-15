@@ -10,7 +10,7 @@ import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
-import { useSortable, ColSort, useResizableColumns, ThResizable } from "../utils/useSortable";
+import { useSortable, ColSort, useResizableColumns, ThResizable, clampAnchoColumna } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import { toastWarn } from "../utils/toastBus";
 import { SelectCategoria, TIPOS_TRABAJO, familiaDe, FAMILIAS } from "../utils/taxonomia";
@@ -1362,9 +1362,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables. Mismo cambio que Computo.jsx.
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_anidado", {
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v2", {
     check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 70,
   });
+  // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
+  const colContainerRef = useRef(null);
+  const setColW = (key, px) => setColWRaw(key, clampAnchoColumna(colContainerRef.current, colW, key, px));
 
   const delAnidado=id=>{
     const a = anidados.find(x=>x.id===id);
@@ -1586,7 +1589,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. Mismo cambio que Computo.jsx. */}
         {anidadosFiltrados.length > 0 && (
-          <div style={{ overflowX:"auto", minWidth:0 }}>
+          <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>

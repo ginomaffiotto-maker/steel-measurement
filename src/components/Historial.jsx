@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, resolverEmpresaId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
@@ -7,7 +7,7 @@ import AutocompleteEmpresa from "./AutocompleteEmpresa";
 import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 import { HISTORIAL_SEED } from "../utils/historialSeed";
 import { familiaDe, FAMILIAS } from "../utils/taxonomia";
-import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable } from "../utils/useSortable";
+import { useSortable, usePaginado, Paginador, useResizableColumns, ThResizable, clampAnchoColumna } from "../utils/useSortable";
 import { useUndoToast } from "./Toast";
 import FiltrosBar from "./FiltrosBar";
 
@@ -537,10 +537,13 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .map(t => ({ ...t, _usd_kg: usdKgDe(t) })),
     [trabajosActivos, filt]); // eslint-disable-line react-hooks/exhaustive-deps
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_historial", {
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_historial_v2", {
     check: 34, ot: 70, fecha: 85, cliente: 130, obra: 130, categoria: 110,
     vendedor: 100, kg: 80, usd: 90, usdkg: 80, origen: 90, acc: 30,
   });
+  // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
+  const colContainerRef = useRef(null);
+  const setColW = (key, px) => setColWRaw(key, clampAnchoColumna(colContainerRef.current, colW, key, px));
   // Paginado (2026-08-31): 235 trabajos históricos reales y creciendo —
   // mismo riesgo de DOM grande que ya causó el cuelgue en Steel CRM.
   const { pagina: paginaHist, totalPaginas: totalPaginasHist, itemsPagina: listaPagina, setPagina: setPaginaHist } = usePaginado(lista, 50, [filt, sortCampo, sortDir]);
@@ -682,7 +685,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
             </div>
           )}
           {lista.length > 0 && (
-            <div style={{ overflowX:"auto", minWidth:0 }}>
+            <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
               </div>

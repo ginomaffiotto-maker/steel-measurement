@@ -103,31 +103,14 @@ export function sumAnchos(widths) {
 // cada columna por dispositivo (localStorage), igual criterio que las
 // preferencias de columnas de Kanban. `defaults` es un objeto {colKey:px}.
 //
-// `containerRef` (2026-09-13, arreglo real y definitivo del bug de
-// resize — 3 intentos fallidos antes, ver historial de commits del mismo
-// día): se lo pasa al `<div style={{overflowX:"auto"}}>` que envuelve la
-// tabla. Al montar y en cada resize de ventana, si ese contenedor es más
-// ANCHO que la suma actual de columnas, escala TODAS proporcionalmente
-// para llenarlo — mismo efecto visual que el `width:"100%"` de siempre
-// (la tabla se ve "llena"), pero calculado una sola vez por JS, nunca por
-// el navegador en tiempo real. Arrastrar una columna después solo cambia
-// ESA columna (`setWidth`, sin tocar las demás) — nunca dispara este
-// recálculo, así que las demás no se mueven mientras se arrastra. Si el
-// contenedor es más angosto que la suma, no se toca nada — aparece
-// scroll horizontal, como siempre.
-// 2026-09-14 — se sacó el `fit()` que reescalaba TODAS las columnas
-// proporcionalmente al montar/resizear la ventana (agregado sin querer
-// por `d75f4a5`, sin relación con el fix real de ese commit — el header
-// fuera de pantalla). Ese `fit()` guardaba en localStorage el resultado
-// ya agrandado, así que cualquier ajuste de ancho por default (achicar
-// "acc", por ejemplo) quedaba pisado en el próximo mount si la pantalla
-// era más ancha que la suma de columnas — la causa real, más de fondo
-// que cualquier cosa de CSS, de que "la columna de la derecha siga
-// viéndose muy ancha" pasara lo que pasara con los defaults. Steel CRM
-// (`SortTH`/`useResizableColumns`, shared.jsx) nunca tuvo este mecanismo
-// — de ahí que ahí las columnas se sintieran predecibles y acá no. Se
-// alinea a exactamente lo mismo que ya usa Steel CRM: leer de
-// localStorage o los defaults, sin ningún reescalado automático.
+// Historial de esta función, resumido (detalle completo en el changelog
+// del proyecto, 2026-09-13/14 — muchas rondas el mismo día): tuvo un
+// `containerRef`/`fit()` que reescalaba TODAS las columnas al montar o
+// resizear la ventana, agregado sin querer por otro commit (`d75f4a5`)
+// que arreglaba algo distinto. Ese reescalado quedaba persistido en
+// localStorage, pisando cualquier ajuste de default para siempre — se
+// sacó del todo. Hoy es idéntica a la de Steel CRM (`SortTH`, shared.jsx):
+// lee de localStorage o los defaults, sin ningún reescalado automático.
 export function useResizableColumns(storageKey, defaults) {
   const [widths, setWidths] = useState(() => {
     try {
@@ -147,6 +130,29 @@ export function useResizableColumns(storageKey, defaults) {
     try { localStorage.removeItem(storageKey); } catch {}
   }
   return { widths, setWidth, reset };
+}
+
+// 2026-09-14 (noche) — tope dinámico de arrastre: Gino grabó un video
+// arrastrando "Monto U$S" bien ancha y reportó que el resto de las
+// columnas quedaban empujadas, con las de los extremos en riesgo de
+// salirse de la pantalla. El tope fijo (`maxWidth=500` en `ThResizable`,
+// ver más abajo) no alcanza — 500px por columna sigue siendo demasiado
+// si ya hay varias columnas anchas. Este helper calcula, en cada
+// arrastre, cuánto puede crecer ESA columna sin que la suma total supere
+// el ancho real del contenedor visible — matemáticamente no hay forma de
+// que el resultado empuje nada fuera de pantalla, sea cual sea la
+// combinación de anchos ya elegidos. Verificado en un HTML aislado:
+// pedir 3000px para una columna quedó topeado a lo que realmente cabía,
+// sin desbordar. `containerEl` es el mismo div `overflowX:auto` que ya
+// envuelve la tabla — se le vuelve a pasar un `ref` liviano solo para
+// esto (no reintroduce el `fit()` de arriba: acá no se persiste nada, ni
+// se toca ninguna otra columna, solo se limita la que se está arrastrando
+// en el momento).
+export function clampAnchoColumna(containerEl, widths, key, deseadoPx) {
+  if (!containerEl) return Math.max(30, deseadoPx);
+  const otroTotal = Object.entries(widths).reduce((s, [k, v]) => k === key ? s : s + (Number(v) || 0), 0);
+  const maxPermitido = Math.max(30, containerEl.clientWidth - otroTotal);
+  return Math.max(30, Math.min(deseadoPx, maxPermitido));
 }
 
 // <th> con handle de arrastre en el borde derecho — mismo mecanismo que

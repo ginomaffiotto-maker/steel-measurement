@@ -13,7 +13,7 @@ import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
 import { ModalConfirmarEliminar, ModalConfirmarBorrado } from "./ConfirmarEliminar";
 import { abrirResumenInterno } from "../utils/resumenInterno";
-import { useSortable, useResizableColumns, ThResizable } from "../utils/useSortable";
+import { useSortable, useResizableColumns, ThResizable, clampAnchoColumna } from "../utils/useSortable";
 import { familiaDe, SelectCategoria, FAMILIAS } from "../utils/taxonomia";
 import { useUndoToast } from "./Toast";
 import { toastWarn, toastError } from "../utils/toastBus";
@@ -3211,10 +3211,13 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
       _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColW, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto", {
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v2", {
     check: 34, nro: 70, nombre: 160, cliente: 130, obra: 130, tipo: 90,
     vendedor: 110, fecha: 90, items: 55, total: 100, estado: 100, acc: 30,
   });
+  // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
+  const colContainerRef = useRef(null);
+  const setColW = (key, px) => setColWRaw(key, clampAnchoColumna(colContainerRef.current, colW, key, px));
 
   // Reintento de sincronización (2026-08-29) — mismo mecanismo agregado del
   // lado de Steel CRM. Se recalcula desde localStorage después de cada
@@ -3558,7 +3561,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
       {lista.length > 0 && (
-        <div style={{ overflowX:"auto", minWidth:0 }}>
+        <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
