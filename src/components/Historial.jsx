@@ -689,7 +689,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
               </div>
-              <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+              <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
                 <thead><tr>
                   <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                     <input type="checkbox" checked={listaPagina.length>0 && listaPagina.every(t=>seleccionados.has(t.id))}
@@ -709,9 +709,6 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                     </ThResizable>
                   ))}
-                  {/* Columna filler (2026-09-14) — sin width propio, absorbe
-                      el sobrante para que las columnas reales no se inflen. */}
-                  <th style={{ ...TH, borderRight:"none" }}></th>
                 </tr></thead>
                 <tbody>
                   {listaPagina.map(t => {
@@ -739,7 +736,6 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                           <button onClick={() => setConfirmarDelId(t.id)}
                             style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
                         </td>
-                        <td style={TD}></td>
                       </tr>
                     );
                   })}

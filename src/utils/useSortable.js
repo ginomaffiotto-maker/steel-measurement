@@ -189,32 +189,28 @@ export function clampAnchoColumna(containerEl, widths, key, deseadoPx) {
 // 2026-09-14 (misma noche) — con el drag ya arreglado, Gino reportó dos
 // cosas más: "Acc" seguía por defecto muy ancha, y las columnas se
 // podían agrandar tanto que las de los extremos se salían de pantalla.
-// Lo primero es un comportamiento real del navegador (confirmado con 3
-// HTML aislados distintos, no una sola vez): con `table-layout:fixed` +
-// tabla al 100% y columnas "bloqueadas" (min=max=width), Chrome IGUAL
-// reparte una porción de lo que sobra entre TODAS ellas — el
-// `min`/`max` no las inmuniza del todo contra esto — así que cuanto más
-// angosta es una columna respecto al resto, más notorio se ve el
-// agrandado. La solución real no es tocar min/max (ya está bien puesto,
-// ver comentario del 2026-09-13) sino agregar una columna FILLER
-// invisible al final de la fila (sin `width` propio, sin borde) — al
-// haber una columna genuinamente sin restricciones, el navegador le
-// manda a ELLA la enorme mayoría del sobrante (verificado: de +230px de
-// slack total, las 8 columnas reales sumaron solo +17px cada una en vez
-// de inflarse proporcional). Es la MISMA idea que ya se había probado y
-// revertido el 2026-09-13 ("Ronda 2" del historial de este mismo mes) —
-// pero en aquel momento `ThResizable` todavía NO tenía el lock
-// `min=max=width` (solo `maxWidth`, agregado recién ese mismo día un
-// poco después) — sin ese lock, las columnas reales sí se podían
-// comprimir de más al convivir con un filler, dando el resultado
-// "desproporcionado" que Gino rechazó en su momento. Con el lock ya en
-// su lugar desde hace un día, el filler se comporta bien: cada columna
-// real queda muy cerca de su ancho declarado, y arrastrar cualquiera de
-// ellas (incluida la última) solo le pide espacio al filler, sin tocar
-// a ninguna otra columna real — confirmado en un HTML aislado antes de
-// aplicarlo acá. Para lo segundo (columnas saliéndose de pantalla), se
-// suma un tope máximo al arrastre (`maxWidth`, default 500px) — hasta
-// ahora `iniciarResize` solo tenía un piso (`minWidth`), nunca un techo.
+// Se probaron 2 arreglos intermedios ese mismo día, los dos con la
+// tabla en `width:"100%"` — un tope fijo de arrastre (`maxWidth=500`,
+// insuficiente: 500px por columna sigue siendo mucho si ya hay varias
+// anchas) y una columna FILLER invisible al final de la fila para que
+// absorbiera el sobrante en vez de que se repartiera entre las
+// columnas reales (funcionaba — verificado con HTML aislado, cada
+// columna real quedaba en su ancho exacto — pero dejaba un espacio
+// muerto enorme, sin usar, dentro de la tabla; Gino lo rechazó por
+// sentirse igual de "roto" que el hueco vacío ya descartado el
+// 2026-09-13). **Arreglo definitivo**: sacar `width:"100%"` de la
+// tabla directamente — sin ese valor, con `table-layout:fixed`, el
+// ancho de la tabla pasa a ser la SUMA real de sus columnas (ninguna
+// se infla ni se le pide que absorba nada), y el `<div
+// style={{overflowX:"auto"}}>` que la envuelve no fuerza ningún ancho
+// mínimo — si la tabla es angosta, el resto de la fila simplemente
+// queda como fondo de la página (sin ningún borde/tarjeta propio
+// alrededor de esta tabla que se vea "cortado a la mitad", a
+// diferencia de lo que sí pasaba con el intento del 2026-09-13). Para
+// "las columnas se salen de pantalla" ya no hace falta ningún tope de
+// arrastre por columna — alcanza con `clampAnchoColumna` (ver abajo),
+// que impide que la SUMA total supere el ancho visible del contenedor,
+// sea cual sea la combinación de anchos elegidos.
 export function ThResizable({ children, style, width, onResize, minWidth = 40, maxWidth = 500, onClick, title }) {
   function iniciarResize(e) {
     e.preventDefault(); e.stopPropagation();

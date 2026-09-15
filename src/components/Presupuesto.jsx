@@ -3565,7 +3565,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
-          <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+          <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
             <thead><tr>
               <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                 <input type="checkbox" checked={lista.length>0 && lista.every(p=>seleccionados.has(p.id))}
@@ -3584,9 +3584,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                 </ThResizable>
               ))}
-              {/* Columna filler (2026-09-14) — sin width propio, absorbe el
-                  sobrante para que las columnas reales no se inflen. */}
-              <th style={{ ...TH, borderRight:"none" }}></th>
             </tr></thead>
             <tbody>
               {lista.map(p => {
@@ -3620,7 +3617,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                           style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
                       )}
                     </td>
-                    <td style={TD}></td>
                   </tr>
                 );
               })}

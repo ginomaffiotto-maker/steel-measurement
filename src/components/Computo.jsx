@@ -1559,7 +1559,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
@@ -1583,9 +1583,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
-                {/* Columna filler (2026-09-14) — sin width propio, absorbe
-                    el sobrante para que las columnas reales no se inflen. */}
-                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {computosFiltrados.map(c => {
@@ -1628,7 +1625,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                           )}
                         </div>
                       </td>
-                      <td style={TD}></td>
                     </tr>
                   );
                 })}
