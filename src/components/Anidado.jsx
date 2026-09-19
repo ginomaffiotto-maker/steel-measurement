@@ -155,7 +155,7 @@ export function runFFD(piezas, largo_barra_mm, kerf_mm, kg_m) {
 // ═══════════════════════════════════════════════════════════════
 // ALGORITMO 2D — Shelf FFD para planchas
 // ═══════════════════════════════════════════════════════════════
-function run2DFFD(piezas, sheet_w, sheet_h) {
+export function run2DFFD(piezas, sheet_w, sheet_h) {
   const all = [];
   piezas.forEach((p,pi) => {
     const w = parseFloat(p.largo_mm)||0, h = parseFloat(p.ancho_mm)||0;
@@ -163,33 +163,75 @@ function run2DFFD(piezas, sheet_w, sheet_h) {
     if (w<=0||h<=0) return;
     for (let i=0;i<cant;i++) all.push({ w, h, etiqueta:p.etiqueta||`${w}×${h}`, colorIdx:pi%PALETTE.length });
   });
-  all.sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+  // FFDH (First-Fit Decreasing Height): ordenar por altura, no por área (fix
+  // 2026-09-19). En un algoritmo de estantes, la altura de cada estante queda
+  // fijada por la primera pieza que entra ahí — solo aceptan después piezas de
+  // igual o menor altura. Ordenar por área (como antes) podía dejar una pieza
+  // angosta-y-larga (poca área, mucha altura) procesándose DESPUÉS de una
+  // pieza chata-y-ancha (más área, menos altura) que ya cerró un estante bajo
+  // — la pieza alta ya no entraba en ningún estante existente y forzaba una
+  // plancha nueva, aunque colocada primero hubiera abierto un estante que la
+  // chata también podía haber usado. Con tiras largas de distinta altura
+  // (típico de almas/alas de vigas de alma llena) esto disparaba el
+  // desperdicio muy por encima de lo que da un nesteo manual — reportado por
+  // Gino con un caso real (52-57% de desperdicio en "Vigas de alma llena").
+  const alturaOrden = (p) => {
+    const mayor = Math.max(p.w,p.h), menor = Math.min(p.w,p.h);
+    return mayor<=sheet_w ? menor : mayor; // si entra "acostada" en el ancho, su altura de estante es el lado corto
+  };
+  all.sort((a,b)=> alturaOrden(b)-alturaOrden(a) || (b.w*b.h)-(a.w*a.h));
 
   const hojas = [];
-  function tryPlace(hoja, pieza) {
-    const orients = [[pieza.w,pieza.h]];
-    if (pieza.w!==pieza.h) orients.push([pieza.h,pieza.w]);
-    for (const [pw,ph] of orients) {
-      if (pw>sheet_w||ph>sheet_h) continue;
-      // intentar en estante existente
+  const orientacionesDe = (pieza) => pieza.w!==pieza.h ? [[pieza.w,pieza.h],[pieza.h,pieza.w]] : [[pieza.w,pieza.h]];
+
+  // Best-fit en vez de first-fit: entre TODOS los estantes ya abiertos (en
+  // cualquier plancha) que acepten la pieza, elige el que menos altura
+  // desperdicia — antes se quedaba con el primer estante que entraba, aunque
+  // dejara mucho más aire libre que otro ya abierto más abajo en la lista.
+  function mejorEstante(pieza) {
+    let mejor = null;
+    for (const hoja of hojas) {
       for (const shelf of hoja.shelves) {
-        if (shelf.x_used+pw<=sheet_w && ph<=shelf.h) {
-          shelf.piezas.push({ x:shelf.x_used, y:shelf.y, w:pw, h:ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx });
-          shelf.x_used+=pw; return true;
+        for (const [pw,ph] of orientacionesDe(pieza)) {
+          if (shelf.x_used+pw<=sheet_w && ph<=shelf.h) {
+            const desp = shelf.h-ph, libre = sheet_w-shelf.x_used-pw;
+            if (!mejor || desp<mejor.desp || (desp===mejor.desp && libre<mejor.libre)) mejor = { shelf, pw, ph, desp, libre };
+          }
         }
       }
-      // nuevo estante
-      if (hoja.y_used+ph<=sheet_h && pw<=sheet_w) {
-        const newShelf = { y:hoja.y_used, h:ph, x_used:pw, piezas:[{ x:0, y:hoja.y_used, w:pw, h:ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx }] };
-        hoja.shelves.push(newShelf); hoja.y_used+=ph; return true;
+    }
+    return mejor;
+  }
+  function abrirEstanteEn(hoja, pieza) {
+    for (const [pw,ph] of orientacionesDe(pieza)) {
+      if (pw<=sheet_w && hoja.y_used+ph<=sheet_h) {
+        hoja.shelves.push({ y:hoja.y_used, h:ph, x_used:pw, piezas:[{ x:0, y:hoja.y_used, w:pw, h:ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx }] });
+        hoja.y_used += ph;
+        return true;
       }
     }
     return false;
   }
   for (const pieza of all) {
-    let placed=false;
-    for (const hoja of hojas) { if (tryPlace(hoja,pieza)) { placed=true; break; } }
-    if (!placed) { const h={ nro:hojas.length+1, shelves:[], y_used:0 }; hojas.push(h); tryPlace(h,pieza); }
+    const mejor = mejorEstante(pieza);
+    if (mejor) {
+      mejor.shelf.piezas.push({ x:mejor.shelf.x_used, y:mejor.shelf.y, w:mejor.pw, h:mejor.ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx });
+      mejor.shelf.x_used += mejor.pw;
+      continue;
+    }
+    let colocado = false;
+    for (const hoja of hojas) { if (abrirEstanteEn(hoja, pieza)) { colocado = true; break; } }
+    if (colocado) continue;
+    // Recién si no entró en ningún estante ni abrió uno nuevo en las planchas
+    // ya creadas, se suma una plancha nueva. Si la pieza no cabe en ninguna
+    // orientación (más grande que la plancha entera), se descarta sin sumar
+    // una plancha fantasma vacía — antes esto inflaba n_hojas con una plancha
+    // sin ninguna pieza adentro.
+    const cabe = orientacionesDe(pieza).some(([pw,ph])=>pw<=sheet_w&&ph<=sheet_h);
+    if (!cabe) continue;
+    const nueva = { nro:hojas.length+1, shelves:[], y_used:0 };
+    hojas.push(nueva);
+    abrirEstanteEn(nueva, pieza);
   }
   const total_area = all.reduce((s,p)=>s+p.w*p.h,0);
   const sheet_area = sheet_w*sheet_h, n=hojas.length;
