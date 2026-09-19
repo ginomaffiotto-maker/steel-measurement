@@ -77,7 +77,21 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   // Producto → nombre (el campo sigue editable a mano después — una
   // misma Solicitud puede pedir cosas de tipo distinto y Gino puede
   // querer un cómputo/presupuesto separado para cada una).
+
+  // Avanza sola a "en elaboración" al elegir cualquiera de las 3 etapas
+  // desde una Solicitud (2026-09-15, a pedido de Gino) — solo si todavía
+  // estaba en "recibida"; nunca pisa "en elaboración"/"enviada" ya
+  // alcanzados por otro camino. Fire-and-forget hacia Supabase, mismo
+  // criterio de siempre (el guardado local nunca espera a la nube).
+  function marcarEnElaboracion(s) {
+    if (s.estado !== "recibida") return;
+    setSolicitudes(prev => prev.map(x => x.id === s.id ? { ...x, estado: "en elaboración" } : x));
+    supabase.from("solicitudes").update({ estado: "en elaboración" }).eq("id", s.id)
+      .then(({ error }) => { if (error) console.error("marcarEnElaboracion", error); });
+  }
+
   function crearComputoDesde(s) {
+    marcarEnElaboracion(s);
     try {
       sessionStorage.setItem("smeas_prefill_computo", JSON.stringify({
         nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
@@ -101,6 +115,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   // dos para no perder la trazabilidad (ver migración
   // 20260912120000_solicitud_id_anidados_presupuestos_sm.sql).
   function crearAnidadoDesde(s) {
+    marcarEnElaboracion(s);
     try {
       sessionStorage.setItem("smeas_prefill_anidado", JSON.stringify({
         nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
@@ -117,6 +132,7 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
   // mapeo que ya usa el resto de la app (ver "Pasar a Presupuesto" en
   // Anidado.jsx).
   function crearPresupuestoDesde(s) {
+    marcarEnElaboracion(s);
     try {
       sessionStorage.setItem("smeas_prefill_presupuesto", JSON.stringify({
         nombre: s.producto || s.obra || s.cliente_nombre || "Solicitud",
