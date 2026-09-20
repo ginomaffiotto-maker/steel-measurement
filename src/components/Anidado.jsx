@@ -1867,10 +1867,19 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 {/* "Eliminar" se movió a la lista de anidados (2026-09-02,
                     a pedido de Gino) — ya no vive acá adentro. */}
                 {actual.grupos.length>0&&(
-                  <button onClick={calcularTodo} disabled={todoAnidado}
+                  // 2026-09-20, a pedido de Gino: antes, una vez que TODOS los
+                  // materiales tenían algún resultado (aunque fuera viejo, de
+                  // antes de un fix del algoritmo), el botón quedaba
+                  // deshabilitado para siempre — la única forma de refrescar
+                  // un anidado ya calculado era expandir cada material y
+                  // clickear "Recalcular" a mano, uno por uno. Ahora sigue
+                  // recalculando TODOS de una sola vez, sin importar si ya
+                  // tenían resultado.
+                  <button onClick={calcularTodo}
+                    title={todoAnidado?"Vuelve a calcular los grupos con la fórmula actual (útil si el sistema cambió desde el último cálculo)":undefined}
                     style={{ ...BTN(todoAnidado?"ok":"primary"),fontSize:12,
-                      ...(todoAnidado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`,cursor:"default"}:{}) }}>
-                    {todoAnidado ? "✓ Todo anidado" : `⚡ Anidar todo (${actual.grupos.length})`}
+                      ...(todoAnidado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`}:{}) }}>
+                    {todoAnidado ? "🔄 Recalcular todo" : `⚡ Anidar todo (${actual.grupos.length})`}
                   </button>
                 )}
                 {hayResultados&&(
