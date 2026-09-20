@@ -689,7 +689,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
             // el sobrante entre el ancho natural de la tabla y el de la
             // pantalla se ve como un hueco vacío en vez de padding normal
             // de panel.
-            <div style={CARD()}>
+            <div style={{ ...CARD(), background: C.iron }}>
             <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>

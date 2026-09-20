@@ -1610,7 +1610,12 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
           // El sobrante queda como padding normal de la tarjeta, no como
           // un área sin estilo — mismo criterio que cualquier panel de esta
           // app con una tabla más angosta que el panel.
-          <div style={CARD()}>
+          // background:C.iron en vez de C.card (default de CARD()) — medido
+          // en píxeles reales sobre una captura de Gino: C.card (#13161c) es
+          // apenas 6-10 puntos de color más claro que la página (#0d0f12),
+          // técnicamente ahí pero invisible a simple vista. C.iron (#1e2330)
+          // da un contraste real, se distingue como panel de un vistazo.
+          <div style={{ ...CARD(), background: C.iron }}>
           <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
