@@ -187,7 +187,8 @@ export default function SolicitudesAsignadas({ usuario, irATab }) {
             ["ganada", "perdida", "no cotizado"].includes(s.estado)
               ? prev.filter(x => x.id !== s.id)
               : prev.map(x => x.id === s.id ? s : x)
-          ))} />
+          ))}
+          onDeleted={s => setSolicitudes(prev => prev.filter(x => x.id !== s.id))} />
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
         <div style={{ fontWeight: 800, fontSize: 20, color: C.text }}>📥 Mis solicitudes asignadas</div>

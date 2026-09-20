@@ -9,6 +9,7 @@ import AutocompleteObra from "./AutocompleteObra";
 import ClienteRapidoModal from "./ClienteRapidoModal";
 import ObraRapidaModal from "./ObraRapidaModal";
 import EmpresaRapidaModal from "./EmpresaRapidaModal";
+import { ModalConfirmarEliminar } from "./ConfirmarEliminar";
 
 // Colores/íconos de Solicitud, compartidos entre SolicitudesAsignadas.jsx y
 // Buscador.jsx (2026-09-12) — antes vivían duplicados solo en el primero.
@@ -40,7 +41,7 @@ const ESTADOS_SOLICITUD = ["recibida", "en elaboración", "enviada", "ganada", "
 // cadena de trazabilidad (Cómputos/Anidados/Presupuestos relacionados)
 // debajo de los datos propios de la solicitud, sin que este componente
 // necesite saber nada de esas otras entidades.
-export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCreated, children }) {
+export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCreated, onDeleted, children }) {
   const esNueva = !s;
   const editable = !!usuario;
 
@@ -59,6 +60,23 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
   const [err, setErr] = useState("");
   const [errCliente, setErrCliente] = useState(false);
   const [errCategoria, setErrCategoria] = useState(false);
+  // Borrado (2026-09-20, a pedido de Gino: la ficha no tenía forma de
+  // eliminar una solicitud desde Steel Costos, solo desde Steel CRM) —
+  // soft-delete real (misma columna `eliminado`/`eliminado_por`/
+  // `eliminado_fecha` que ya usa Steel CRM desde el 25/8), con confirmación
+  // de la propia contraseña (mismo patrón que Cómputo/Anidado/Presupuesto,
+  // `usuarioPropio`) — sin Papelera de este lado, el registro sigue
+  // visible/recuperable desde Steel CRM si hace falta deshacerlo.
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+  async function eliminar() {
+    const { error } = await supabase.from("solicitudes")
+      .update({ eliminado: true, eliminado_por: usuario?.nombre || "", eliminado_fecha: new Date().toISOString() })
+      .eq("id", s.id);
+    if (error) return "No se pudo eliminar: " + error.message;
+    setConfirmarEliminar(false);
+    onDeleted?.(s);
+    onClose();
+  }
 
   // Mismo patrón que Cómputo/Anidado/Presupuesto (2026-08-29): Cliente/
   // Obra/Empresa dejan de ser texto libre — si lo tipeado no matchea nada
@@ -376,6 +394,26 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
             </div>
           )}
         </fieldset>
+
+        {/* Eliminar queda fuera del fieldset a propósito — sigue disponible
+            aunque la solicitud esté cerrada (ganada/perdida/no cotizado),
+            mismo criterio que el resto del sistema (el candado de "cerrada"
+            protege la edición de datos, no el borrado). */}
+        {!esNueva && !esDeOtro && (
+          <button type="button" onClick={() => setConfirmarEliminar(true)}
+            style={{ ...BTN("ghost"), marginTop: 8, width: "100%", color: C.err, borderColor: C.err + "55" }}>
+            🗑 Eliminar solicitud
+          </button>
+        )}
+
+        {confirmarEliminar && (
+          <ModalConfirmarEliminar
+            titulo={`solicitud "${f.producto || f.obra || f.cliente_nombre || "sin nombre"}"`}
+            usuarioPropio={usuario}
+            onConfirm={eliminar}
+            onClose={() => setConfirmarEliminar(false)}
+          />
+        )}
 
         {children}
       </div>
