@@ -537,9 +537,12 @@ export default function Historial({ usuario, usuarios = [], logear }) {
     .map(t => ({ ...t, _usd_kg: usdKgDe(t) })),
     [trabajosActivos, filt]); // eslint-disable-line react-hooks/exhaustive-deps
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_historial_v2", {
-    check: 34, ot: 70, fecha: 85, cliente: 130, obra: 130, categoria: 110,
-    vendedor: 100, kg: 80, usd: 90, usdkg: 80, origen: 90, acc: 30,
+  // v3 (2026-09-20, reportado por Gino: "casi media pantalla sin
+  // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
+  // más generosos, clave de storage renovada.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_historial_v3", {
+    check: 34, ot: 90, fecha: 95, cliente: 220, obra: 220, categoria: 170,
+    vendedor: 150, kg: 90, usd: 110, usdkg: 90, origen: 110, acc: 30,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);

@@ -3345,9 +3345,12 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // ancho entre Nombre/Cliente/Obra, que son los que más se recortan con
   // nombres reales largos. Clave de storage renovada para no arrastrar el
   // ancho viejo de una columna que ya no existe.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v3", {
-    check: 34, nro: 70, nombre: 180, cliente: 140, obra: 140, tipo: 90,
-    vendedor: 110, fecha: 90, total: 100, estado: 100, acc: 30,
+  // v4 (2026-09-20, reportado por Gino: "casi media pantalla sin
+  // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
+  // más generosos, clave de storage renovada.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v4", {
+    check: 34, nro: 90, nombre: 260, cliente: 220, obra: 220, tipo: 130,
+    vendedor: 160, fecha: 100, total: 120, estado: 130, acc: 30,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);

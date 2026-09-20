@@ -1589,8 +1589,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // v3 (2026-09-20): "Tipo / Familia" combinada se separó en 2 columnas
   // reales — mismo cambio y mismo motivo de renovar la clave que en
   // Computo.jsx (ver comentario ahí).
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v3", {
-    check: 34, nombre: 260, fecha: 85, tipo: 110, familia: 140, vendedor: 120, kg: 90, monto: 110, acc: 70,
+  // v4 (2026-09-20, reportado por Gino: "casi media pantalla sin
+  // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
+  // más generosos, clave de storage renovada.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v4", {
+    check: 34, nombre: 480, fecha: 95, tipo: 140, familia: 220, vendedor: 170, kg: 100, monto: 130, acc: 70,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);

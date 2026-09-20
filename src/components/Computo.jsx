@@ -1298,8 +1298,13 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // reales — clave de storage renovada (mismo criterio que el 14/9) para
   // que nadie quede con el ancho viejo de la columna combinada aplicado
   // a la columna "tipo" nueva, mucho más angosta.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v3", {
-    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 110, familia: 140, vendedor: 120, kg: 90, monto: 110, acc: 100,
+  // v4 (2026-09-20, reportado por Gino: "casi media pantalla sin
+  // columnas") — anchos por defecto bien más generosos, para que la
+  // tabla real (no un relleno decorativo) ocupe la mayor parte de la
+  // pantalla desde el vamos. Clave de storage renovada para que nadie
+  // quede con los anchos angostos de antes pisando estos nuevos.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v4", {
+    check: 34, nro: 90, nombre: 460, fecha: 95, tipo: 140, familia: 220, vendedor: 170, kg: 100, monto: 130, acc: 100,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
