@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, peekNroPresupuesto, catchUpNroPresupuesto, newCodigoCalculo, catchUpCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
+import { calcPieza } from "./Computo";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -160,6 +161,16 @@ function bibSupM2mFallback(material_id, material_nombre) {
   return parseFloat(mat?.sup) || 0;
 }
 
+// Precio USD/kg por material_id, resuelto contra la biblioteca real de
+// perfiles/planchuelas/planchas — compartido por materialesUnificadosAnidado
+// y materialesUnificadosComputo para no repetir la misma búsqueda.
+function bibPrecioPorId() {
+  const mapa = {};
+  [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[]), ...loadLS("smeas_planchas",[])]
+    .forEach(m => { mapa[m.id] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
+  return mapa;
+}
+
 function materialesUnificadosAnidado(anidado) {
   // 2026-08-30: esta función no traía precio en absoluto (a diferencia de la
   // misma función en Anidado.jsx, que sí lo resuelve) — "Importar materiales
@@ -168,9 +179,7 @@ function materialesUnificadosAnidado(anidado) {
   // sin avisar (encontrado en vivo por Gino). Se resuelve acá por
   // `material_id` (más robusto que por nombre) para que ambos casos usen
   // el mismo dato.
-  const bibPrecioPorId = {};
-  [...loadLS("smeas_perfiles",[]), ...loadLS("smeas_planchuelas",[]), ...loadLS("smeas_planchas",[])]
-    .forEach(m => { bibPrecioPorId[m.id] = parseFloat(m.precio_usd_kg || m.precio || 0) || 0; });
+  const bibPrecio = bibPrecioPorId();
   return (anidado?.grupos || []).filter(g => g.resultado).map(g => {
     const r = g.resultado.resumen || {};
     const sup_m2m = g.sup_m2m || (g.tipo!=="plancha" ? bibSupM2mFallback(g.material_id, g.material_nombre) : 0);
@@ -186,9 +195,42 @@ function materialesUnificadosAnidado(anidado) {
     unidades.desp = +((unidades.total||0) - (unidades.util||0)).toFixed(2);
     // % desperdicio de este material (kg_total incluye el desperdicio de corte, kg_util no)
     const pct_desperdicio = g.tipo === "plancha" ? (r.pct_desp || 0) : (r.kg_total>0 ? Math.round((1 - (r.kg_util||0)/r.kg_total)*1000)/10 : 0);
-    const precio_usd_kg = bibPrecioPorId[g.material_id] || 0;
-    return { id: g.id, tipo: g.tipo, nombre: g.material_nombre || "Sin material", kg, sup, unidades, pct_desperdicio, precio_usd_kg, ficha: g.ficha || {} };
+    const precio_usd_kg = bibPrecio[g.material_id] || 0;
+    // sin_nestear (solo planchas, 2026-09-19): piezas que no entraron en
+    // ninguna orientación de la plancha — ya están excluidas de kg/monto
+    // de arriba, pero el vendedor tiene que saber que ese material real
+    // (pedido por el cliente) no quedó incluido en lo que está por traer.
+    return { id: g.id, tipo: g.tipo, nombre: g.material_nombre || "Sin material", kg, sup, unidades, pct_desperdicio, precio_usd_kg, ficha: g.ficha || {}, sin_nestear: r.sin_nestear || [] };
   });
+}
+
+// "Importar directo del Cómputo" (sin pasar por Anidado) — 2026-09-19, a
+// pedido de Gino: para piezas simples donde no hace falta optimizar el
+// corte, no tiene sentido obligar a crear un Anidado solo para poder traer
+// los materiales a un Presupuesto. Trae el kg/m² NETO por material (sin
+// desperdicio de nesteo — acá no se anidó nada, así que no hay barras/hojas
+// "a comprar" que calcular, solo lo que las piezas realmente pesan) sumando
+// todos los ítems del Cómputo, con el mismo multiplicador de cantidad que
+// usa el resto de la app (cantidad de la pieza × cantidad del ítem ×
+// cantidad total de la obra).
+function materialesUnificadosComputo(computo) {
+  const bibPrecio = bibPrecioPorId();
+  const multTotal = computo?.cantidad_total || 1;
+  const mapa = {};
+  (computo?.items || []).forEach(it => {
+    const cantItem = it.cantidad || 1;
+    (it.piezas || []).forEach(p => {
+      if (!p.material_id) return;
+      const c = calcPieza(p);
+      const key = p.material_id;
+      if (!mapa[key]) {
+        mapa[key] = { id: key, tipo: p.tipo, nombre: p.material_nombre || "Sin material", kg: 0, sup: 0, precio_usd_kg: bibPrecio[p.material_id] || 0 };
+      }
+      mapa[key].kg  += c.total_kg  * cantItem * multTotal;
+      mapa[key].sup += c.total_sup * cantItem * multTotal;
+    });
+  });
+  return Object.values(mapa).filter(m => m.kg > 0);
 }
 
 // Íconos (2026-08-24, sistema "Acero", mismo criterio que steelCRM): ya
@@ -874,7 +916,9 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
   const bibMateriales = useBibliotecaHierros();
   const [fichaAbierta, setFichaAbierta] = useState(null);
   const [anidadoExpandido, setAnidadoExpandido] = useState(true);
-  const [confirmarReimportar, setConfirmarReimportar] = useState(false);
+  const [computoExpandido, setComputoExpandido] = useState(false);
+  const [confirmarReimportarAnidado, setConfirmarReimportarAnidado] = useState(false);
+  const [confirmarReimportarComputo, setConfirmarReimportarComputo] = useState(false);
   const updPatch = (id, patch) => set("hierros", rows.map(r => {
     if (r.id !== id) return r;
     const nr = { ...r, ...patch };
@@ -918,6 +962,17 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
   const anidKgGalvanizar= materialesAnidado.filter(m=>m.ficha.galvanizado).reduce((s,m)=>s+m.kg,0);
   const anidBarras = materialesAnidado.filter(m=>m.tipo==="perfil").reduce((s,m)=>s+m.unidades.total,0);
   const anidHojas   = materialesAnidado.filter(m=>m.tipo==="plancha").reduce((s,m)=>s+m.unidades.total,0);
+  // 2026-09-19: piezas que no entraron en ninguna plancha del anidado (más
+  // grandes que la plancha en cualquier orientación) — ese material real no
+  // está incluido en los kg/hojas de arriba, hay que avisar antes de importar.
+  const anidSinNestear = materialesAnidado.flatMap(m => m.sin_nestear || []);
+
+  // "Importar directo del Cómputo" (sin Anidado) — 2026-09-19.
+  const computos = loadLS("smeas_computos", []);
+  const computoSelId = item.computo_id || "";
+  const computoSel = computos.find(c => String(c.id) === String(computoSelId)) || null;
+  const materialesComputo = computoSel ? materialesUnificadosComputo(computoSel) : [];
+  const kgComputo = materialesComputo.reduce((s,m)=>s+m.kg,0);
 
   return (
     <div>
@@ -951,6 +1006,14 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
               {anidM2Arenar>0 && <span>m² a arenar: <b style={{color:C.teal}}>{n2(anidM2Arenar)}</b></span>}
               {anidM2Pintar>0 && <span>m² a pintar: <b style={{color:C.pur}}>{n2(anidM2Pintar)}</b></span>}
               {anidKgGalvanizar>0 && <span>kg a galvanizar: <b style={{color:C.gold}}>{n2(anidKgGalvanizar)}</b></span>}
+            </div>
+          )}
+          {anidadoSel && anidSinNestear.length>0 && (
+            <div style={{ fontSize:12, color:C.err, marginBottom:10, padding:"6px 10px", background:C.err+"11", border:`1px solid ${C.err}44`, borderRadius:6 }}>
+              ⚠ Este anidado tiene {anidSinNestear.reduce((s,p)=>s+p.cantidad,0)} pieza(s) que no entraron en
+              ninguna plancha (más grandes que la plancha en cualquier orientación) — ese material NO está
+              incluido en los kg de arriba ni en lo que se va a importar. Revisá el anidado antes de cotizar
+              con estos números.
             </div>
           )}
           {anidadoSel && (() => {
@@ -990,11 +1053,16 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
             const yaImportado = rows.some(r => r._anidado_id === anidadoSel.id);
             return (
               <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
-                <button onClick={()=> yaImportado ? setConfirmarReimportar(true) : importarMateriales()}
+                <button onClick={()=> yaImportado ? setConfirmarReimportarAnidado(true) : importarMateriales()}
                   style={{...BTN("primary"), padding:"4px 12px", fontSize:13}}>
-                  ⬇ Importar materiales del anidado
+                  {/* 2026-09-19, a pedido de Gino: "Importar" invitaba a pensar
+                      que era seguro apretarlo de nuevo — una vez que este
+                      anidado ya se trajo, el botón avisa que es una
+                      actualización (que de todos modos duplica si se
+                      confirma, ver el modal de abajo), no una carga nueva. */}
+                  {yaImportado ? "🔄 Actualizar materiales del anidado" : "⬇ Importar materiales del anidado"}
                 </button>
-                {confirmarReimportar && (
+                {confirmarReimportarAnidado && (
                   <ModalConfirmarBorrado
                     titulo="materiales del anidado"
                     verbo="Reimportar"
@@ -1002,8 +1070,69 @@ function TabHierros({ item, set, onAnidadoVinculado }) {
                     subtitulo={`Este anidado ya se importó antes a este ítem — volver a traerlo agrega los materiales DE NUEVO, duplicados, sin sacar los que ya están.\n\nSi te equivocaste al importar, es más fácil borrar las filas de más a mano que reimportar.`}
                     checkboxLabel="Sí, quiero traer los materiales de nuevo (va a duplicar)"
                     labelBoton="⬇ Reimportar de todos modos"
-                    onConfirm={()=>{ importarMateriales(); setConfirmarReimportar(false); }}
-                    onClose={()=>setConfirmarReimportar(false)}
+                    onConfirm={()=>{ importarMateriales(); setConfirmarReimportarAnidado(false); }}
+                    onClose={()=>setConfirmarReimportarAnidado(false)}
+                  />
+                )}
+              </div>
+            );
+          })()}
+          </>}
+        </div>
+      )}
+      {computos.length > 0 && (
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:14 }}>
+          <div onClick={()=>setComputoExpandido(v=>!v)}
+            style={{ fontWeight:700, color:C.info, fontSize:13, marginBottom: computoExpandido?8:0, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+            <span>{computoExpandido?"▾":"▸"}</span>🧮 Cómputo (sin anidar)
+            {!computoExpandido && computoSel && <span style={{ color:C.muted, fontWeight:400 }}>— {computoSel.nombre}</span>}
+          </div>
+          {computoExpandido && <>
+          <div style={{ fontSize:12, color:C.muted, marginBottom:8 }}>
+            Para piezas simples que no necesitan un nesteo real — trae el kg/m² neto de cada material del Cómputo, sin pasar por Anidado (sin barras/hojas "a comprar", porque acá no se optimizó ningún corte).
+          </div>
+          <select value={String(computoSelId)} onChange={e=>set("computo_id", e.target.value)} style={{...INP, marginBottom: computoSel ? 10 : 0}}>
+            <option value="">— Ninguno —</option>
+            {computos.map(c => <option key={c.id} value={String(c.id)}>{c.nombre} ({c.fecha})</option>)}
+          </select>
+          {computoSel && (
+            <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+              <span>Kg total: <b style={{color:C.info}}>{n2(kgComputo)}</b></span>
+              <span>Materiales: <b style={{color:C.muted}}>{materialesComputo.length}</b></span>
+            </div>
+          )}
+          {computoSel && (() => {
+            const importarDeComputo = () => {
+              const nuevasFilas = materialesComputo.map(m => {
+                const usd_kg = m.precio_usd_kg || 0;
+                return {
+                  id: uid(), nombre: m.nombre, proveedor: "", fecha_precio: "", obs: "", cantidad: 1,
+                  kg_pieza: +m.kg.toFixed(3), area_pieza_m2: +m.sup.toFixed(3), usd_kg,
+                  arena: false, pintura: false, galvanizado: false,
+                  pct_desperdicio: 0, // sin nesteo no hay desperdicio de corte que calcular
+                  subtotal_kg: +m.kg.toFixed(3), subtotal_m2: +m.sup.toFixed(3), subtotal_usd: +(m.kg*usd_kg).toFixed(2),
+                  _computo_id: computoSel.id,
+                };
+              });
+              set("hierros", [...rows, ...nuevasFilas]);
+            };
+            const yaImportado = rows.some(r => r._computo_id === computoSel.id);
+            return (
+              <div style={{ display:"flex", gap:16, fontSize:13, color:C.muted, alignItems:"center", flexWrap:"wrap" }}>
+                <button onClick={()=> yaImportado ? setConfirmarReimportarComputo(true) : importarDeComputo()}
+                  style={{...BTN("primary"), padding:"4px 12px", fontSize:13}}>
+                  {yaImportado ? "🔄 Actualizar materiales del cómputo" : "⬇ Importar materiales del cómputo"}
+                </button>
+                {confirmarReimportarComputo && (
+                  <ModalConfirmarBorrado
+                    titulo="materiales del cómputo"
+                    verbo="Reimportar"
+                    color={C.warn}
+                    subtitulo={`Este cómputo ya se importó antes a este ítem — volver a traerlo agrega los materiales DE NUEVO, duplicados, sin sacar los que ya están.\n\nSi te equivocaste al importar, es más fácil borrar las filas de más a mano que reimportar.`}
+                    checkboxLabel="Sí, quiero traer los materiales de nuevo (va a duplicar)"
+                    labelBoton="⬇ Reimportar de todos modos"
+                    onConfirm={()=>{ importarDeComputo(); setConfirmarReimportarComputo(false); }}
+                    onClose={()=>setConfirmarReimportarComputo(false)}
                   />
                 )}
               </div>

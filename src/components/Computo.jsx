@@ -112,7 +112,7 @@ const computoVacio = () => ({
 });
 
 // ─── CÁLCULOS ─────────────────────────────────────────────────────
-function calcPieza(p) {
+export function calcPieza(p) {
   if (p.tipo === "perfil") {
     const largo    = (parseFloat(p.largo_mm_input) || 0) / 1000;
     const kg_pieza = largo * p.kg_m;

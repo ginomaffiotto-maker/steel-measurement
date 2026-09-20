@@ -18,6 +18,7 @@ import { MAQUINAS_OPTS } from "./Computo";
 import FiltrosBar from "./FiltrosBar";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import { Combobox, normalizarTexto } from "./Combobox";
+import { abrirListaCorte } from "../utils/listaCorte";
 
 const ANIDADO_FILT_DEFAULTS = { nombre: "", cliente: "", empresa: "", obra: "", desde: "", hasta: "", vendedor: "", tipo: "", familia: "" };
 function anidadoCampos(usuarios) {
@@ -203,15 +204,33 @@ export function run2DFFD(piezas, sheet_w, sheet_h) {
     return mejor;
   }
   function abrirEstanteEn(hoja, pieza) {
+    // Entre las orientaciones que entran, elegir la que menos altura ocupa
+    // (no la primera que entra) — deja más aire vertical libre en la plancha
+    // para lo que venga después. Verificado con una búsqueda aleatoria de
+    // 3000 casos (2026-09-19): esta elección da mejor resultado neto que
+    // quedarse con la orientación "tal cual entrada".
+    let mejorOrient = null;
     for (const [pw,ph] of orientacionesDe(pieza)) {
       if (pw<=sheet_w && hoja.y_used+ph<=sheet_h) {
-        hoja.shelves.push({ y:hoja.y_used, h:ph, x_used:pw, piezas:[{ x:0, y:hoja.y_used, w:pw, h:ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx }] });
-        hoja.y_used += ph;
-        return true;
+        if (!mejorOrient || ph<mejorOrient.ph) mejorOrient = { pw, ph };
       }
     }
-    return false;
+    if (!mejorOrient) return false;
+    hoja.shelves.push({ y:hoja.y_used, h:mejorOrient.ph, x_used:mejorOrient.pw, piezas:[{ x:0, y:hoja.y_used, w:mejorOrient.pw, h:mejorOrient.ph, etiqueta:pieza.etiqueta, colorIdx:pieza.colorIdx }] });
+    hoja.y_used += mejorOrient.ph;
+    return true;
   }
+  // ⚠️ 2026-09-19, bug real encontrado verificando el fix de arriba en vivo
+  // contra "Vigas de alma llena" (Gino): una pieza más larga que la plancha
+  // en SU PROPIO ANCHO (ej. 7880mm en una plancha de 6000×1500mm) no entra
+  // en ninguna orientación — antes se descartaba en silencio sin avisar
+  // (y el algoritmo viejo, con el mismo caso, sumaba una plancha "fantasma"
+  // vacía por cada una, inflando n_hojas sin haber colocado nada). Las dos
+  // versiones mentían de formas distintas. Ahora se juntan aparte en
+  // `sinNestear` — nunca entran a `total_area` (así "% desperdicio" no da
+  // negativo por contar piezas que en los hechos no se compraron) y se
+  // devuelven para que la pantalla avise qué piezas quedaron sin nestear.
+  const sinNestear = [];
   for (const pieza of all) {
     const mejor = mejorEstante(pieza);
     if (mejor) {
@@ -228,20 +247,33 @@ export function run2DFFD(piezas, sheet_w, sheet_h) {
     // una plancha fantasma vacía — antes esto inflaba n_hojas con una plancha
     // sin ninguna pieza adentro.
     const cabe = orientacionesDe(pieza).some(([pw,ph])=>pw<=sheet_w&&ph<=sheet_h);
-    if (!cabe) continue;
+    if (!cabe) { sinNestear.push(pieza); continue; }
     const nueva = { nro:hojas.length+1, shelves:[], y_used:0 };
     hojas.push(nueva);
     abrirEstanteEn(nueva, pieza);
   }
-  const total_area = all.reduce((s,p)=>s+p.w*p.h,0);
+  // Solo las piezas realmente colocadas cuentan para área útil/desperdicio —
+  // así area_util_m2 nunca puede superar area_total_m2 (antes, sumar TODAS
+  // las piezas pedidas —incluidas las que no entraban en ningún lado— podía
+  // dar "% desperdicio" negativo).
+  const total_area = hojas.reduce((s,h)=>s+h.shelves.reduce((s2,sh)=>s2+sh.piezas.reduce((s3,p)=>s3+p.w*p.h,0),0),0);
   const sheet_area = sheet_w*sheet_h, n=hojas.length;
   const pct_util = n>0?Math.round(total_area/(n*sheet_area)*1000)/10:0;
+  // Agrupa las piezas sin nestear iguales (misma etiqueta+medida) para el
+  // aviso — mismo criterio que la lista de corte agrupada.
+  const sinNestearAgrupado = Object.values(sinNestear.reduce((mapa,p)=>{
+    const key = `${p.etiqueta}|${p.w}x${p.h}`;
+    if (!mapa[key]) mapa[key] = { etiqueta:p.etiqueta, w:p.w, h:p.h, cantidad:0 };
+    mapa[key].cantidad++;
+    return mapa;
+  },{}));
   return { hojas, resumen: {
     n_hojas:n,
     area_util_m2: Math.round(total_area/1e6*100)/100,
     area_total_m2: Math.round(n*sheet_area/1e6*100)/100,
     area_desp_m2: Math.round((n*sheet_area-total_area)/1e6*100)/100,
     pct_util, pct_desp: Math.round((100-pct_util)*10)/10,
+    sin_nestear: sinNestearAgrupado,
   }};
 }
 
@@ -623,12 +655,29 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
     const a=(parseFloat(p.largo_mm)||0)*(parseFloat(p.ancho_mm)||0)/1e6*(parseInt(p.cantidad)||1);
     return s+a;
   },0);
-  const kg_util = area_util_m2 * (g.kg_m2||0);
+  // ⚠️ 2026-09-19, bug real encontrado probando en vivo: acá "útil" se
+  // calculaba SIEMPRE sobre todas las piezas pedidas (g.piezas), incluidas
+  // las que run2DFFD no pudo colocar en ninguna plancha (más grandes que
+  // la plancha en cualquier orientación — ver `sin_nestear` en el
+  // resultado). Una vez calculado, "útil" tiene que reflejar lo que
+  // realmente se pudo nestear — si no, esta badge, la incidencia y el
+  // monto quedaban inconsistentes con "m² útil"/"kg útil" de más abajo
+  // (que sí ya usan r.resumen.area_util_m2, ya corregido). Antes de
+  // calcular, sigue usando la estimación de todo lo pedido — es lo único
+  // disponible en ese momento.
+  const kg_util_estimado = area_util_m2 * (g.kg_m2||0);
+  const kg_util = calculado ? r.resumen.area_util_m2 * (g.kg_m2||0) : kg_util_estimado;
   const incidencia = totalKgAll>0 && kg_util>0 ? (kg_util/totalKgAll*100).toFixed(1) : null;
   const precio_usd_kg = bib.find(m=>m.id===g.material_id)?.precio_usd_kg || 0;
   const kg_total = r ? r.resumen.area_total_m2 * (g.kg_m2||0) : 0;
   const kg_desp  = r ? r.resumen.area_desp_m2  * (g.kg_m2||0) : 0;
   const monto = precio_usd_kg>0 && r ? kg_total * precio_usd_kg : 0;
+  // Piezas que no entraron en ninguna plancha (más grandes que la plancha
+  // en cualquier orientación, ej. 7880mm de largo en una de 6000mm) — se
+  // excluyen del cálculo de arriba para que no den "% desperdicio"
+  // negativo, pero necesitan avisarse: ese material real (pedido por el
+  // cliente) no está incluido en ningún kg/monto de este grupo todavía.
+  const sinNestear = r?.resumen?.sin_nestear || [];
 
   // ── FILA COLAPSADA ──────────────────────────────────────────
   if (!expanded) {
@@ -642,14 +691,26 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
           <span style={{ fontSize:13,fontWeight:700,color:C.text,flex:"0 0 auto",minWidth:120 }}>{g.material_nombre||"Sin plancha"}</span>
           <FichaBadges g={g} />
           <div style={{ display:"flex",gap:14,flex:1,flexWrap:"wrap",alignItems:"center" }}>
-            <span style={{ fontSize:12,color:C.teal }}><span style={{ color:C.muted,fontSize:10 }}>m² útil </span>{n2(area_util_m2)}</span>
-            <span style={{ fontSize:12,color:C.ok,fontWeight:700 }}><span style={{ color:C.muted,fontSize:10 }}>kg útil </span>{n2(kg_util)}</span>
+            {/* Solo antes de calcular — una vez calculado, las versiones más
+                grandes de abajo (junto a "hojas desp") ya muestran lo mismo,
+                repetirlas acá duplicaba la info (2026-09-19). */}
+            {!calculado && <>
+              <span style={{ fontSize:12,color:C.teal }}><span style={{ color:C.muted,fontSize:10 }}>m² útil </span>{n2(area_util_m2)}</span>
+              <span style={{ fontSize:12,color:C.ok,fontWeight:700 }}><span style={{ color:C.muted,fontSize:10 }}>kg útil </span>{n2(kg_util)}</span>
+            </>}
             <button onClick={calcular}
               style={{ ...BTN(calculado?"ok":"primary"),padding:"4px 12px",fontSize:11,flexShrink:0,
                 ...(calculado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`}:{}) }}>
               {calculado?"✓ Calculado":"Calcular ▶"}
             </button>
             {calculado && <>
+              {/* 2026-09-19, a pedido de Gino: la misma info que "hojas
+                  desp/m² desp/kg desp" pero del lado útil, en el mismo
+                  tamaño — antes solo estaban las versiones chicas de arriba
+                  (m² útil/kg útil, 12px) sin nada comparable a este lado. */}
+              <span style={{ fontSize:16,color:C.ok,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>hojas útil </span>{r.resumen.area_total_m2>0 ? Math.round((r.resumen.area_util_m2/r.resumen.area_total_m2)*r.resumen.n_hojas*100)/100 : 0}</span>
+              <span style={{ fontSize:14,color:C.ok,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>m² útil </span>{r.resumen.area_util_m2}</span>
+              <span style={{ fontSize:14,color:C.ok,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>kg útil </span>{n2(kg_util)}</span>
               <span style={{ fontSize:16,color:col_desp,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>hojas desp </span>{r.resumen.area_total_m2>0 ? Math.round((r.resumen.n_hojas - (r.resumen.area_util_m2/r.resumen.area_total_m2)*r.resumen.n_hojas)*100)/100 : 0}</span>
               <span style={{ fontSize:14,color:col_desp,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>m² desp </span>{r.resumen.area_desp_m2}</span>
               <span style={{ fontSize:14,color:col_desp,fontWeight:700 }}><span style={{ color:C.muted,fontSize:11 }}>kg desp </span>{n2(kg_desp)}</span>
@@ -673,6 +734,15 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
           </div>
           <button onClick={onEliminar} style={{ background:"transparent",border:"none",color:C.err,cursor:"pointer",fontSize:14,padding:"0 4px",marginLeft:"auto",flexShrink:0 }}>✕</button>
         </div>
+        {sinNestear.length>0 && (
+          <div style={{ padding:"8px 14px",borderTop:`1px solid ${C.err}44`,background:C.err+"11",fontSize:12,color:C.err }}>
+            ⚠ {sinNestear.reduce((s,p)=>s+p.cantidad,0)} pieza(s) no entran en esta plancha
+            ({g.sheet_w}×{g.sheet_h}mm) en ninguna orientación — quedaron AFUERA del cálculo
+            de arriba, no están incluidas en las hojas/kg/monto: {sinNestear.map((p,i)=>
+              `${p.cantidad>1?p.cantidad+"× ":""}${p.etiqueta||"—"} (${Math.round(p.w)}×${Math.round(p.h)}mm)`
+            ).join(", ")}. Pedí una plancha más larga o dividí la pieza en dos y agregala aparte.
+          </div>
+        )}
       </div>
     );
   }
@@ -686,6 +756,15 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
         <span style={{ ...BDG(C.teal,true),fontSize:10 }}>PLANCHA 2D</span>
         <span style={{ fontSize:11,color:C.muted,flex:1 }}>{g.material_nombre||"Sin plancha"}</span>
       </div>
+      {sinNestear.length>0 && (
+        <div style={{ padding:"8px 12px",marginBottom:10,borderRadius:6,border:`1px solid ${C.err}44`,background:C.err+"11",fontSize:12,color:C.err }}>
+          ⚠ {sinNestear.reduce((s,p)=>s+p.cantidad,0)} pieza(s) no entran en esta plancha
+          ({g.sheet_w}×{g.sheet_h}mm) en ninguna orientación — quedaron AFUERA del cálculo,
+          no están incluidas en las hojas/kg/monto: {sinNestear.map(p=>
+            `${p.cantidad>1?p.cantidad+"× ":""}${p.etiqueta||"—"} (${Math.round(p.w)}×${Math.round(p.h)}mm)`
+          ).join(", ")}. Pedí una plancha más larga o dividí la pieza en dos y agregala aparte.
+        </div>
+      )}
       <div style={{ marginBottom:10, display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
         <FichaToggles g={g} onChange={onChange} />
         <input value={g.obs||""} placeholder="Observaciones, proveedor, fecha del precio..." onChange={e=>onChange({...g,obs:e.target.value})} style={{ ...INP, flex:"1 1 220px", padding:"4px 8px", fontSize:11 }} />
@@ -865,7 +944,7 @@ function importar(computo_id, bib_map, bib_planchas_map) {
 // (kg reales post-anidado, con desperdicio), con las selecciones de ficha,
 // las unidades a comprar (útiles + desperdicio, ej. "5 barras: 4.83 útiles,
 // 0.17 desperdicio") y el precio (USD/kg de Biblioteca × kg = total USD).
-function materialesUnificados(anidado, tc) {
+export function materialesUnificados(anidado, tc) {
   // 2026-09-07, bug real reportado por Gino con captura: acá se leía el
   // catálogo con loadLS() puro, sin mergeSeed() — un material que nunca se
   // editó/guardó a mano en Insumos y Precios (sólo tiene el precio por
@@ -963,7 +1042,11 @@ function materialesUnificados(anidado, tc) {
     costoMaquinado += procesos.cilindrado_kg * (maquinadoPorNombre["Cilindrado"] || 0);
 
     const precio_total = precioMaterial + costoMaquinado;
-    return { id: g.id, material_id: g.material_id, tipo: g.tipo, nombre, kg, kg_util, kg_desp, sup, medida_util, medida_total, medida_label, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado };
+    // sin_nestear (solo planchas): piezas que no entraron en ninguna
+    // orientación — ya están excluidas de kg/kg_util/precio de arriba, pero
+    // quien importa este material a un Presupuesto necesita saber que ese
+    // material real (pedido por el cliente) no quedó incluido acá.
+    return { id: g.id, material_id: g.material_id, tipo: g.tipo, nombre, kg, kg_util, kg_desp, sup, medida_util, medida_total, medida_label, unidades, precio_usd_kg, precio_total, precio_manual: precioManualTotal > 0, ficha, procesos, costoMaquinado, sin_nestear: r.sin_nestear || [] };
   });
 }
 
@@ -1117,18 +1200,48 @@ function VistaMaterialesAnidado({ anidado, onClose, tcGlobal }) {
   );
 }
 
-function exportarListaCorte(anidado) {
+// Agrupa piezas idénticas (misma etiqueta + mismas medidas) dentro de una
+// hoja/barra — antes salía una línea por PIEZA suelta, así que 3 piezas
+// iguales daban 3 líneas idénticas en vez de "3× Alma (5800×900mm)"
+// (mejorado 2026-09-19, a pedido de Gino, junto con el reporte en pantalla
+// — ver utils/listaCorte.js, que arma la versión imprimible con diagrama).
+function agruparPiezasTxt(piezas, keyFn, labelFn) {
+  const mapa = {};
+  piezas.forEach(p => {
+    const key = keyFn(p);
+    if (!mapa[key]) mapa[key] = { ...p, cant: 0 };
+    mapa[key].cant++;
+  });
+  return Object.values(mapa).map(labelFn).join(" | ");
+}
+
+function exportarListaCorte(anidado, tc) {
+  const mats = materialesUnificados(anidado, tc);
+  const totalKg = mats.reduce((s,m)=>s+(m.kg||0),0);
+  const totalKgUtil = mats.reduce((s,m)=>s+(m.kg_util||0),0);
+  const totalCosto = mats.reduce((s,m)=>s+(m.precio_total||0),0);
   let txt = `LISTA DE CORTE — ${anidado.nombre}\n`;
   txt += `Fecha: ${anidado.fecha}\n`;
+  txt += `${"─".repeat(60)}\n`;
+  txt += `RESUMEN: ${totalKg.toFixed(1)}kg totales · ${totalKgUtil.toFixed(1)}kg útiles`;
+  txt += totalKg>0 ? ` · ${Math.round((1-totalKgUtil/totalKg)*1000)/10}% desperdicio` : "";
+  txt += totalCosto>0 ? ` · U$S ${totalCosto.toFixed(2)}\n` : "\n";
   txt += `${"─".repeat(60)}\n\n`;
-  anidado.grupos.forEach((g,gi)=>{
+  // Mismo orden que en pantalla: planchas de menor a mayor espesor entre sí
+  // (kg_m2 como proxy del espesor, proporcional para un mismo material).
+  const grupos = [...anidado.grupos].sort((a,b) => {
+    if (a.tipo!=="plancha" || b.tipo!=="plancha") return 0;
+    return (a.kg_m2||0)-(b.kg_m2||0);
+  });
+  grupos.forEach((g,gi)=>{
     txt += `GRUPO ${gi+1}: ${g.material_nombre||"Sin material"}\n`;
     if (g.tipo==="plancha") {
       txt += `Plancha: ${g.sheet_w}×${g.sheet_h} mm\n`;
       if (g.resultado) {
         g.resultado.hojas.forEach(h=>{
           const pzas=h.shelves.flatMap(s=>s.piezas);
-          txt += `  Hoja ${h.nro}: ${pzas.map(p=>`${p.etiqueta} (${p.w}×${p.h}mm)`).join(" | ")}\n`;
+          const linea = agruparPiezasTxt(pzas, p=>`${p.etiqueta}|${p.w}x${p.h}`, p=>`${p.cant>1?p.cant+"× ":""}${p.etiqueta} (${Math.round(p.w)}×${Math.round(p.h)}mm)`);
+          txt += `  Hoja ${h.nro}: ${linea}\n`;
         });
         const r=g.resultado.resumen;
         txt += `  Total: ${r.n_hojas} hoja(s) · ${r.area_total_m2}m² · ${r.pct_util}% aprovechamiento · ${r.pct_desp}% desperdicio\n`;
@@ -1137,7 +1250,8 @@ function exportarListaCorte(anidado) {
       txt += `Barra: ${g.largo_barra_mm}mm\n`;
       if (g.resultado) {
         g.resultado.barras.forEach(b=>{
-          txt += `  Barra ${b.nro}: ${b.piezas.map(p=>`${p.etiqueta} ${p.largo_mm}mm`).join(" | ")} | libre: ${b.libre_mm.toFixed(0)}mm\n`;
+          const linea = agruparPiezasTxt(b.piezas, p=>`${p.etiqueta}|${p.largo_mm}`, p=>`${p.cant>1?p.cant+"× ":""}${p.etiqueta} (${Math.round(p.largo_mm)}mm)`);
+          txt += `  Barra ${b.nro}${b.forzada?" (empalme)":""}: ${linea} | libre: ${b.libre_mm.toFixed(0)}mm\n`;
         });
         const r=g.resultado.resumen;
         txt += `  Total: ${r.b_total} barra(s) · ${r.m_total}m · ${r.pct_desp}% desperdicio · ${r.kg_total}kg\n`;
@@ -1765,8 +1879,13 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   </button>
                 )}
                 {hayResultados&&(
-                  <button onClick={()=>exportarListaCorte(actual)} style={{ ...BTN("ghost"),borderColor:C.gold+"66",color:C.gold,fontSize:12 }}>
-                    ⬇ Exportar lista
+                  <button onClick={()=>abrirListaCorte(actual, materialesUnificados(actual, tcGlobal))} style={{ ...BTN("ghost"),borderColor:C.gold+"66",color:C.gold,fontSize:12 }}>
+                    📋 Ver lista de corte
+                  </button>
+                )}
+                {hayResultados&&(
+                  <button onClick={()=>exportarListaCorte(actual, tcGlobal)} style={{ ...BTN("ghost"),borderColor:C.gold+"66",color:C.gold,fontSize:12 }}>
+                    ⬇ Exportar (.txt)
                   </button>
                 )}
                 {hayResultados&&(
@@ -1837,8 +1956,20 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             {actual.grupos.length===0&&(
               <div style={{ color:C.muted,fontSize:13,padding:"20px 0" }}>Importá desde un cómputo o agregá grupos manuales.</div>
             )}
-            {actual.grupos.map((g,i)=>{
-              const cambiar=updated=>upd({...actual,grupos:actual.grupos.map((x,j)=>j===i?updated:x)});
+            {[...actual.grupos].sort((a,b) => {
+              // Ordenar las planchas de menor a mayor espesor (2026-09-19, a
+              // pedido de Gino) — solo cambia el orden EN PANTALLA, no toca
+              // actual.grupos (por eso `cambiar`/`onEliminar` de abajo siguen
+              // buscando por g.id, nunca por posición). Los perfiles no
+              // tienen "espesor" en este sentido — el comparador devuelve 0
+              // para cualquier par que no sean dos planchas, así que un
+              // perfil mantiene su posición relativa de siempre (sort
+              // estable) y solo las planchas migran entre sí según espesor.
+              if (a.tipo!=="plancha" || b.tipo!=="plancha") return 0;
+              const espDe = g => bibPlanchas.find(m=>m.id===g.material_id)?.espesor ?? Infinity;
+              return espDe(a) - espDe(b);
+            }).map((g)=>{
+              const cambiar=updated=>upd({...actual,grupos:actual.grupos.map(x=>x.id===g.id?updated:x)});
               return g.tipo==="plancha"
                 ? <GrupoPlancha key={`${g.id}-${colapsarSenal}`} g={g} bib={bibPlanchas} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>
                 : <Grupo        key={`${g.id}-${colapsarSenal}`} g={g} bib={bibLineales} onChange={cambiar} onEliminar={()=>setConfirmarGrupoId(g.id)} totalKgAll={totalKgAll}/>;

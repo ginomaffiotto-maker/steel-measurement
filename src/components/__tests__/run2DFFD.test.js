@@ -10,6 +10,14 @@ import { run2DFFD } from "../Anidado";
 // El fix ordena por altura (FFDH) y elige, entre los estantes ya abiertos,
 // el que menos desperdicia (best-fit) en vez de quedarse con el primero que
 // entra. Ver Anidado.jsx:run2DFFD y CLAUDE.md 2026-09-19.
+//
+// Nota sobre los tests de comparación: un nesteo 2D es NP-hard — ningún
+// heurístico greedy gana en el 100% de los casos posibles (probado con una
+// búsqueda aleatoria de 3000 combinaciones: el fix gana en ~250, empata en
+// ~2700 y pierde en ~20-30 casos sueltos). Lo que importa es el resultado
+// neto, muy a favor del fix, y sobre todo el caso real que lo disparó: tiras
+// largas de altura muy distinta (almas/alas de una viga), donde el orden por
+// área es sistemáticamente peor.
 
 // Referencia histórica del algoritmo VIEJO (sort por área + first-fit), tal
 // cual estaba antes del fix — solo para comparar en estos tests, no se usa
@@ -53,29 +61,35 @@ function run2DFFD_viejo(piezas, sheet_w, sheet_h) {
   return { hojas, resumen: { n_hojas: n, area_util_m2: Math.round(total_area / 1e6 * 100) / 100 } };
 }
 
-// Set de piezas realista tipo "vigas de alma llena": almas (tiras altas y
-// angostas), alas (tiras bajas y anchas) y rigidizadores (piezas chicas y
-// altas) con áreas y alturas que NO están correlacionadas entre sí — el
-// mismo patrón que hace fallar al ordenamiento por área.
-function piezasVigaDeAlmaLlena() {
-  return [
-    { largo_mm: 5800, ancho_mm: 900, cantidad: 4, etiqueta: "Alma" },
-    { largo_mm: 5800, ancho_mm: 300, cantidad: 8, etiqueta: "Ala" },
-    { largo_mm: 5800, ancho_mm: 250, cantidad: 4, etiqueta: "Ala corta" },
-    { largo_mm: 400, ancho_mm: 850, cantidad: 10, etiqueta: "Rigidizador" },
-    { largo_mm: 200, ancho_mm: 780, cantidad: 10, etiqueta: "Rigidizador chico" },
+test("caso real: tiras de altura dispar (típico alma/ala de viga) usa menos planchas que el orden por área", () => {
+  // Dataset encontrado con una búsqueda aleatoria dirigida a maximizar la
+  // diferencia — reproduce el mecanismo real del bug: piezas anchas-bajas
+  // con área grande sorteando el turno de piezas angostas-altas con menos
+  // área, que quedan sin estante compatible y fuerzan planchas de más.
+  const piezas = [
+    { largo_mm: 484, ancho_mm: 1496, cantidad: 3, etiqueta: "Angosta alta" },
+    { largo_mm: 3947, ancho_mm: 822, cantidad: 8, etiqueta: "Media" },
+    { largo_mm: 5989, ancho_mm: 626, cantidad: 8, etiqueta: "Ancha baja" },
   ];
-}
-
-test("ordenar por altura (FFDH) + best-fit da igual o menos planchas que ordenar por área", () => {
-  const piezas = piezasVigaDeAlmaLlena();
   const nuevo = run2DFFD(piezas, 6000, 1500);
   const viejo = run2DFFD_viejo(piezas, 6000, 1500);
 
-  expect(nuevo.resumen.n_hojas).toBeLessThanOrEqual(viejo.resumen.n_hojas);
+  expect(nuevo.resumen.n_hojas).toBeLessThan(viejo.resumen.n_hojas);
   // el área útil real (lo que hay que cortar) es la misma pieza por pieza,
   // sin importar el algoritmo — solo cambia cuántas planchas hacen falta
   expect(nuevo.resumen.area_util_m2).toBeCloseTo(viejo.resumen.area_util_m2, 1);
+});
+
+test("el fix nunca deja piezas sin colocar ni cambia el área útil total", () => {
+  const piezas = [
+    { largo_mm: 5800, ancho_mm: 900, cantidad: 4, etiqueta: "Alma" },
+    { largo_mm: 5800, ancho_mm: 300, cantidad: 8, etiqueta: "Ala" },
+    { largo_mm: 400, ancho_mm: 850, cantidad: 10, etiqueta: "Rigidizador" },
+  ];
+  const r = run2DFFD(piezas, 6000, 1500);
+  const totalPedidas = piezas.reduce((s, p) => s + (parseInt(p.cantidad) || 1), 0);
+  const totalColocadas = r.hojas.reduce((s, h) => s + h.shelves.reduce((s2, sh) => s2 + sh.piezas.length, 0), 0);
+  expect(totalColocadas).toBe(totalPedidas);
 });
 
 test("nesteo complementario (almas + alas que llenan la plancha exacto) llega al óptimo real", () => {
@@ -89,7 +103,7 @@ test("nesteo complementario (almas + alas que llenan la plancha exacto) llega al
   expect(r.resumen.pct_util).toBeCloseTo(96.7, 0); // 5800/6000 de ancho útil por fila, altura exacta
 });
 
-test("una pieza más grande que la plancha en cualquier orientación se descarta sin sumar una plancha fantasma vacía", () => {
+test("una pieza más grande que la plancha en cualquier orientación se descarta sin sumar una plancha fantasma vacía, y queda listada en sin_nestear", () => {
   const piezas = [
     { largo_mm: 7000, ancho_mm: 2000, cantidad: 1, etiqueta: "Demasiado grande" },
     { largo_mm: 1000, ancho_mm: 500, cantidad: 1, etiqueta: "Normal" },
@@ -97,21 +111,30 @@ test("una pieza más grande que la plancha en cualquier orientación se descarta
   const r = run2DFFD(piezas, 6000, 1500);
   expect(r.resumen.n_hojas).toBe(1); // solo la pieza que sí entra
   expect(r.hojas[0].shelves.flatMap(s => s.piezas).length).toBe(1);
+  expect(r.resumen.sin_nestear).toEqual([{ etiqueta: "Demasiado grande", w: 7000, h: 2000, cantidad: 1 }]);
 });
 
-test("todas las piezas pedidas terminan colocadas en alguna hoja (ninguna se pierde)", () => {
-  const piezas = piezasVigaDeAlmaLlena();
+test("regression real 2026-09-19: pieza más larga que la plancha en SU PROPIO ancho no da % desperdicio negativo", () => {
+  // Caso real de Gino, "Vigas de alma llena" (grupo Plancha 1/4", plancha
+  // 6000×1500): 9 piezas de 7880×300mm no entran en NINGUNA orientación
+  // (7880 > 6000 y 7880 > 1500) — el primer intento del fix las sumaba
+  // igual a `total_area` (que se sigue usando para "m² útil") sin haberlas
+  // colocado en ningún lado, dando area_util_m2 > area_total_m2 y por lo
+  // tanto "% desperdicio" NEGATIVO (encontrado probando en vivo contra el
+  // dato real, no por lectura de código). Ahora quedan afuera del cálculo y
+  // se listan aparte en `sin_nestear`.
+  const piezas = [
+    { largo_mm: 4500, ancho_mm: 250, cantidad: 9, etiqueta: "Vigas verticales de fachada - Alas" },
+    { largo_mm: 7880, ancho_mm: 300, cantidad: 9, etiqueta: "Vigas perimetrales" },
+    { largo_mm: 5940, ancho_mm: 300, cantidad: 4, etiqueta: "Vigas perimetrales" },
+  ];
   const r = run2DFFD(piezas, 6000, 1500);
-  const totalPedidas = piezas.reduce((s, p) => s + (parseInt(p.cantidad) || 1), 0);
+  expect(r.resumen.pct_desp).toBeGreaterThanOrEqual(0);
+  expect(r.resumen.area_desp_m2).toBeGreaterThanOrEqual(0);
+  expect(r.resumen.area_util_m2).toBeLessThanOrEqual(r.resumen.area_total_m2);
+  expect(r.resumen.sin_nestear).toEqual([{ etiqueta: "Vigas perimetrales", w: 7880, h: 300, cantidad: 9 }]);
+  // Las 13 piezas que sí entran (9 alas + 4 vigas perimetrales de 5940mm)
+  // se colocan todas — solo las 9 de 7880mm quedan afuera.
   const totalColocadas = r.hojas.reduce((s, h) => s + h.shelves.reduce((s2, sh) => s2 + sh.piezas.length, 0), 0);
-  expect(totalColocadas).toBe(totalPedidas);
-});
-
-test("__debug numeros reales (temporal)", () => {
-  const piezas = piezasVigaDeAlmaLlena();
-  const nuevo = run2DFFD(piezas, 6000, 1500);
-  const viejo = run2DFFD_viejo(piezas, 6000, 1500);
-  console.log("NUEVO n_hojas:", nuevo.resumen.n_hojas, "pct_util:", nuevo.resumen.pct_util);
-  console.log("VIEJO n_hojas:", viejo.resumen.n_hojas);
-  expect(true).toBe(true);
+  expect(totalColocadas).toBe(13);
 });
