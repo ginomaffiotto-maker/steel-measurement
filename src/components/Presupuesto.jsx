@@ -3336,13 +3336,18 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
     .filter(p => !filt.vendedor || String(p.vendedor) === filt.vendedor)
     .filter(p => !filt.desde || (p.fecha||"") >= filt.desde)
     .filter(p => !filt.hasta || (p.fecha||"") <= filt.hasta)
-    .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total, _n_items: (p.items||[]).length,
+    .map(p => ({ ...p, _total_usd: calcPresupuesto(p).gran_total,
       _vendedor_nombre: usuarios.find(u => String(u.id) === String(p.vendedor))?.nombre || "" })),
     [presupuestos, filtEst, filt, usuarios]);
   const { ordenados: lista, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(listaFiltrada, "fecha", "desc");
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v2", {
-    check: 34, nro: 70, nombre: 160, cliente: 130, obra: 130, tipo: 90,
-    vendedor: 110, fecha: 90, items: 55, total: 100, estado: 100, acc: 30,
+  // v3 (2026-09-20, a pedido de Gino): se saca la columna "Ítems" (el
+  // detalle real ya está un click adentro, en la ficha) y se reparte su
+  // ancho entre Nombre/Cliente/Obra, que son los que más se recortan con
+  // nombres reales largos. Clave de storage renovada para no arrastrar el
+  // ancho viejo de una columna que ya no existe.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v3", {
+    check: 34, nro: 70, nombre: 180, cliente: 140, obra: 140, tipo: 90,
+    vendedor: 110, fecha: 90, total: 100, estado: 100, acc: 30,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -3694,7 +3699,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
-          <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
             <thead><tr>
               <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
                 <input type="checkbox" checked={lista.length>0 && lista.every(p=>seleccionados.has(p.id))}
@@ -3704,7 +3709,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
               {[
                 { h:"N°", campo:"nro", k:"nro" }, { h:"Nombre", campo:"nombre", k:"nombre" }, { h:"Cliente", campo:"cliente", k:"cliente" },
                 { h:"Obra", campo:"obra", k:"obra" }, { h:"Tipo", campo:"tipo_trabajo", k:"tipo" }, { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
-                { h:"Fecha", campo:"fecha", k:"fecha" }, { h:"Ítems", campo:"_n_items", k:"items" }, { h:"Total USD", campo:"_total_usd", k:"total" },
+                { h:"Fecha", campo:"fecha", k:"fecha" }, { h:"Total USD", campo:"_total_usd", k:"total" },
                 { h:"Estado", campo:"estado", k:"estado" }, { h:"", campo:null, k:"acc" },
               ].map(({h,campo,k}) => (
                 <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
@@ -3713,6 +3718,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                 </ThResizable>
               ))}
+              {/* Columna "filler" (2026-09-20) — ver comentario en
+                  Computo.jsx, mismo mecanismo: única celda sin ancho fijo,
+                  absorbe el sobrante para que la tabla llene el ancho
+                  disponible sin afectar las columnas reales. */}
+              <th style={{ ...TH, borderRight:"none" }}></th>
             </tr></thead>
             <tbody>
               {lista.map(p => {
@@ -3733,7 +3743,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                     <td style={TD}><span style={BDG(C.steel,true)}>{p.tipo_trabajo||"Fab"}</span></td>
                     <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
                     <td style={TD}><span style={{ fontSize:13, color:C.muted }}>{p.fecha}</span></td>
-                    <td style={{ ...TD, textAlign:"center" }}>{(p.items||[]).length}</td>
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
                       {p._total_usd>0 ? `$${n2(p._total_usd)}` : "—"}
                     </td>
@@ -3746,6 +3755,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                           style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
                       )}
                     </td>
+                    <td style={TD}></td>
                   </tr>
                 );
               })}

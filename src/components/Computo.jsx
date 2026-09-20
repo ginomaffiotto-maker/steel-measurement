@@ -1258,15 +1258,24 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
     const multTotal = c.cantidad_total || 1;
     const _kg = c.items.reduce((s,it)=>s+it.piezas.reduce((s2,p)=>s2+calcPieza(p).total_kg,0)*(it.cantidad||1),0) * multTotal;
     return { ...c, _kg, _monto_usd: calcMontoUSDComputo(c, c.tc ?? tcGlobal),
-      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre || "" };
+      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(c.vendedor))?.nombre || "",
+      // Tipo/Familia separadas en columnas propias (2026-09-20, a pedido de
+      // Gino) — antes vivían apiladas en una sola columna, sin poder
+      // ordenar por Familia sola. `_familia` se calcula una vez acá mismo
+      // criterio que el resto de los campos derivados de esta lista.
+      _familia: c.categoria ? familiaDe(c.categoria) : "" };
   });
   const { ordenados: computosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(computosFiltradosBase, "fecha", "desc");
   // Tabla real con columnas ajustables (2026-09-12, a pedido de Gino: mismo
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v2", {
-    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 100,
+  // v3 (2026-09-20): "Tipo / Familia" combinada se separó en 2 columnas
+  // reales — clave de storage renovada (mismo criterio que el 14/9) para
+  // que nadie quede con el ancho viejo de la columna combinada aplicado
+  // a la columna "tipo" nueva, mucho más angosta.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v3", {
+    check: 34, nro: 70, nombre: 260, fecha: 85, tipo: 110, familia: 140, vendedor: 120, kg: 90, monto: 110, acc: 100,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -1559,7 +1568,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={computosFiltrados.every(c=>seleccionados.has(c.id))}
@@ -1570,7 +1579,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                   { h:"N°", campo:"nro", k:"nro" },
                   { h:"Nombre", campo:"nombre", k:"nombre" },
                   { h:"Fecha", campo:"fecha", k:"fecha" },
-                  { h:"Tipo / Familia", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Tipo", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Familia", campo:"_familia", k:"familia" },
                   { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
                   { h:"Kg", campo:"_kg", k:"kg" },
                   { h:"Monto U$S", campo:"_monto_usd", k:"monto" },
@@ -1583,6 +1593,16 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
+                {/* Columna "filler" (2026-09-20) — sin ancho ni contenido, la
+                    única sin width/minWidth/maxWidth de toda la fila. Con la
+                    tabla en width:"100%" y table-layout:fixed, el navegador
+                    reparte TODO el sobrante acá (nunca a las columnas reales,
+                    que tienen min=max=width fijo) — llena el ancho disponible
+                    sin reabrir el bug de "arrastrar una columna mueve a las
+                    demás" (ver useSortable.js:sumAnchos para el historial
+                    completo de esta saga). Sin borde derecho para no leerse
+                    como una columna fantasma. */}
+                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {computosFiltrados.map(c => {
@@ -1606,10 +1626,8 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                         <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.cliente?`${c.cliente} · `:""}{c.items.length} ítem{c.items.length!==1?"s":""}</div>
                       </td>
                       <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{c.fecha||"—"}</span></td>
-                      <td style={TD}>
-                        <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</div>
-                        <div style={{ fontSize:11, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</div>
-                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</span></td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</span></td>
                       <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
@@ -1625,6 +1643,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                           )}
                         </div>
                       </td>
+                      <td style={TD}></td>
                     </tr>
                   );
                 })}
