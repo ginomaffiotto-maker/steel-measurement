@@ -76,6 +76,17 @@ function svgPlancha(hoja, sheet_w, sheet_h) {
     `<rect width="${W}" height="${H}" fill="#eee" stroke="#ccc"/>${rects}</svg>`;
 }
 
+function seccionSinNestear(sinNestear) {
+  if (!sinNestear || !sinNestear.length) return "";
+  const chips = sinNestear.map(p =>
+    `<span class="pieza-chip pieza-sin-nestear">${p.cantidad > 1 ? p.cantidad + "× " : ""}${escapeHtml(p.etiqueta || "—")} (${Math.round(p.w)}×${Math.round(p.h)}mm)</span>`
+  ).join("");
+  return `<div class="sin-nestear-aviso">
+    ⚠ ${sinNestear.reduce((s, p) => s + p.cantidad, 0)} pieza(s) NO entran en esta plancha en ninguna orientación — quedaron AFUERA de las hojas de abajo, no las cortes de acá. Pedí una plancha más larga o cargalas aparte:
+    <div class="hoja-piezas">${chips}</div>
+  </div>`;
+}
+
 function seccionGrupo(g) {
   const r = g.resultado?.resumen;
   if (!g.resultado || !r) return "";
@@ -98,6 +109,7 @@ function seccionGrupo(g) {
         <span class="grupo-dim">Plancha ${fmtN(g.sheet_w)}×${fmtN(g.sheet_h)}mm</span>
         <span class="grupo-total">${r.n_hojas} hoja${r.n_hojas !== 1 ? "s" : ""} · ${r.pct_desp}% desperdicio</span>
       </div>
+      ${seccionSinNestear(r.sin_nestear)}
       <div class="hojas-grid">${hojas}</div>
     </div>`;
   } else {
@@ -151,6 +163,17 @@ export function buildListaCorteHTML(anidado, mats) {
   const gruposHTML = grupos.map(seccionGrupo).join("") ||
     `<div class="sin-datos">Ningún grupo tiene un corte calculado todavía.</div>`;
 
+  // Aviso global (2026-09-20, a pedido de Gino): antes el cartel de piezas
+  // sin nestear solo se veía en la pantalla de Anidado — este mismo papel,
+  // que es el que se lleva al taller a cortar, no decía nada, así que un
+  // operario podía terminar el corte pensando que estaba completo. Suma el
+  // total real de piezas sin nestear de TODOS los grupos de plancha (no
+  // solo el primero), arriba de todo, antes de que se pueda ignorar.
+  const totalSinNestear = grupos.reduce((s, g) => s + (g.resultado?.resumen?.sin_nestear || []).reduce((s2, p) => s2 + p.cantidad, 0), 0);
+  const avisoGlobal = totalSinNestear > 0
+    ? `<div class="aviso-global">⚠ Esta lista de corte NO está completa: ${totalSinNestear} pieza(s) no entraron en ninguna plancha calculada acá (más grandes que la plancha comprada) y quedaron afuera del corte. Están marcadas en naranja en cada material más abajo — hay que pedir una plancha más larga o cargarlas aparte antes de cortar.</div>`
+    : "";
+
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
   <title>Lista de corte — ${escapeHtml(anidado.nombre)}</title>
   <style>
@@ -181,6 +204,9 @@ export function buildListaCorteHTML(anidado, mats) {
     .hoja-nro{font-size:10px;font-weight:800;color:#444;margin-bottom:4px}
     .hoja-piezas{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
     .pieza-chip{background:#f1f1f1;border-radius:4px;padding:2px 7px;font-size:10px;color:#333}
+    .sin-nestear-aviso{background:#fff4e5;border:1px solid #f0a500;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#7a4a00;font-weight:600}
+    .pieza-sin-nestear{background:#f0a500;color:#fff}
+    .aviso-global{background:#fff4e5;border:1.5px solid #f0a500;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#7a4a00;font-weight:700}
     .hoja-libre{font-size:10px;color:#888;margin-top:4px}
     .hoja-barra.forzada{background:#fff8ec}
     .sin-datos{color:#999;font-style:italic;font-size:12px;padding:12px 0}
@@ -195,6 +221,7 @@ export function buildListaCorteHTML(anidado, mats) {
     </div>
     <div class="fecha">Fecha: ${fmtD(anidado.fecha)}</div>
   </div>
+  ${avisoGlobal}
 
   <div class="section-title">Resumen general</div>
   <div class="kpi-grid">

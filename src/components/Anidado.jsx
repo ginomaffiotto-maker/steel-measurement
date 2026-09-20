@@ -1220,12 +1220,19 @@ function exportarListaCorte(anidado, tc) {
   const totalKg = mats.reduce((s,m)=>s+(m.kg||0),0);
   const totalKgUtil = mats.reduce((s,m)=>s+(m.kg_util||0),0);
   const totalCosto = mats.reduce((s,m)=>s+(m.precio_total||0),0);
+  // Aviso de piezas sin nestear (2026-09-20) — mismo motivo que en
+  // listaCorte.js (reporte imprimible): este .txt es el otro documento que
+  // se puede llevar al taller, tenía el mismo hueco.
+  const totalSinNestear = anidado.grupos.reduce((s,g)=>s+(g.resultado?.resumen?.sin_nestear||[]).reduce((s2,p)=>s2+p.cantidad,0),0);
   let txt = `LISTA DE CORTE — ${anidado.nombre}\n`;
   txt += `Fecha: ${anidado.fecha}\n`;
   txt += `${"─".repeat(60)}\n`;
   txt += `RESUMEN: ${totalKg.toFixed(1)}kg totales · ${totalKgUtil.toFixed(1)}kg útiles`;
   txt += totalKg>0 ? ` · ${Math.round((1-totalKgUtil/totalKg)*1000)/10}% desperdicio` : "";
   txt += totalCosto>0 ? ` · U$S ${totalCosto.toFixed(2)}\n` : "\n";
+  if (totalSinNestear > 0) {
+    txt += `⚠ INCOMPLETA: ${totalSinNestear} pieza(s) no entran en ninguna plancha calculada acá — quedaron afuera del corte, ver detalle en cada grupo abajo.\n`;
+  }
   txt += `${"─".repeat(60)}\n\n`;
   // Mismo orden que en pantalla: planchas de menor a mayor espesor entre sí
   // (kg_m2 como proxy del espesor, proporcional para un mismo material).
@@ -1245,6 +1252,10 @@ function exportarListaCorte(anidado, tc) {
         });
         const r=g.resultado.resumen;
         txt += `  Total: ${r.n_hojas} hoja(s) · ${r.area_total_m2}m² · ${r.pct_util}% aprovechamiento · ${r.pct_desp}% desperdicio\n`;
+        if (r.sin_nestear?.length) {
+          const linea = r.sin_nestear.map(p=>`${p.cantidad>1?p.cantidad+"× ":""}${p.etiqueta} (${Math.round(p.w)}×${Math.round(p.h)}mm)`).join(", ");
+          txt += `  ⚠ SIN NESTEAR (no entran en esta plancha, quedan afuera): ${linea}\n`;
+        }
       } else txt += `  (sin calcular)\n`;
     } else {
       txt += `Barra: ${g.largo_barra_mm}mm\n`;
@@ -1511,15 +1522,21 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
     // (material realmente aprovechado), no el total comprado — mismo
     // criterio que el badge resaltado de cada grupo, más arriba.
     return { ...a, _kg: materiales.reduce((s,m)=>s+m.kg_util,0), _monto_usd: materiales.reduce((s,m)=>s+m.precio_total,0),
-      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre || "" };
+      _vendedor_nombre: usuarios.find(u=>String(u.id)===String(a.vendedor))?.nombre || "",
+      // Tipo/Familia separadas en columnas propias (2026-09-20), mismo
+      // cambio que Computo.jsx.
+      _familia: a.categoria ? familiaDe(a.categoria) : "" };
   });
   const { ordenados: anidadosFiltrados, campo: sortCampo, dir: sortDir, ordenarPor } = useSortable(anidadosFiltradosBase, "fecha", "desc");
   // Tabla real con columnas ajustables (2026-09-12, a pedido de Gino: mismo
   // look que Presupuesto/Historial de acá y que Presupuestos de Steel CRM)
   // — antes eran filas armadas con divs sueltos, sin línea divisoria entre
   // columnas ni anchos configurables. Mismo cambio que Computo.jsx.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v2", {
-    check: 34, nombre: 260, fecha: 85, tipo: 150, vendedor: 120, kg: 90, monto: 110, acc: 70,
+  // v3 (2026-09-20): "Tipo / Familia" combinada se separó en 2 columnas
+  // reales — mismo cambio y mismo motivo de renovar la clave que en
+  // Computo.jsx (ver comentario ahí).
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v3", {
+    check: 34, nombre: 260, fecha: 85, tipo: 110, familia: 140, vendedor: 120, kg: 90, monto: 110, acc: 70,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -1749,7 +1766,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
                   <input type="checkbox" checked={anidadosFiltrados.every(a=>seleccionados.has(a.id))}
@@ -1759,7 +1776,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 {[
                   { h:"Nombre", campo:"nombre", k:"nombre" },
                   { h:"Fecha", campo:"fecha", k:"fecha" },
-                  { h:"Tipo / Familia", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Tipo", campo:"tipo_trabajo", k:"tipo" },
+                  { h:"Familia", campo:"_familia", k:"familia" },
                   { h:"Vendedor", campo:"_vendedor_nombre", k:"vendedor" },
                   { h:"Kg", campo:"_kg", k:"kg" },
                   { h:"Monto U$S", campo:"_monto_usd", k:"monto" },
@@ -1772,6 +1790,9 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
+                {/* Columna "filler" (2026-09-20) — ver comentario en
+                    Computo.jsx, mismo mecanismo. */}
+                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {anidadosFiltrados.map(a=>{
@@ -1792,10 +1813,8 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                         <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
                       </td>
                       <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{a.fecha||"—"}</span></td>
-                      <td style={TD}>
-                        <div style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</div>
-                        <div style={{ fontSize:11, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</div>
-                      </td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</span></td>
+                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</span></td>
                       <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{kg>0?n2(kg):"—"}</td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
@@ -1812,6 +1831,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                           )}
                         </div>
                       </td>
+                      <td style={TD}></td>
                     </tr>
                   );
                 })}
