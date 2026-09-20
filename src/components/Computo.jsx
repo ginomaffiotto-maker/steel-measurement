@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
+import { C, TH, TD, INP, LBL, BDG, BTN, CARD } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -1601,16 +1601,20 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. */}
         {computosFiltrados.length > 0 && (
+          // Tarjeta (2026-09-20, reportado por Gino con captura: sin esto,
+          // el "resto" del ancho de pantalla que la tabla natural no ocupa
+          // se ve como un hueco vacío) — la tarjeta sí ocupa el 100% del
+          // ancho (comportamiento normal de un <div> de bloque), la tabla
+          // adentro queda en su ancho natural (suma de columnas, nunca
+          // width:"100%" — ver comentario de ThResizable en useSortable.js).
+          // El sobrante queda como padding normal de la tarjeta, no como
+          // un área sin estilo — mismo criterio que cualquier panel de esta
+          // app con una tabla más angosta que el panel.
+          <div style={CARD()}>
           <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            {/* SIN width:"100%" a propósito — ver el comentario largo de
-                ThResizable en useSortable.js (2026-09-14): con width:100%
-                el navegador estira columnas al ensancharlas ("se mueven las
-                otras"), y un filler no rellena bien. El ancho de la tabla
-                pasa a ser la suma real de sus columnas, igual que Historial
-                — nunca reponer width:"100%" acá. */}
             <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
@@ -1681,6 +1685,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                 })}
               </tbody>
             </table>
+          </div>
           </div>
         )}
         {Toast}

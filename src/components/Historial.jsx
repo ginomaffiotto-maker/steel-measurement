@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
+import { C, TH, TD, INP, LBL, BDG, BTN, CARD } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, resolverEmpresaId, saveDBTrabajoHistorico, useMergeHistorialNube } from "../utils/storage";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -685,6 +685,11 @@ export default function Historial({ usuario, usuarios = [], logear }) {
             </div>
           )}
           {lista.length > 0 && (
+            // Tarjeta (2026-09-20) — mismo motivo que Computo.jsx: sin esto,
+            // el sobrante entre el ancho natural de la tabla y el de la
+            // pantalla se ve como un hueco vacío en vez de padding normal
+            // de panel.
+            <div style={CARD()}>
             <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
               <div style={{ textAlign:"right", marginBottom:6 }}>
                 <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
@@ -742,6 +747,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                 </tbody>
               </table>
               <Paginador pagina={paginaHist} totalPaginas={totalPaginasHist} setPagina={setPaginaHist} />
+            </div>
             </div>
           )}
         </>

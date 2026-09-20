@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
+import { C, TH, TD, INP, LBL, BDG, BTN, CARD } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial, getMoneda, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
@@ -1837,14 +1837,15 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
             2026-08-24, que no tenían línea divisoria entre columnas ni
             anchos configurables. Mismo cambio que Computo.jsx. */}
         {anidadosFiltrados.length > 0 && (
+          // Tarjeta (2026-09-20) — mismo motivo que Computo.jsx: sin esto,
+          // el sobrante entre el ancho natural de la tabla y el de la
+          // pantalla se ve como un hueco vacío en vez de padding normal
+          // de panel.
+          <div style={CARD()}>
           <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
             <div style={{ textAlign:"right", marginBottom:6 }}>
               <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
             </div>
-            {/* SIN width:"100%" a propósito — ver el comentario largo de
-                ThResizable en useSortable.js (2026-09-14): con width:100%
-                el navegador estira columnas al ensancharlas ("se mueven las
-                otras"). Mismo criterio que Computo.jsx/Historial.jsx. */}
             <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
               <thead><tr>
                 <ThResizable style={TH} width={colW.check} onResize={w=>setColW("check",w)}>
@@ -1912,6 +1913,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                 })}
               </tbody>
             </table>
+          </div>
           </div>
         )}
       </>

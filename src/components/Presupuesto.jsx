@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import { createPortal } from "react-dom";
-import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
+import { C, TH, TD, INP, LBL, BDG, BTN, CARD } from "../styles/colors";
 import { saveLS, loadLS, uid, stamp, touch, loadTarifario, saveTarifario, saveDBTarifario, peekNroPresupuesto, catchUpNroPresupuesto, newCodigoCalculo, catchUpCodigoCalculo, buscarVinculosCRM, enviarPresupuestoASteelCRM, resolverClienteId, saveDBPresupuestoSM, saveDBItem, useMergePresupuestosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes, saveDBMaterial, getMoneda, esperarSesion } from "../utils/storage";
 import { mergeSeed, migrar, PERFILES_DATA, PLANCHUELAS_DATA, PLANCHAS_DATA, IDS_UNIFICADOS_GM, FichaModal } from "./BibliotecaMateriales";
 import { calcPieza } from "./Computo";
@@ -3695,14 +3695,15 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
         </div>
       )}
       {lista.length > 0 && (
+        // Tarjeta (2026-09-20) — mismo motivo que Computo.jsx: sin esto,
+        // el sobrante entre el ancho natural de la tabla y el de la
+        // pantalla se ve como un hueco vacío en vez de padding normal
+        // de panel.
+        <div style={CARD()}>
         <div ref={colContainerRef} style={{ overflowX:"auto", minWidth:0 }}>
           <div style={{ textAlign:"right", marginBottom:6 }}>
             <button onClick={resetColW} style={{ ...BTN("ghost"), padding:"3px 10px", fontSize:11 }} title="Restablecer anchos de columna">↺ Anchos</button>
           </div>
-          {/* SIN width:"100%" a propósito — ver el comentario largo de
-              ThResizable en useSortable.js (2026-09-14): con width:100%
-              el navegador estira columnas al ensancharlas ("se mueven las
-              otras"). Mismo criterio que Computo.jsx/Historial.jsx. */}
           <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
             <thead><tr>
               <ThResizable style={TH} width={colW.check} onResize={w => setColW("check", w)}>
@@ -3759,6 +3760,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
               })}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
