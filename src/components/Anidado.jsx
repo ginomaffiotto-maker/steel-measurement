@@ -436,9 +436,19 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
   const kerfSospechoso = (parseFloat(g.kerf_mm)||0) > 100;
   const r=g.resultado;
   const calculado = !!r;
-  // Aviso de resultado desactualizado (2026-09-20) — ver comentario en
-  // ALGORITMO_1D_VERSION/ALGORITMO_2D_VERSION, arriba en el archivo.
-  const desactualizado = calculado && r.version !== ALGORITMO_1D_VERSION;
+  // Sin aviso de "desactualizado" acá a propósito (2026-09-20, corregido
+  // el mismo día tras probarlo en vivo): runFFD (1D) nunca tuvo un cambio
+  // real de lógica desde el 2026-08-03 — a diferencia de run2DFFD, ningún
+  // resultado 1D viejo es realmente peor que uno nuevo. Poner
+  // `desactualizado = r.version !== ALGORITMO_1D_VERSION` acá marcaba
+  // CUALQUIER cómputo 1D calculado antes de hoy como "desactualizado"
+  // (nunca tuvieron el campo `version`), sin que hubiera ninguna mejora
+  // real detrás — falso positivo generalizado, encontrado probando en
+  // vivo contra la base real. Si el día que `runFFD` tenga un cambio real
+  // de lógica (ALGORITMO_1D_VERSION sube a 2), ahí sí conviene agregar
+  // este aviso — decidiendo en ese momento cómo tratar los resultados
+  // viejos sin `version`.
+  const desactualizado = false;
 
   // Cálculos para fila resumen
   const total_m = g.piezas.reduce((s,p)=>(parseFloat(p.largo_mm)||0)*(parseInt(p.cantidad)||1)+s,0)/1000;
@@ -1640,9 +1650,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // Cuántos materiales de ESTE anidado quedaron con un resultado calculado
   // con una versión vieja del algoritmo (2026-09-20) — mismo criterio que
   // el badge "⚠ desactualizado" de cada tarjeta, resumido acá para que se
-  // note sin tener que expandir cada material uno por uno.
-  const gruposDesactualizados = (actual?.grupos||[]).filter(g => g.resultado &&
-    g.resultado.version !== (g.tipo==="plancha" ? ALGORITMO_2D_VERSION : ALGORITMO_1D_VERSION)).length;
+  // note sin tener que expandir cada material uno por uno. Solo Plancha
+  // (2D) — Perfil (1D) no tiene ningún cambio real de algoritmo detrás
+  // todavía, ver comentario de `desactualizado` en Grupo (1D) más arriba.
+  const gruposDesactualizados = (actual?.grupos||[]).filter(g => g.tipo==="plancha" &&
+    g.resultado && g.resultado.version !== ALGORITMO_2D_VERSION).length;
 
   // colapsarSenal: incrementarlo cambia el `key` de cada Grupo/GrupoPlancha
   // (ver .map() más abajo), forzando su remount — así el estado local
@@ -1853,9 +1865,6 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
-                {/* Columna "filler" (2026-09-20) — ver comentario en
-                    Computo.jsx, mismo mecanismo. */}
-                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {anidadosFiltrados.map(a=>{
@@ -1894,7 +1903,6 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                           )}
                         </div>
                       </td>
-                      <td style={TD}></td>
                     </tr>
                   );
                 })}
@@ -1915,7 +1923,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
           )}
           {gruposDesactualizados>0 && (
             <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", margin:"12px 0", fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-              ⚠ {gruposDesactualizados} de {actual.grupos.length} material(es) fueron calculados con una versión anterior del algoritmo de nesteo — pueden estar mostrando más desperdicio (o piezas sin nestear sin avisar) del que darían hoy.
+              ⚠ {gruposDesactualizados} plancha(s) de este anidado fueron calculadas con una versión anterior del algoritmo de nesteo — pueden estar mostrando más desperdicio (o piezas sin nestear sin avisar) del que darían hoy.
               {!esDeOtro && <button onClick={calcularTodo} style={{ ...BTN("ghost"), borderColor:C.warn+"66", color:C.warn, fontSize:12, padding:"3px 10px" }}>🔄 Recalcular todo</button>}
             </div>
           )}
