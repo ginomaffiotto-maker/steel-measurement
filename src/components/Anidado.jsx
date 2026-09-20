@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial, getMoneda } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBAnidado, useMergeAnidadosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, loadTarifario, saveDBMaterial, getMoneda, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -97,6 +97,20 @@ function useBibliotecaPlanchas() {
 // vivió el bug crítico de empalme de la sesión 2026-08-03 (una pieza más
 // larga que la barra se descartaba en silencio); el regression test fija
 // el comportamiento correcto con un caso sintético mínimo.
+//
+// Versión de cada algoritmo (2026-09-20) — se incrementa solo cuando cambia
+// la LÓGICA de colocación, no por ajustes de UI. Se guarda dentro de cada
+// `resultado` para poder avisar en pantalla si un grupo ya calculado quedó
+// con un resultado de una versión vieja — sin esto, el fix real del
+// 2026-09-19 (FFDH + best-fit en run2DFFD) mejoraba el algoritmo pero
+// cualquier anidado ya calculado ANTES de ese día seguía mostrando el
+// resultado viejo (más planchas, más desperdicio, piezas perdidas sin
+// aviso) para siempre, sin que nadie se enterara salvo que lo recalculara
+// a mano por las dudas — confirmado real con Gino el 2026-09-20 sobre
+// "VIgas de alma llena" (18 hojas / 57.1% vs. 6 hojas / 23.8% tras
+// recalcular). No cambia ningún cálculo, solo lo hace visible.
+export const ALGORITMO_1D_VERSION = 1;
+export const ALGORITMO_2D_VERSION = 2; // v2 = FFDH + best-fit (2026-09-19), reemplaza orden por área + first-fit
 export function runFFD(piezas, largo_barra_mm, kerf_mm, kg_m) {
   // mm_util se calcula sobre las piezas ORIGINALES (antes de empalmar), así
   // siempre refleja el largo real pedido — independiente de cómo se resuelva
@@ -145,7 +159,7 @@ export function runFFD(piezas, largo_barra_mm, kerf_mm, kg_m) {
   const n=barras.length;
   const mm_kerf=barras.reduce((s,b)=>s+Math.max(0,b.piezas.length-1)*kerf_mm,0);
   const mm_total=n*largo_barra_mm, mm_desp=Math.max(0,mm_total-mm_util_total-mm_kerf), kgm=parseFloat(kg_m)||0;
-  return { barras, resumen: {
+  return { barras, version: ALGORITMO_1D_VERSION, resumen: {
     b_util:+(mm_util_total/largo_barra_mm).toFixed(2), b_desp:+(mm_desp/largo_barra_mm).toFixed(2), b_total:n,
     m_util:+(mm_util_total/1000).toFixed(2), m_desp:+(mm_desp/1000).toFixed(2), m_total:+(mm_total/1000).toFixed(2),
     kg_util:+(mm_util_total/1000*kgm).toFixed(1), kg_desp:+(mm_desp/1000*kgm).toFixed(1), kg_total:+(mm_total/1000*kgm).toFixed(1),
@@ -267,7 +281,7 @@ export function run2DFFD(piezas, sheet_w, sheet_h) {
     mapa[key].cantidad++;
     return mapa;
   },{}));
-  return { hojas, resumen: {
+  return { hojas, version: ALGORITMO_2D_VERSION, resumen: {
     n_hojas:n,
     area_util_m2: Math.round(total_area/1e6*100)/100,
     area_total_m2: Math.round(n*sheet_area/1e6*100)/100,
@@ -422,6 +436,9 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
   const kerfSospechoso = (parseFloat(g.kerf_mm)||0) > 100;
   const r=g.resultado;
   const calculado = !!r;
+  // Aviso de resultado desactualizado (2026-09-20) — ver comentario en
+  // ALGORITMO_1D_VERSION/ALGORITMO_2D_VERSION, arriba en el archivo.
+  const desactualizado = calculado && r.version !== ALGORITMO_1D_VERSION;
 
   // Cálculos para fila resumen
   const total_m = g.piezas.reduce((s,p)=>(parseFloat(p.largo_mm)||0)*(parseInt(p.cantidad)||1)+s,0)/1000;
@@ -453,6 +470,9 @@ function Grupo({ g, bib, onChange, onEliminar, totalKgAll }) {
                 ...(calculado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`}:{}) }}>
               {calculado?"✓ Calculado":"Calcular ▶"}
             </button>
+            {desactualizado && (
+              <span title="Este resultado se calculó con una versión anterior del algoritmo de nesteo — clickeá Calcular para actualizarlo" style={{ fontSize:10,color:C.warn,fontWeight:700,whiteSpace:"nowrap",flexShrink:0 }}>⚠ desactualizado</span>
+            )}
             {calculado && <>
               <span style={{ fontSize:16,color:C.ok,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>b.útiles </span>{r.resumen.b_util}</span>
               <span style={{ fontSize:16,color:col_desp,fontWeight:800 }}><span style={{ color:C.muted,fontSize:11 }}>b.desp </span>{r.resumen.b_desp}</span>
@@ -649,6 +669,9 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
   };
   const r=g.resultado;
   const calculado = !!r;
+  // Aviso de resultado desactualizado (2026-09-20) — ver comentario en
+  // ALGORITMO_1D_VERSION/ALGORITMO_2D_VERSION, arriba en el archivo.
+  const desactualizado = calculado && r.version !== ALGORITMO_2D_VERSION;
 
   // Cálculos para fila resumen
   const area_util_m2 = g.piezas.reduce((s,p)=>{
@@ -703,6 +726,9 @@ function GrupoPlancha({ g, bib, onChange, onEliminar, totalKgAll }) {
                 ...(calculado?{background:C.ok+"22",color:C.ok,border:`1px solid ${C.ok}66`}:{}) }}>
               {calculado?"✓ Calculado":"Calcular ▶"}
             </button>
+            {desactualizado && (
+              <span title="Este resultado se calculó con una versión anterior del algoritmo de nesteo — clickeá Calcular para actualizarlo" style={{ fontSize:10,color:C.warn,fontWeight:700,whiteSpace:"nowrap",flexShrink:0 }}>⚠ desactualizado</span>
+            )}
             {calculado && <>
               {/* 2026-09-19, a pedido de Gino: la misma info que "hojas
                   desp/m² desp/kg desp" pero del lado útil, en el mismo
@@ -1396,12 +1422,30 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
         const vendedor = usuarios.find(u => String(u.id) === String(a.vendedor))?.profileId || null;
         const { cliente, comentarios, ...resto } = a;
         await saveDBAnidado({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: a.eliminadoPor ?? null, eliminado_fecha: a.eliminadoFecha ?? null });
+        limpiarSyncPendiente("anidado", a.id);
+        refrescarSyncAnidado();
       } catch (e) {
         console.warn(`[Fase 3] No se pudo sincronizar anidado "${a.nombre || a.id}" con el backend:`, e.message || e);
+        // Mismo mecanismo que Presupuesto/Cómputo (2026-08-29/2026-09-20).
+        marcarSyncPendiente("anidado", a.id);
+        refrescarSyncAnidado();
       }
     });
     queue.set(a.id, propia);
     return propia;
+  };
+
+  // Aviso de anidados sin sincronizar a la nube (2026-09-20).
+  const [syncPendientesAnidado, setSyncPendientesAnidado] = useState(() => obtenerSyncPendientes().filter(p => p.tipo === "anidado"));
+  const refrescarSyncAnidado = () => setSyncPendientesAnidado(obtenerSyncPendientes().filter(p => p.tipo === "anidado"));
+  const puedeReintentarAnidado = (a) => !a || !a.vendedor || String(a.vendedor) === String(usuario?.id) || ["admin","supervisor"].includes(usuario?.rol);
+  const syncPendientesAnidadoVisibles = syncPendientesAnidado.filter(sp => puedeReintentarAnidado(anidados.find(x => x.id === sp.id)));
+  const reintentarSyncAnidado = () => {
+    syncPendientesAnidadoVisibles.forEach(sp => {
+      const a = anidados.find(x => x.id === sp.id);
+      if (a) dualWriteAnidado(a);
+      else { limpiarSyncPendiente("anidado", sp.id); refrescarSyncAnidado(); }
+    });
   };
 
   const upd = a => { const t = touch(a); save(anidados.map(x=>x.id===a.id?t:x)); dualWriteAnidado(t); };
@@ -1593,6 +1637,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
 
   const hayResultados = actual?.grupos?.some(g=>g.resultado);
   const todoAnidado = !!actual?.grupos?.length && actual.grupos.every(g=>g.resultado);
+  // Cuántos materiales de ESTE anidado quedaron con un resultado calculado
+  // con una versión vieja del algoritmo (2026-09-20) — mismo criterio que
+  // el badge "⚠ desactualizado" de cada tarjeta, resumido acá para que se
+  // note sin tener que expandir cada material uno por uno.
+  const gruposDesactualizados = (actual?.grupos||[]).filter(g => g.resultado &&
+    g.resultado.version !== (g.tipo==="plancha" ? ALGORITMO_2D_VERSION : ALGORITMO_1D_VERSION)).length;
 
   // colapsarSenal: incrementarlo cambia el `key` de cada Grupo/GrupoPlancha
   // (ver .map() más abajo), forzando su remount — así el estado local
@@ -1679,6 +1729,19 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
           <button onClick={()=>setCreando(v=>!v)} style={{ ...BTN("primary"),padding:"6px 18px",fontSize:12 }}>+ Nuevo</button>
         </div>
       </div>
+      )}
+
+      {/* Aviso de anidados sin sincronizar a la nube (2026-09-20) — mismo
+          mecanismo que Presupuesto/Cómputo. */}
+      {!actual && syncPendientesAnidadoVisibles.length > 0 && (
+        <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap:"wrap" }}>
+            <span>☁️ <strong>{syncPendientesAnidadoVisibles.length}</strong> anidado(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
+            <button onClick={reintentarSyncAnidado} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              Reintentar ahora
+            </button>
+          </div>
+        </div>
       )}
 
       {!actual && creando&&(
@@ -1848,6 +1911,12 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
           {esDeOtro && (
             <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", margin:"12px 0", fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8 }}>
               🔒 Este anidado es de {usuarios.find(u=>String(u.id)===String(actual.vendedor))?.nombre||"otro vendedor"} — solo lo podés ver. Usá "Clonar" si querés armar el tuyo a partir de este.
+            </div>
+          )}
+          {gruposDesactualizados>0 && (
+            <div style={{ background:C.warn+"15", border:`1px solid ${C.warn}44`, borderRadius:8, padding:"8px 14px", margin:"12px 0", fontSize:13, color:C.warn, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              ⚠ {gruposDesactualizados} de {actual.grupos.length} material(es) fueron calculados con una versión anterior del algoritmo de nesteo — pueden estar mostrando más desperdicio (o piezas sin nestear sin avisar) del que darían hoy.
+              {!esDeOtro && <button onClick={calcularTodo} style={{ ...BTN("ghost"), borderColor:C.warn+"66", color:C.warn, fontSize:12, padding:"3px 10px" }}>🔄 Recalcular todo</button>}
             </div>
           )}
           <div>

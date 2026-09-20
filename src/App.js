@@ -391,7 +391,19 @@ export default function App() {
     (async () => {
       if (inactivo()) {
         cerrarSesion();
-      } else if (!usuario) {
+      } else {
+        // Bug real (2026-09-20, confirmado en vivo el 2026-09-14/19 en más
+        // de una sesión de QA): esto antes solo corría `if (!usuario)` — un
+        // `usuario` ya restaurado desde `sessionStorage` (arriba, síncrono
+        // al montar) se daba por bueno sin nunca chequear si el token de
+        // Supabase seguía vigente. La UI mostraba "logueado" mientras el
+        // guardado real fallaba con un error de RLS críptico (sesión
+        // vencida, revocada, o Supabase Auth limpiada por otra pestaña) —
+        // el mismo riesgo que ya estaba señalado como teórico desde el
+        // 2026-08-24 del lado de este archivo. Ahora SIEMPRE se revalida
+        // contra Supabase al montar, sin importar si `usuario` ya venía
+        // seteado — si el token real ya no es válido, se cae al login en
+        // vez de quedar con una sesión fantasma.
         const { data } = await supabase.auth.getSession();
         const authUser = data?.session?.user;
         if (authUser) {
@@ -401,6 +413,12 @@ export default function App() {
           // sesión real (signOut) — acá no queda nada más que hacer, el
           // usuario se va a quedar en la pantalla de login.
           if (local && !local.accesoDenegado) setUsuario(local);
+          else if (!local || local.accesoDenegado) setUsuario(null);
+        } else if (usuario) {
+          // Había un usuario "cacheado" en sessionStorage pero Supabase ya
+          // no tiene una sesión real — mostrar la app como logueada acá
+          // hubiera sido la sesión fantasma de arriba.
+          setUsuario(null);
         }
       }
       marcarActividad();

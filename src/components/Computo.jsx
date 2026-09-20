@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { C, TH, TD, INP, LBL, BDG, BTN } from "../styles/colors";
-import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas } from "../utils/storage";
+import { saveLS, loadLS, uid, stamp, touch, resolverClienteId, saveDBComputo, useMergeComputosNube, saveDBComentario, deleteDBComentario, useListaClientes, useListaObras, useListaEmpresas, marcarSyncPendiente, limpiarSyncPendiente, obtenerSyncPendientes } from "../utils/storage";
 import ComentariosPanel from "./ComentariosPanel";
 import { supabase } from "../utils/supabaseClient";
 import AutocompleteCliente from "./AutocompleteCliente";
@@ -1103,12 +1103,36 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
         const vendedor = usuarios.find(u => String(u.id) === String(c.vendedor))?.profileId || null;
         const { cliente, comentarios, ...resto } = c;
         await saveDBComputo({ ...resto, cliente_id, obra_id, empresa_id, vendedor, eliminado_por: c.eliminadoPor ?? null, eliminado_fecha: c.eliminadoFecha ?? null });
+        limpiarSyncPendiente("computo", c.id);
+        refrescarSyncComputo();
       } catch (e) {
         console.warn(`[Fase 3] No se pudo sincronizar cómputo "${c.nro || c.id}" con el backend:`, e.message || e);
+        // Mismo mecanismo que Presupuesto (2026-08-29/2026-09-04): antes un
+        // fallo acá quedaba solo en la consola — el cómputo se seguía viendo
+        // "guardado" en este dispositivo sin que nadie se enterara de que
+        // nunca llegó a la nube (invisible en cualquier otro dispositivo).
+        marcarSyncPendiente("computo", c.id);
+        refrescarSyncComputo();
       }
     });
     queue.set(c.id, propia);
     return propia;
+  };
+
+  // Aviso de cómputos sin sincronizar (2026-09-20) — mismo mecanismo ya
+  // usado para Presupuesto (2026-08-29/2026-09-04): filtrado a lo que este
+  // usuario realmente puede resolver (el candado de dueño bloquea reintentar
+  // el de otro vendedor, salvo admin/supervisor).
+  const [syncPendientesComputo, setSyncPendientesComputo] = useState(() => obtenerSyncPendientes().filter(p => p.tipo === "computo"));
+  const refrescarSyncComputo = () => setSyncPendientesComputo(obtenerSyncPendientes().filter(p => p.tipo === "computo"));
+  const puedeReintentarComputo = (c) => !c || !c.vendedor || String(c.vendedor) === String(usuario?.id) || ["admin","supervisor"].includes(usuario?.rol);
+  const syncPendientesComputoVisibles = syncPendientesComputo.filter(sp => puedeReintentarComputo(computos.find(x => x.id === sp.id)));
+  const reintentarSyncComputo = () => {
+    syncPendientesComputoVisibles.forEach(sp => {
+      const c = computos.find(x => x.id === sp.id);
+      if (c) dualWriteComputo(c);
+      else { limpiarSyncPendiente("computo", sp.id); refrescarSyncComputo(); }
+    });
   };
 
   // Bug real (2026-09-13, reportado por Gino con una pieza real perdida —
@@ -1456,6 +1480,19 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
             <button onClick={()=>setFiltroSolicitud(null)}
               style={{ marginLeft:"auto", background:"none", border:`1px solid ${C.border}`, color:C.muted,
                 borderRadius:5, padding:"2px 10px", cursor:"pointer", fontSize:11.5 }}>✕ Ver todos</button>
+          </div>
+        )}
+
+        {/* Aviso de cómputos sin sincronizar a la nube (2026-09-20) — mismo
+            mecanismo que ya tiene Presupuesto. */}
+        {syncPendientesComputoVisibles.length > 0 && (
+          <div style={{ background: C.err + "22", border: "1px solid " + C.err + "33", borderRadius: 8, padding: "8px 14px", marginBottom: 14, fontSize:14, color: C.err }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap:"wrap" }}>
+              <span>☁️ <strong>{syncPendientesComputoVisibles.length}</strong> cómputo(s) no se sincronizaron a la nube — solo existen en este dispositivo por ahora.</span>
+              <button onClick={reintentarSyncComputo} style={{ background: C.err, color: "#fff", border: "none", borderRadius: 6, padding: "5px 12px", fontSize:13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                Reintentar ahora
+              </button>
+            </div>
           </div>
         )}
 
