@@ -1630,16 +1630,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                   </ThResizable>
                 ))}
-                {/* Columna "filler" (2026-09-20) — sin ancho ni contenido, la
-                    única sin width/minWidth/maxWidth de toda la fila. Con la
-                    tabla en width:"100%" y table-layout:fixed, el navegador
-                    reparte TODO el sobrante acá (nunca a las columnas reales,
-                    que tienen min=max=width fijo) — llena el ancho disponible
-                    sin reabrir el bug de "arrastrar una columna mueve a las
-                    demás" (ver useSortable.js:sumAnchos para el historial
-                    completo de esta saga). Sin borde derecho para no leerse
-                    como una columna fantasma. */}
-                <th style={{ ...TH, borderRight:"none" }}></th>
               </tr></thead>
               <tbody>
                 {computosFiltrados.map(c => {
@@ -1680,7 +1670,6 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                           )}
                         </div>
                       </td>
-                      <td style={TD}></td>
                     </tr>
                   );
                 })}

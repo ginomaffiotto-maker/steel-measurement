@@ -3718,11 +3718,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
                 </ThResizable>
               ))}
-              {/* Columna "filler" (2026-09-20) — ver comentario en
-                  Computo.jsx, mismo mecanismo: única celda sin ancho fijo,
-                  absorbe el sobrante para que la tabla llene el ancho
-                  disponible sin afectar las columnas reales. */}
-              <th style={{ ...TH, borderRight:"none" }}></th>
             </tr></thead>
             <tbody>
               {lista.map(p => {
@@ -3755,7 +3750,6 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                           style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
                       )}
                     </td>
-                    <td style={TD}></td>
                   </tr>
                 );
               })}
