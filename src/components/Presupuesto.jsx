@@ -3348,9 +3348,11 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
   // v4 (2026-09-20, reportado por Gino: "casi media pantalla sin
   // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
   // más generosos, clave de storage renovada.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v4", {
-    check: 34, nro: 90, nombre: 260, cliente: 220, obra: 220, tipo: 130,
-    vendedor: 160, fecha: 100, total: 120, estado: 130, acc: 30,
+  // v5 (2026-09-20, mismo día — Gino: "agranda más") — otra vuelta de
+  // anchos más generosos.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_presupuesto_v5", {
+    check: 34, nro: 100, nombre: 340, cliente: 280, obra: 280, tipo: 150,
+    vendedor: 190, fecha: 110, total: 140, estado: 160, acc: 40,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -3720,7 +3722,7 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                 { h:"Fecha", campo:"fecha", k:"fecha" }, { h:"Total USD", campo:"_total_usd", k:"total" },
                 { h:"Estado", campo:"estado", k:"estado" }, { h:"", campo:null, k:"acc" },
               ].map(({h,campo,k}) => (
-                <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                <ThResizable key={h} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", textAlign: k==="total" ? "right" : "center" }}
                   width={colW[k]} onResize={w => setColW(k, w)}
                   onClick={() => campo && ordenarPor(campo)} title={campo?"Ordenar por "+h:undefined}>
                   {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
@@ -3739,24 +3741,26 @@ export default function Presupuesto({ usuario, tcGlobal, usuarios = [], logear }
                       <input type="checkbox" checked={seleccionados.has(p.id)} onChange={() => toggleSelPres(p.id)}
                         style={{ width:15, height:15, cursor:"pointer" }} />
                     </td>
-                    <td style={TD}><span style={{ color:C.muted, fontSize:13 }}>{p.nro}</span></td>
-                    <td style={TD}><span style={{ fontWeight:700 }}>{p.nombre}</span></td>
-                    <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p.cliente||"—"}</span></td>
-                    <td style={TD}><span style={{ fontSize:13, color:C.muted }}>{p.obra||"—"}</span></td>
-                    <td style={TD}><span style={BDG(C.steel,true)}>{p.tipo_trabajo||"Fab"}</span></td>
-                    <td style={TD}><span style={{ fontSize:13, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
-                    <td style={TD}><span style={{ fontSize:13, color:C.muted }}>{p.fecha}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ color:C.muted, fontSize:13 }}>{p.nro}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ fontWeight:700 }}>{p.nombre}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:13, color:C.steel }}>{p.cliente||"—"}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:13, color:C.muted }}>{p.obra||"—"}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={BDG(C.steel,true)}>{p.tipo_trabajo||"Fab"}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:13, color:C.steel }}>{p._vendedor_nombre||"—"}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:13, color:C.muted }}>{p.fecha}</span></td>
                     <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>
                       {p._total_usd>0 ? `$${n2(p._total_usd)}` : "—"}
                     </td>
-                    <td style={TD}><span style={BDG(est.color,true)}>{est.icon} {est.label}</span></td>
+                    <td style={{ ...TD, textAlign:"center" }}><span style={BDG(est.color,true)}>{est.icon} {est.label}</span></td>
                     <td style={TD} onClick={e=>e.stopPropagation()}>
+                      <div style={{ display:"flex", justifyContent:"center" }}>
                       <button onClick={() => clonarPres(p)} title="Clonar presupuesto"
                         style={{ background:"none", border:"none", color:C.steel, cursor:"pointer", fontSize:14, marginRight:8 }}>📋</button>
                       {(usuario?.rol !== "vendedor" || !p.vendedor || String(p.vendedor) === String(usuario.id)) && (
                         <button onClick={() => setConfirmarDelId(p.id)}
                           style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:14 }}>🗑</button>
                       )}
+                      </div>
                     </td>
                   </tr>
                 );

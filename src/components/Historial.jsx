@@ -540,9 +540,11 @@ export default function Historial({ usuario, usuarios = [], logear }) {
   // v3 (2026-09-20, reportado por Gino: "casi media pantalla sin
   // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
   // más generosos, clave de storage renovada.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_historial_v3", {
-    check: 34, ot: 90, fecha: 95, cliente: 220, obra: 220, categoria: 170,
-    vendedor: 150, kg: 90, usd: 110, usdkg: 90, origen: 110, acc: 30,
+  // v4 (2026-09-20, mismo día — Gino: "agranda más") — otra vuelta de
+  // anchos más generosos.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_historial_v4", {
+    check: 34, ot: 100, fecha: 105, cliente: 280, obra: 280, categoria: 210,
+    vendedor: 180, kg: 100, usd: 130, usdkg: 100, origen: 130, acc: 40,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -711,7 +713,7 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                     { h:"USD", campo:"usd_total", k:"usd" }, { h:"USD/kg", campo:"_usd_kg", k:"usdkg" }, { h:"Origen", campo:"origen", k:"origen" },
                     { h:"", campo:null, k:"acc" },
                   ].map(({h,campo,k}) => (
-                    <ThResizable key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none" }}
+                    <ThResizable key={h} title={campo ? "Ordenar por "+h : TH_TOOLTIPS[h]} style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", textAlign: (k==="kg"||k==="usd"||k==="usdkg") ? "right" : "center" }}
                       width={colW[k]} onResize={w => setColW(k, w)}
                       onClick={() => campo && ordenarPor(campo)}>
                       {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
@@ -730,17 +732,17 @@ export default function Historial({ usuario, usuarios = [], logear }) {
                           <input type="checkbox" checked={seleccionados.has(t.id)} onChange={()=>toggleSelTrabajo(t.id)}
                             style={{ width:15, height:15, cursor:"pointer" }} />
                         </td>
-                        <td style={TD}><span style={{ color:C.muted, fontSize:11 }}>{t.nro_ot}</span></td>
-                        <td style={TD}><span style={{ fontSize:11, color:C.muted }}>{t.fecha}</span></td>
-                        <td style={TD}><span style={{ fontWeight:700 }}>{t.cliente||"—"}</span></td>
-                        <td style={TD}><span style={{ fontSize:12, color:C.steel }}>{t.obra||"—"}</span></td>
-                        <td style={TD}><span style={BDG(C.steel,true)}>{t.categoria||"—"}</span></td>
-                        <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{usuarios.find(u=>String(u.id)===String(t.vendedor))?.nombre||"—"}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={{ color:C.muted, fontSize:11 }}>{t.nro_ot}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:11, color:C.muted }}>{t.fecha}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={{ fontWeight:700 }}>{t.cliente||"—"}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.steel }}>{t.obra||"—"}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={BDG(C.steel,true)}>{t.categoria||"—"}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.muted }}>{usuarios.find(u=>String(u.id)===String(t.vendedor))?.nombre||"—"}</span></td>
                         <td style={{ ...TD, textAlign:"right" }}>{n3(t.kg_total)}</td>
                         <td style={{ ...TD, textAlign:"right", fontWeight:700, color:C.ok }}>${n2(t.usd_total)}</td>
                         <td style={{ ...TD, textAlign:"right", color:C.accent, fontWeight:700 }}>{n2(t._usd_kg)}</td>
-                        <td style={TD}><span style={BDG(origen.color,true)}>{origen.label}</span></td>
-                        <td style={TD} onClick={e=>e.stopPropagation()}>
+                        <td style={{ ...TD, textAlign:"center" }}><span style={BDG(origen.color,true)}>{origen.label}</span></td>
+                        <td style={{ ...TD, textAlign:"center" }} onClick={e=>e.stopPropagation()}>
                           <button onClick={() => setConfirmarDelId(t.id)}
                             style={{ background:"none", border:"none", color:C.err, cursor:"pointer", fontSize:13 }}>🗑</button>
                         </td>

@@ -1303,8 +1303,10 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
   // tabla real (no un relleno decorativo) ocupe la mayor parte de la
   // pantalla desde el vamos. Clave de storage renovada para que nadie
   // quede con los anchos angostos de antes pisando estos nuevos.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v4", {
-    check: 34, nro: 90, nombre: 460, fecha: 95, tipo: 140, familia: 220, vendedor: 170, kg: 100, monto: 130, acc: 100,
+  // v5 (2026-09-20, mismo día — Gino: "agranda más") — otra vuelta de
+  // anchos más generosos.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_computo_v5", {
+    check: 34, nro: 100, nombre: 600, fecha: 105, tipo: 160, familia: 260, vendedor: 200, kg: 110, monto: 150, acc: 110,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -1644,7 +1646,7 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                   { h:"", campo:null, k:"acc" },
                 ].map(({h,campo,k}) => (
                   <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
-                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
+                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", textAlign: (k==="kg"||k==="monto") ? "right" : "center" }}
                     width={colW[k]} onResize={w=>setColW(k,w)}
                     onClick={()=>campo && ordenarPor(campo)}>
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
@@ -1665,21 +1667,21 @@ export default function Computo({ onNidar, onExportarPresupuesto, usuario, usuar
                         <input type="checkbox" checked={seleccionados.has(c.id)} onChange={()=>toggleSelComputo(c.id)}
                           style={{ width:15, height:15, cursor:"pointer" }} />
                       </td>
-                      <td style={TD}>{c.nro ? <span style={BDG(C.accent,true)}>{c.nro}</span> : "—"}</td>
-                      <td style={TD}>
+                      <td style={{ ...TD, textAlign:"center" }}>{c.nro ? <span style={BDG(C.accent,true)}>{c.nro}</span> : "—"}</td>
+                      <td style={{ ...TD, textAlign:"center" }}>
                         <div style={{ fontWeight:800, color:C.text }}>{c.nombre||"Sin nombre"}
                           {multTotal>1 && <span style={{ ...BDG(C.pur,true), marginLeft:8, fontSize:10 }}>×{multTotal}</span>}
                         </div>
                         <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{c.cliente?`${c.cliente} · `:""}{c.items.length} ítem{c.items.length!==1?"s":""}</div>
                       </td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{c.fecha||"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.muted }}>{c.fecha||"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{c.tipo_trabajo||"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.muted }}>{c.categoria?familiaDe(c.categoria):"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{tot>0?n2(tot):"—"}</td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
                       <td style={TD} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:"flex", gap:5 }}>
+                        <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
                           <button onClick={()=>clonarComputo(c)} title="Clonar este cómputo completo"
                             style={{ ...BTN("ghost"), padding:"3px 7px", fontSize:11 }}>⧉</button>
                           <button onClick={()=>{saveLS("smeas_anidar_pending",c.id); onNidar&&onNidar();}} title="Anidar"

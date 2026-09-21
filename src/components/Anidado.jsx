@@ -1592,8 +1592,11 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
   // v4 (2026-09-20, reportado por Gino: "casi media pantalla sin
   // columnas") — mismo motivo que Computo.jsx: anchos por defecto bien
   // más generosos, clave de storage renovada.
-  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v4", {
-    check: 34, nombre: 480, fecha: 95, tipo: 140, familia: 220, vendedor: 170, kg: 100, monto: 130, acc: 70,
+  // v5 (2026-09-20, mismo día — Gino: "agranda más, sobretodo en
+  // anidado") — otra vuelta de anchos más generosos, esta pantalla en
+  // particular más que las otras 3.
+  const { widths: colW, setWidth: setColWRaw, reset: resetColW } = useResizableColumns("smeas_cols_anidado_v5", {
+    check: 34, nombre: 650, fecha: 110, tipo: 170, familia: 280, vendedor: 210, kg: 120, monto: 160, acc: 80,
   });
   // Tope dinámico de arrastre (2026-09-14) — ver comentario en useSortable.js.
   const colContainerRef = useRef(null);
@@ -1867,7 +1870,7 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                   { h:"", campo:null, k:"acc" },
                 ].map(({h,campo,k}) => (
                   <ThResizable key={k} title={campo ? "Ordenar por "+h : undefined}
-                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", ...((k==="kg"||k==="monto") ? { textAlign:"right" } : {}) }}
+                    style={{ ...TH, cursor:campo?"pointer":"default", userSelect:"none", textAlign: (k==="kg"||k==="monto") ? "right" : "center" }}
                     width={colW[k]} onResize={w=>setColW(k,w)}
                     onClick={()=>campo && ordenarPor(campo)}>
                     {h}{sortCampo===campo && campo ? (sortDir==="asc"?" ▲":" ▼") : ""}
@@ -1888,18 +1891,18 @@ export default function Anidado({ usuario, usuarios = [], tcGlobal, logear, onEx
                         <input type="checkbox" checked={seleccionados.has(a.id)} onChange={()=>toggleSelAnidado(a.id)}
                           style={{ width:15, height:15, cursor:"pointer" }} />
                       </td>
-                      <td style={TD}>
+                      <td style={{ ...TD, textAlign:"center" }}>
                         <div style={{ fontWeight:800, color:C.text }}>{a.nombre||"Sin nombre"}</div>
                         <div style={{ fontSize:11,color:C.muted, marginTop:2 }}>{nG} grupo{nG!==1?"s":""}{(a.cliente||a.obra)?` · ${[a.cliente,a.obra].filter(Boolean).join(" · ")}`:""}</div>
                       </td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{a.fecha||"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</span></td>
-                      <td style={TD}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.muted }}>{a.fecha||"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.steel, fontWeight:600 }}>{a.tipo_trabajo||"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.muted }}>{a.categoria?familiaDe(a.categoria):"—"}</span></td>
+                      <td style={{ ...TD, textAlign:"center" }}><span style={{ fontSize:12, color:C.text }}>{vendedorNombre||"— Sin asignar —"}</span></td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.ok }}>{kg>0?n2(kg):"—"}</td>
                       <td style={{ ...TD, textAlign:"right", fontWeight:800, color:C.gold }}>{monto>0?n2(monto):"—"}</td>
                       <td style={TD} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:"flex", gap:5 }}>
+                        <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
                           <button onClick={()=>clonarAnidado(a)} title="Clonar este anidado completo"
                             style={{ ...BTN("ghost"), padding:"3px 7px", fontSize:11 }}>⧉</button>
                           {/* 2026-09-02, a pedido de Gino: "Eliminar" vivía solo
