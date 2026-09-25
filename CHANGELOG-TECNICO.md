@@ -3,7 +3,7 @@
 **Para:** referencia rápida de "qué cambió y cuándo" a nivel técnico, sin
 la textura de sesión de los changelogs narrativos.
 **De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
-**Fecha:** 2026-08-25, actualizado 2026-09-11
+**Fecha:** 2026-08-25, actualizado 2026-09-25
 **Fuente:** condensado de `steelCRM - BUILDIING/CLAUDE.md`,
 `steel-measurement/PLAN.md` + `PLAN-HISTORIAL.md`, y `steel-backend/CLAUDE.md`.
 
@@ -484,6 +484,106 @@ directamente ausentes en una, un tercero con estado desactualizado).
   pegado en el formulario) existía desde antes pero nunca se
   sincronizaba — cerrado para que "Mis solicitudes asignadas" (que lee
   la tabla directo) pueda mostrarlo.
+
+## 2026-09-12/13 — C2 del roadmap cerrado (Rentabilidad), Centro de exportación a Google Sheets en los dos sistemas
+
+- **Pestaña "💰 Rentabilidad" en Dashboard (Steel CRM) — cierra C2 del
+  roadmap**: margen agregado por vendedor y por categoría sobre los
+  presupuestos con `costo_real_usd` vinculado a un cálculo de Steel
+  Costos — con la cobertura de la muestra siempre visible ("N de M
+  presupuestos del período"), mismo criterio que ya usa Forecast con
+  "calibrado con N cierres reales", para que nunca se lea como el margen
+  real de toda la cartera.
+- **Google Sheets — export en vivo, en los dos sistemas**: reusa el
+  mismo token/scope `drive.file` ya autorizado para el backup a Drive,
+  sin pedir un consentimiento nuevo; el `spreadsheetId` de la hoja creada
+  se guarda en Config para reusarla entre dispositivos. Steel CRM lo
+  suma a su `ExportModal` ya existente (12/9); Steel Costos, que no
+  tenía ningún export general hasta ese momento (solo un `.txt` plano de
+  la lista de corte de Anidado), estrena su propio `ExportModal.jsx`
+  (13/9, 4 hojas: Cómputos/Anidados/Presupuestos/Historial) con Excel y
+  Sheets desde el arranque, portando el mecanismo 1:1 de Steel CRM.
+- **Config: gates de rol en pestañas (Steel CRM)** — Empresa/Sistema/
+  Integraciones pasan a admin-only (afectan a toda la empresa si se
+  tocan mal); Metas/Actividad pasan a admin+supervisor; la lista de
+  Equipo (dentro de Usuarios) también — "Mi cuenta" sigue abierta a
+  cualquiera. Alarmas queda sin cambios a propósito (los umbrales hoy
+  son compartidos para toda la empresa, no por vendedor — un cambio de
+  modelo de datos aparte). Default de pestaña al abrir Config ajustado
+  por rol para que un no-admin no caiga en una pestaña vacía.
+
+## 2026-09-14 — Ficha de Solicitud editable en Steel Costos, fix real de integración (`producto`)
+
+- **`FichaSolicitud.jsx` (Steel Costos) pasa de "solo lectura + modal de
+  alta aparte" a componente dual**: ver/crear/editar en un solo lugar,
+  con alta rápida de Cliente/Obra/Empresa (mismo patrón que Cómputo/
+  Anidado/Presupuesto) y candado de dueño — usado por "Mis solicitudes
+  asignadas"; el Buscador Global sigue usándolo en modo solo lectura
+  para solicitudes de todo el tenant.
+- **Fix real de integración**: `producto` (`pres.nombre`, el nombre real
+  del presupuesto en Steel Costos) nunca se mapeaba al enviar un
+  presupuesto a Steel CRM (botón "☁️ Enviar a Steel CRM") — llegaba
+  vacío desde que existe ese botón (29/8).
+- **Sesión revalidada al restaurar (`App.js`, los dos sistemas)**: cierra
+  un riesgo teórico documentado desde el 24/8 y confirmado real varias
+  veces en septiembre (RLS rechazando escrituras con la UI todavía
+  mostrando "logueado") — la sesión restaurada desde caché local ya no
+  se da por buena sin más, siempre se revalida contra Supabase al
+  montar la app.
+- Batería de tests unitarios nueva (calibración de Forecast, recálculo
+  de 3 vías Kgs↔U$S/kg↔Monto, escalones de Bonificaciones, auditoría
+  geométrica del catálogo de materiales — ver `ARQUITECTURA-COMPARTIDA.md`
+  §3) y fix real menor: "kg/día" mostraba `Infinity` en una Ficha de
+  Aceptados completada el mismo día que se creó (división por 0 días).
+
+## 2026-09-19 — `items_presupuesto_crm` (tabla nueva), fix real del algoritmo de nesteo 2D
+
+- **`items_presupuesto_crm`**: ítems desglosados opcionales de un
+  presupuesto de Steel CRM (descripción/cantidad/precio unitario/kgs por
+  línea) — para cotizaciones con varios productos distintos en un mismo
+  presupuesto. Un presupuesto sin ítems sigue funcionando exactamente
+  igual que siempre; con 1+ ítems, Monto/Kgs se derivan como suma de los
+  ítems. Exclusivo de Steel CRM, sin relación con `items_presupuesto_sm`
+  (Steel Costos) pese al nombre parecido.
+- **Fix real del nesteo 2D de planchas** (`run2DFFD`, Anidado — Steel
+  Costos): ordenaba las piezas por área en vez de por altura de estante,
+  lo que podía dejar piezas varadas forzando planchas nuevas sin
+  necesidad real (caso real reportado: 52-57% de desperdicio en un
+  anidado real). Corregido a ordenar por altura (FFDH) + best-fit entre
+  todos los estantes ya abiertos — validado con una búsqueda aleatoria
+  de 3000 combinaciones sintéticas antes de dar el fix por bueno, no
+  solo con el caso real reportado.
+- **Aceptar/rechazar un presupuesto en Steel CRM actualiza la Solicitud
+  de origen** (pasa a "ganada"/"perdida") — antes quedaba en "enviada"
+  para siempre salvo que alguien entrara a mano a cerrarla.
+- **Candado por campo + auto-avance de estado, en la Ficha de Solicitud
+  de Steel Costos**: un campo ya cargado queda bloqueado con un botón
+  "🔓 Editar" para desbloquearlo a mano (mismo patrón que `BudgetModal`
+  en Steel CRM desde el 7/9); crear un Cómputo/Anidado/Presupuesto desde
+  una Solicitud la pasa sola de "recibida" a "en elaboración".
+
+## 2026-09-20 — Versionado de resultados de nesteo + fix real de vínculo roto Solicitud→Presupuesto
+
+- **Resultados de nesteo versionados** (`runFFD`/`run2DFFD`, Anidado):
+  cada resultado calculado queda con la versión del algoritmo que lo
+  produjo — un grupo calculado con una versión vieja del algoritmo 2D
+  (antes del fix del 19/9) se marca "desactualizado" en vez de mostrar
+  el resultado viejo en silencio. El 1D queda sin este aviso a
+  propósito (sin cambio real de lógica desde el 3/8 — marcarlo hubiera
+  sido un falso positivo generalizado sobre cómputos ya calculados,
+  encontrado probando en vivo el mismo día y corregido de inmediato).
+- **Fix real: "Crear presupuesto desde esta solicitud" podía dejar la
+  Solicitud marcada "enviada" con un vínculo roto** — si el `nro`
+  autogenerado del presupuesto nuevo chocaba con uno ya existente, el
+  guardado se rechazaba pero la Solicitud igual se marcaba "enviada"
+  con el id del presupuesto (nunca persistido) — quedaba trabada sin
+  forma de reintentar desde la UI. Corregido para que la Solicitud solo
+  se actualice si el guardado realmente tuvo éxito.
+- Auto-partido de piezas más largas que la plancha/barra disponible
+  (ej. una viga de 7880mm en una plancha de 6000×1500mm) queda anotado
+  como **F1** en el roadmap del proyecto, sin implementar — el sistema
+  avisa que la pieza no entra (`sinNestear`) pero no la parte sola
+  todavía; decidido con Gino: corte exacto, sin margen de solape.
 
 ---
 

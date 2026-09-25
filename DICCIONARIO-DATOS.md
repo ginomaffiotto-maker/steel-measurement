@@ -4,7 +4,7 @@
 o cualquier documento (manual, arquitectura) que necesite el detalle
 columna por columna del esquema real.
 **De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
-**Fecha:** 2026-08-25, actualizado 2026-09-11
+**Fecha:** 2026-08-25, actualizado 2026-09-25
 **Fuente:** las 65 migraciones de `steel-backend/supabase/migrations/`,
 leídas completas (no de memoria).
 **Relación con los otros dos documentos**: `ENTIDADES-COMPARTIDAS.md`
@@ -60,7 +60,7 @@ propiedad, distinto de esto) en `ENTIDADES-COMPARTIDAS.md` §8.
 | `nombre` | text not null | |
 | `rol` | text not null, check in (`admin`,`supervisor`,`vendedor`) | |
 | `emoji`, `foto` | text | Avatar. |
-| `acceso_crm`, `acceso_costos` | boolean not null default `true` | 2026-09-04 — control de acceso por módulo (vender Steel CRM/Steel Costos por separado dentro del mismo tenant). Default `true` no bloquea a nadie ya invitado; solo se aplica en el cliente (React), RLS no lo verifica. |
+| `acceso_crm`, `acceso_costos` | boolean not null default `true` | 2026-09-04 — control de acceso por módulo (vender Steel CRM/Steel Costos por separado dentro del mismo tenant). Default `true` no bloquea a nadie ya invitado. Hasta el 2026-09-11 solo se verificaba en el cliente (React); desde el 2026-09-12 también hay policies RESTRICTIVE de RLS (helpers `current_user_acceso_crm()`/`current_user_acceso_costos()`) que lo hacen cumplir a nivel de base sobre ~37 tablas de Steel Costos y 15 de Steel CRM — ver `ENTIDADES-COMPARTIDAS.md` §8. |
 | `invitado_pendiente` | boolean not null default `false` | 2026-09-03 — se marca al invitar, se limpia sola en el primer login real. Alimenta el badge "⏳ Invitado — pendiente". |
 
 Función `current_tenant_id()` (security definer): devuelve el `tenant_id` del usuario autenticado — la usan todas las policies RLS. Desde 2026-09-03 existe también `current_user_rol()` (mismo patrón), usada por las policies del candado de dueño (ver `ENTIDADES-COMPARTIDAS.md` §8).
@@ -154,6 +154,27 @@ dos nunca tuvieron columna `empresa` en la base, nada que recuperar).
 **Candado de dueño (RLS, 2026-09-03)** — ver `ENTIDADES-COMPARTIDAS.md` §8:
 UPDATE (incluye el soft-delete) restringido a `vendedor_id = auth.uid()` o
 admin/supervisor; SELECT/INSERT sin cambios.
+
+### `items_presupuesto_crm` (nueva 2026-09-19, exclusiva de Steel CRM)
+| Columna | Tipo | Nota |
+|---|---|---|
+| `presupuesto_id` | uuid → `presupuestos_crm` on delete cascade | |
+| `descripcion` | text not null | |
+| `cantidad` | numeric not null default 1 | |
+| `precio_unitario` | numeric not null default 0 | |
+| `monto` | numeric not null default 0 | `cantidad × precio_unitario`, calculado en el cliente. |
+| `kgs` | numeric, nullable | Opcional — un ítem puede no tener peso propio cargado. |
+| `orden` | int not null default 0 | |
+| `created_at` | timestamptz not null default now() | |
+
+RLS de tenant simple (no hereda el candado de dueño de `presupuestos_crm`)
+— mismo criterio que `comentarios_presupuesto`/`comentarios_computo`/
+`comentarios_anidado`. Reemplazo total del array en cada guardado (no
+reconciliación fila por fila). Con 1+ ítems, `presupuestos_crm.monto_final`/
+`kg_cotizados` se derivan como suma de los ítems (`recalcularDesdeItems`,
+`utils/calculos.js`) — los 3 campos de la línea única quedan
+deshabilitados en el formulario. No confundir con `items_presupuesto_sm`
+(Steel Costos) — son tablas y conceptos completamente distintos.
 
 ### `comentarios_presupuesto` / `comentarios_obra` / `comentarios_ficha_aceptado`
 Misma forma en las 3 (genéricas vía `comentarioToDB`/`FromDB` con `table` como parámetro):

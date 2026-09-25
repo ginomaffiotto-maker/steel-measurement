@@ -3,7 +3,7 @@
 **Para:** cualquier sesión que toque IA, cotización, backup o cualquier
 llamada a un servicio externo en Steel CRM o Steel Costos.
 **De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
-**Fecha:** 2026-08-25, actualizado 2026-09-11
+**Fecha:** 2026-08-25, actualizado 2026-09-25
 **Fuente:** `server.js` y `api/*.js` de los dos repos, `src/utils/googleDrive.js`,
 `src/utils/verificarPassword.js`, `src/utils/supabaseClient.js`, y los
 componentes `Config.jsx` de cada sistema — leído directo, no de memoria.
@@ -155,6 +155,43 @@ más de 30 días — sigue existiendo el código en `server.js` (uso local,
 inofensivo) pero el `useEffect` de `App.js` que lo llamaba en cada carga
 se sacó (ensuciaba la consola de producción con el error de conexión de
 arriba, sin cumplir ninguna función real ahí).
+
+**Google Sheets (export en vivo) — 2026-09-12/13, en los dos sistemas.**
+Botón "Google Sheets" en el modal de exportación de cada sistema, junto
+a Excel/PDF — pensado como "Centro de exportación": todos los formatos
+desde un solo lugar. `syncToGoogleSheet`/`sheetsFetch` (`googleDrive.js`)
+reusan el mismo token y scope (`drive.file`) que ya tenía autorizado el
+backup a Drive (§3 de arriba) — la propia referencia de la API de Sheets
+lista `drive.file` como scope válido para `spreadsheets.create` y para
+leer/escribir hojas creadas por la propia app, así que no hace falta
+pedir el scope más amplio `auth/spreadsheets` ni un consentimiento nuevo
+de Google. El `spreadsheetId` de la hoja creada queda guardado en Config
+(`tenant_settings`) para reusar la misma hoja en vez de crear una nueva
+cada vez que se exporta desde cualquier dispositivo — "actualiza en
+vivo" en lugar de "descarga un archivo".
+
+- **Steel CRM (2026-09-12)**: botón dentro de `ExportModal` (`shared.jsx`,
+  ya existía para Excel/PDF).
+- **Steel Costos (2026-09-13) — no tenía ningún export general hasta esa
+  fecha** (solo la lista de corte de Anidado, un `.txt` plano, sin
+  tocar). `ExportModal.jsx` nuevo, botón "Exportar" en el topbar (visible
+  desde cualquier pantalla, mismo criterio que Steel CRM), con 4 hojas —
+  Cómputos, Anidados, Presupuestos, Historial — columnas toggleables y
+  filtro por fecha/vendedor; `syncToGoogleSheet`/`sheetsFetch` portados
+  1:1 de Steel CRM, mismo Client ID/proyecto de Google Cloud ya usado
+  para el backup a Drive (confirmado por Gino — es el mismo proyecto en
+  los dos sistemas). Lee `localStorage` directo al abrir, mismo criterio
+  que ya usa el Buscador Global de esa app. **Alcance v1, decidido
+  explícitamente**: Cómputos y Anidados exportan solo metadata (sin Kg/
+  Monto — esos totales se calculan hoy con `reduce` dentro del render de
+  cada pantalla, no como función reusable); Presupuestos e Historial sí
+  incluyen Kg/Monto reales (`calcPresupuesto`/`calcTrabajo`, las mismas
+  funciones que ya usan sus propias pantallas). **Fix real de paso**: el
+  primer intento de exportar a Excel falló con "librería Excel no
+  cargada" — Steel Costos nunca había cargado SheetJS (el único "export"
+  que tenía la app, la lista de corte, es un `.txt` por Blob, no un
+  Excel real) — corregido cargando la misma librería por CDN que ya usa
+  Steel CRM.
 
 Los dos sistemas comparten, además, la herramienta de migración a la nube
 ("☁️ Migrar todo a la nube" / "Migrar datos históricos a la nube") —

@@ -4,7 +4,7 @@
 steel-backend, y cualquier documento de manual/instalación/arquitectura que se
 construya a partir de este.
 **De:** sesión de documentación (`steelCRM - BUILDIING` → `SteelPlatform`)
-**Fecha:** 2026-08-25, actualizado 2026-09-11
+**Fecha:** 2026-08-25, actualizado 2026-09-25
 **Fuente:** relevado directo contra el código real — las 65 migraciones SQL de
 `steel-backend/supabase/migrations/`, `steelcrm/src/utils/storage.js` y
 `steel-measurement/src/utils/storage.js` — no reconstruido de memoria ni del
@@ -214,6 +214,7 @@ el resto del diagrama.
 | `ficha_ordenes_compra`, `ficha_facturas`, `ficha_fechas_pago` | `id` c/u | `ficha_id→fichas_aceptados` | `saveDocumentosFichaDB` (reemplazo total por lote) | — | Los 3 documentos de una ficha. |
 | `comentarios_obra` | `id` | `obra_id→obras` | `comentarioToDB` (genérica) | ✅ | Mismo componente compartido `ComentariosThread` que presupuestos. |
 | `comentarios_ficha_aceptado` | `id` | `ficha_id→fichas_aceptados` | `comentarioToDB` (genérica) | ✅ | |
+| `items_presupuesto_crm` | `id` | `presupuesto_id→presupuestos_crm` | `saveItemsPresupuestoCrmDB` (reemplazo total del array en cada guardado) | — | Nueva 2026-09-19, exclusiva de Steel CRM (no tiene relación con `items_presupuesto_sm` de Steel Costos — dos conceptos distintos que conviven sin cruzarse). Ítems desglosados opcionales de un presupuesto (descripción/cantidad/precio unitario/kgs por línea) para cotizaciones con varios productos — un presupuesto sin ítems sigue funcionando exactamente igual que siempre (Kgs/U$S por kg/Monto en una sola línea). Con 1+ ítems cargados, `presupuestos_crm.monto_final`/`kg_cotizados` se recalculan como suma de los ítems y el vendedor deja de tocarlos a mano. RLS de tenant simple (no hereda el candado de dueño de `presupuestos_crm`), mismo patrón que las tablas de Comentarios. **Límite conocido**: no tiene Fase 5 propia — si el presupuesto llega "nuevo" a un dispositivo que nunca lo tuvo local, el Monto/Kgs totales sí llegan bien (viven en la fila de `presupuestos_crm`), pero el desglose de ítems en sí no. |
 
 ---
 
@@ -254,7 +255,10 @@ Hay **seis mecanismos** en el esquema — cinco activos, uno viejo dado de baja:
    de Steel Costos (`enviarPresupuestoASteelCRM`, `storage.js`) —
    escribe directo a Supabase (sin archivo intermedio): crea la fila en
    `presupuestos_crm` con el resumen comercial (cliente, obra, categoría,
-   kg, USD) e inserta la fila de vínculo. Desde 2026-09-03/04, dos datos
+   kg, USD) e inserta la fila de vínculo. **Bug real, cerrado 2026-09-14**:
+   `producto` (el nombre real del presupuesto del lado de Steel Costos,
+   `pres.nombre`) nunca se mapeaba acá — llegaba vacío a Steel CRM desde
+   que existe este botón. Desde 2026-09-03/04, dos datos
    más viajan apoyados en este mismo vínculo, en sentidos opuestos:
    `presupuestos_sm.costo_real_usd` (Steel Costos → Steel CRM, alimenta el
    colchón de negociación en `BudgetModal`) y `presupuestos_sm.estado_crm`
@@ -388,8 +392,9 @@ un cliente cargado desde cualquiera de los dos aparece en el otro.
   fallo en localStorage (`scrm_sync_pendientes` / `smeas_sync_pendientes`)
   y muestra un aviso con botón "Reintentar ahora" — en Inicio (Steel CRM)
   o arriba de la lista (Steel Costos, que no tiene pantalla de
-  Inicio). Mecanismo genérico, pensado para sumar el resto de las
-  entidades con dual-write más adelante si hace falta.
+  Inicio). Mecanismo genérico, extendido desde 2026-09-20 también a
+  `computos`/`anidados` (Steel Costos) y `solicitudes` (Steel CRM) —
+  antes solo cubría Presupuestos en los dos sistemas.
 - **Soft-delete**: las entidades marcadas ✅ en §4/§5 nunca se borran de
   verdad — se marcan `eliminado = true` (+ `eliminado_por`, `eliminado_fecha`
   donde aplica) y se filtran de las vistas activas. Recuperables desde una
