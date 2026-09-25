@@ -114,7 +114,21 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
   // "no se puede cambiar ninguno después de aceptado o rechazado".
   const cerrada = !esNueva && ["ganada", "perdida", "no cotizado"].includes(s?.estado);
 
-  function Bloqueable({ campo, label, children }) {
+  // Bug real (2026-09-25, reportado por Tiao: "se tranca y no deja
+  // cambiar las opciones" al crear una Solicitud): esto era un componente
+  // <Bloqueable> DEFINIDO ADENTRO del render de FichaSolicitudModal — se
+  // recreaba con una identidad de función nueva en cada render, así que
+  // React lo trataba como un tipo de componente distinto en cada tecla
+  // tipeada y remontaba (unmount+mount) TODOS los campos envueltos con él
+  // — perdiendo el foco del input a cada carácter, y con un <select>
+  // cerrándose/reseteándose apenas se hacía click en una opción. Pasa a
+  // ser una función común (minúscula, no JSX-component) llamada inline —
+  // sigue siendo el mismo closure sobre esNueva/s/desbloqueados, pero al
+  // no ser un componente React no hay reconciliación de tipo de por
+  // medio, así que los inputs ya no se remontan solo por tipear en otro
+  // campo. Mismo patrón simple que ya usa BudgetModal en Steel CRM
+  // (disabled={bloqueadoDatos} directo, sin envolver en un componente).
+  function bloqueable(campo, label, children) {
     const lleno = !esNueva && s && s[campo] != null && s[campo] !== "";
     const bloqueado = lleno && !desbloqueados.has(campo);
     if (bloqueado) {
@@ -279,7 +293,7 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
         {!esNueva && <div style={{ marginBottom: 14 }}><span style={BDG(ESTADO_SOLICITUD_COLOR[s.estado] || C.muted, true)}>{s.estado}</span></div>}
 
         <fieldset disabled={esDeOtro || cerrada} style={{ border: "none", margin: 0, padding: 0 }}>
-          <Bloqueable campo="cliente_nombre" label="Cliente *">
+          {bloqueable("cliente_nombre", "Cliente *", <>
             <AutocompleteCliente placeholder="Ej: Juan Pérez" value={f.cliente_nombre} autoFocus={esNueva}
               onChange={v => { set("cliente_nombre", v); if (v.trim()) setErrCliente(false); }}
               style={{ ...INP, marginBottom: (clienteSinResolver || errCliente) ? 4 : 10, ...(errCliente ? { border: "1px solid " + C.err } : {}) }} />
@@ -290,9 +304,9 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
                 <button type="button" onClick={() => setShowClienteRapido(true)} style={{ background: "none", border: `1px solid ${C.warn}55`, color: C.warn, borderRadius: 5, padding: "1px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Crear cliente nuevo</button>
               </div>
             )}
-          </Bloqueable>
+          </>)}
 
-          <Bloqueable campo="empresa" label="Empresa">
+          {bloqueable("empresa", "Empresa", <>
             <AutocompleteEmpresa placeholder="Ej: CCFC" value={f.empresa} onChange={v => set("empresa", v)}
               style={{ ...INP, marginBottom: empresaSinResolver ? 4 : 10 }} />
             {empresaSinResolver && (
@@ -301,9 +315,9 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
                 <button type="button" onClick={() => setShowEmpresaRapida(true)} style={{ background: "none", border: `1px solid ${C.warn}55`, color: C.warn, borderRadius: 5, padding: "1px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Crear empresa nueva</button>
               </div>
             )}
-          </Bloqueable>
+          </>)}
 
-          <Bloqueable campo="obra" label="Obra">
+          {bloqueable("obra", "Obra", <>
             <AutocompleteObra placeholder="Ej: Nave Industrial" value={f.obra} onChange={v => set("obra", v)}
               style={{ ...INP, marginBottom: obraSinResolver ? 4 : 10 }} />
             {obraSinResolver && (
@@ -312,49 +326,49 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
                 <button type="button" onClick={() => setShowObraRapida(true)} style={{ background: "none", border: `1px solid ${C.warn}55`, color: C.warn, borderRadius: 5, padding: "1px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Crear obra nueva</button>
               </div>
             )}
-          </Bloqueable>
+          </>)}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Bloqueable campo="producto" label="Producto"><input style={{ ...INP, marginBottom: 10 }} value={f.producto} onChange={e => set("producto", e.target.value)} /></Bloqueable>
-            <Bloqueable campo="direccion_obra" label="Dirección de obra"><input style={{ ...INP, marginBottom: 10 }} value={f.direccion_obra} onChange={e => set("direccion_obra", e.target.value)} /></Bloqueable>
+            {bloqueable("producto", "Producto", <input style={{ ...INP, marginBottom: 10 }} value={f.producto} onChange={e => set("producto", e.target.value)} />)}
+            {bloqueable("direccion_obra", "Dirección de obra", <input style={{ ...INP, marginBottom: 10 }} value={f.direccion_obra} onChange={e => set("direccion_obra", e.target.value)} />)}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Bloqueable campo="contacto" label="Contacto"><input style={{ ...INP, marginBottom: 10 }} value={f.contacto} onChange={e => set("contacto", e.target.value)} /></Bloqueable>
-            <Bloqueable campo="tel" label="Teléfono"><input style={{ ...INP, marginBottom: 10 }} value={f.tel} onChange={e => set("tel", e.target.value)} /></Bloqueable>
+            {bloqueable("contacto", "Contacto", <input style={{ ...INP, marginBottom: 10 }} value={f.contacto} onChange={e => set("contacto", e.target.value)} />)}
+            {bloqueable("tel", "Teléfono", <input style={{ ...INP, marginBottom: 10 }} value={f.tel} onChange={e => set("tel", e.target.value)} />)}
           </div>
-          <Bloqueable campo="email" label="Email"><input style={{ ...INP, marginBottom: 10 }} value={f.email} onChange={e => set("email", e.target.value)} /></Bloqueable>
+          {bloqueable("email", "Email", <input style={{ ...INP, marginBottom: 10 }} value={f.email} onChange={e => set("email", e.target.value)} />)}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Bloqueable campo="categoria" label="Categoría *">
+            {bloqueable("categoria", "Categoría *", <>
               <SelectCategoria value={f.categoria} onChange={v => { set("categoria", v); if (v) setErrCategoria(false); }}
                 style={{ marginBottom: errCategoria ? 4 : 10, ...(errCategoria ? { border: "1px solid " + C.err } : {}) }} />
               {errCategoria && <div style={{ fontSize: 11, color: C.err, fontWeight: 500, marginBottom: 10 }}>⚠ Seleccioná una categoría</div>}
-            </Bloqueable>
-            <Bloqueable campo="tipo_trabajo" label="Tipo de trabajo">
+            </>)}
+            {bloqueable("tipo_trabajo", "Tipo de trabajo", (
               <select style={{ ...INP, marginBottom: 10 }} value={f.tipo_trabajo} onChange={e => set("tipo_trabajo", e.target.value)}>
                 {TIPOS_TRABAJO.map(t => <option key={t}>{t}</option>)}
               </select>
-            </Bloqueable>
+            ))}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Bloqueable campo="estado_obra" label="Estado de obra">
+            {bloqueable("estado_obra", "Estado de obra", (
               <select style={{ ...INP, marginBottom: 10 }} value={f.estado_obra} onChange={e => set("estado_obra", e.target.value)}>
                 <option value="">— Sin definir —</option>
                 <option value="Adjudicada">Adjudicada</option>
                 <option value="Licitación">Licitación</option>
                 <option value="Directa">Directa</option>
               </select>
-            </Bloqueable>
-            <Bloqueable campo="prioridad_manual" label="Prioridad">
+            ))}
+            {bloqueable("prioridad_manual", "Prioridad", (
               <select style={{ ...INP, marginBottom: 10 }} value={f.prioridad_manual} onChange={e => set("prioridad_manual", e.target.value)}>
                 <option value="">— Sin definir —</option>
                 <option value="alta">🔴 Alta</option>
                 <option value="media">🟡 Media</option>
                 <option value="baja">🟢 Baja</option>
               </select>
-            </Bloqueable>
+            ))}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -364,7 +378,7 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
                 {ESTADOS_SOLICITUD.map(es => <option key={es} value={es}>{es}</option>)}
               </select>
             </div>
-            <Bloqueable campo="fecha_limite" label="Fecha límite"><input type="date" style={{ ...INP, marginBottom: 10 }} value={f.fecha_limite} onChange={e => set("fecha_limite", e.target.value)} /></Bloqueable>
+            {bloqueable("fecha_limite", "Fecha límite", <input type="date" style={{ ...INP, marginBottom: 10 }} value={f.fecha_limite} onChange={e => set("fecha_limite", e.target.value)} />)}
           </div>
 
           {!esNueva && (s.fecha_recepcion || s.fecha_envio || s.fecha_resolucion) && (
@@ -375,16 +389,16 @@ export default function FichaSolicitudModal({ s, usuario, onClose, onSaved, onCr
             </div>
           )}
 
-          <Bloqueable campo="mensaje_cliente" label="Mensaje del cliente">
+          {bloqueable("mensaje_cliente", "Mensaje del cliente", (
             <textarea style={{ ...INP, marginBottom: 10, minHeight: 70 }} value={f.mensaje_cliente}
               placeholder="Pegá acá el mail, WhatsApp, o el pedido tal cual llegó..." onChange={e => set("mensaje_cliente", e.target.value)} />
-          </Bloqueable>
-          <Bloqueable campo="notas" label="Notas">
+          ))}
+          {bloqueable("notas", "Notas", (
             <textarea style={{ ...INP, marginBottom: 10, minHeight: 60 }} value={f.notas} onChange={e => set("notas", e.target.value)} />
-          </Bloqueable>
-          <Bloqueable campo="link_archivos" label="Link de archivos (Drive, Dropbox, etc.)">
+          ))}
+          {bloqueable("link_archivos", "Link de archivos (Drive, Dropbox, etc.)", (
             <input style={{ ...INP, marginBottom: 14 }} value={f.link_archivos} placeholder="https://..." onChange={e => set("link_archivos", e.target.value)} />
-          </Bloqueable>
+          ))}
 
           {err && <div style={{ fontSize: 12, color: C.err, marginBottom: 10 }}>{err}</div>}
           {!esDeOtro && !cerrada && (
